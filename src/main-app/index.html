@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اثر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
+  --accent:#7B5EFF;--accent-lo:rgba(123,94,255,.14);--accent-mid:rgba(123,94,255,.3);
+  --ok:#2FD6A8;--warn:#F5A623;--err:#FF5F7E;
+  --t1:#EEEEF6;--t2:#8585AA;--t3:#454568;
+  --bd:rgba(255,255,255,.06);--bd2:rgba(255,255,255,.12);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font-family:'Inter',system-ui,sans-serif;font-size:13px}
+.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
+.no-drag{-webkit-app-region:no-drag}
+
+/* ── Layout ── */
+.app{display:flex;flex-direction:row-reverse;height:100%}
+
+/* ── Sidebar ── */
+.sidebar{width:220px;flex-shrink:0;background:rgba(8,8,26,.98);border-left:1px solid var(--bd);
+  display:flex;flex-direction:column;padding-top:40px;overflow:hidden;z-index:10}
+
+.app-brand{display:flex;align-items:center;gap:10px;padding:0 18px 24px;direction:rtl}
+.brand-icon{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#5B3FDF);
+  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.brand-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.3px}
+.brand-sub{font-size:10.5px;color:var(--t3);margin-top:1px}
+
+.nav-section{padding:0 10px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.5px;text-transform:uppercase;padding-right:16px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:10px;
+  cursor:pointer;transition:all .13s;direction:rtl;margin:1px 6px;user-select:none}
+.nav-item:hover{background:var(--bg2)}
+.nav-item.active{background:var(--accent-lo)}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;color:var(--t3);transition:color .13s}
+.nav-item:hover svg{color:var(--t2)}
+.nav-item.active svg{color:var(--accent)}
+.nav-label{font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:13.5px;color:var(--t2);transition:color .13s}
+.nav-item:hover .nav-label{color:var(--t1)}
+.nav-item.active .nav-label{color:var(--t1)}
+.nav-divider{height:1px;background:var(--bd);margin:8px 16px}
+
+.nav-item.subapp{opacity:.75}
+.nav-item.subapp:hover{opacity:1}
+.nav-badge{margin-right:auto;font-size:10px;padding:2px 6px;border-radius:4px;
+  background:var(--accent-lo);color:var(--accent);font-family:'Space Grotesk',sans-serif;font-weight:600}
+
+/* ── Main content ── */
+.main{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+/* section shown/hidden */
+.section{display:none;height:100%;overflow:hidden;flex-direction:column}
+.section.active{display:flex}
+
+/* ── HOME ── */
+.home-scroll{flex:1;overflow-y:auto;padding:40px 32px 32px}
+.home-scroll::-webkit-scrollbar{width:5px}
+.home-scroll::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+
+.home-date-block{margin-bottom:36px}
+.shamsi-date{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:38px;
+  letter-spacing:-.5px;line-height:1;margin-bottom:6px}
+.shamsi-day{font-size:14px;color:var(--t2)}
+
+.stats-row{display:flex;gap:14px;margin-bottom:32px;flex-wrap:wrap}
+.stat-card{flex:1;min-width:140px;background:var(--bg2);border:1px solid var(--bd);border-radius:14px;
+  padding:16px 18px;direction:rtl;cursor:pointer;transition:all .15s}
+.stat-card:hover{background:var(--bg3);border-color:var(--bd2)}
+.stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:28px;margin-bottom:4px}
+.stat-num.accent{color:var(--accent)}
+.stat-num.ok{color:var(--ok)}
+.stat-num.warn{color:var(--warn)}
+.stat-label{font-size:12px;color:var(--t3)}
+
+.home-section-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;
+  margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.home-see-all{font-size:12px;color:var(--accent);cursor:pointer}
+
+/* today's plan */
+.plan-list{display:flex;flex-direction:column;gap:6px;margin-bottom:32px}
+.plan-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg2);
+  border-radius:10px;border:1px solid var(--bd);direction:rtl;cursor:pointer;transition:all .13s}
+.plan-item:hover{background:var(--bg3)}
+.plan-item.done{opacity:.5}
+.plan-item.done .plan-title{text-decoration:line-through}
+.plan-time{font-size:12px;color:var(--t3);min-width:40px;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0}
+.plan-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.plan-title{font-size:13px;flex:1}
+.plan-check{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--bd2);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:all .13s}
+.plan-check:hover{border-color:var(--ok);background:rgba(47,214,168,.1)}
+.plan-check.done{background:var(--ok);border-color:var(--ok)}
+.plan-empty{padding:16px;text-align:center;color:var(--t3);font-size:12.5px;direction:rtl}
+
+/* active items */
+.active-cards{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px}
+.active-cards::-webkit-scrollbar{height:3px}
+.active-cards::-webkit-scrollbar-thumb{background:var(--bg3)}
+.active-card{width:140px;flex-shrink:0;background:var(--bg2);border:1px solid var(--bd);border-radius:12px;
+  overflow:hidden;cursor:pointer;transition:all .15s}
+.active-card:hover{background:var(--bg3);border-color:var(--bd2);transform:translateY(-2px)}
+.active-card-cover{height:90px;display:flex;align-items:center;justify-content:center;font-size:36px;
+  background:linear-gradient(135deg,var(--bg3),var(--bg4))}
+.active-card-cover img{width:100%;height:100%;object-fit:cover}
+.active-card-body{padding:9px 10px;direction:rtl}
+.active-card-title{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.active-card-sub{font-size:11px;color:var(--t3)}
+.active-card-prog{height:2px;background:var(--bg4);border-radius:1px;margin-top:6px}
+.active-card-prog-fill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--accent),#a082ff)}
+
+/* ── LIBRARY ── */
+.lib-header{padding:36px 24px 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.lib-tabs{display:flex;gap:3px;background:rgba(255,255,255,.04);border-radius:9px;padding:3px}
+.lib-tab{padding:6px 14px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:12.5px;
+  cursor:pointer;transition:all .13s;color:var(--t3);display:flex;align-items:center;gap:5px}
+.lib-tab:hover{color:var(--t2)}
+.lib-tab.on{color:var(--t1);background:var(--bg3)}
+
+.lib-add-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:9px;
+  background:var(--accent-lo);border:1px solid var(--accent-mid);color:var(--accent);
+  font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+.lib-add-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+.kanban{display:flex;gap:16px;padding:16px 24px 24px;overflow-x:auto;flex:1;overflow-y:hidden}
+.kanban::-webkit-scrollbar{height:5px}
+.kanban::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+
+.kanban-col{flex:1;min-width:260px;display:flex;flex-direction:column;background:rgba(255,255,255,.025);
+  border-radius:14px;border:1px solid var(--bd);overflow:hidden}
+.kanban-col-hd{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;direction:rtl;flex-shrink:0}
+.col-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.col-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px}
+.col-count{font-size:11px;color:var(--t3);margin-right:auto}
+.kanban-cards{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+.kanban-cards::-webkit-scrollbar{width:3px}
+.kanban-cards::-webkit-scrollbar-thumb{background:var(--bg4)}
+
+.kcard{background:var(--bg2);border:1px solid var(--bd);border-radius:11px;padding:11px 12px;
+  cursor:pointer;transition:all .13s;direction:rtl;position:relative}
+.kcard:hover{background:var(--bg3);border-color:var(--bd2)}
+.kcard-top{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px}
+.kcard-cover{width:36px;height:52px;border-radius:5px;flex-shrink:0;overflow:hidden;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:16px}
+.kcard-cover img{width:100%;height:100%;object-fit:cover}
+.kcard-info{flex:1;min-width:0}
+.kcard-title{font-weight:500;font-size:13px;line-height:1.4;margin-bottom:3px}
+.kcard-creator{font-size:11.5px;color:var(--t3)}
+.kcard-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.kcard-badge{font-size:10.5px;padding:2px 7px;border-radius:4px;font-family:'Space Grotesk',sans-serif;font-weight:500}
+.type-book{background:rgba(47,214,168,.12);color:var(--ok)}
+.type-film{background:rgba(123,94,255,.12);color:var(--accent)}
+.type-music{background:rgba(245,166,35,.12);color:var(--warn)}
+.kcard-rating{display:flex;gap:2px;margin-top:5px}
+.star{font-size:12px;cursor:pointer;color:var(--t3);transition:color .1s}
+.star.on{color:var(--warn)}
+.kcard-actions{display:flex;gap:5px;margin-top:8px}
+.kcard-action{font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;border:1px solid var(--bd);
+  color:var(--t3);transition:all .13s;font-family:'Space Grotesk',sans-serif}
+.kcard-action:hover{background:var(--bg4);color:var(--t2)}
+.kcard-action.primary{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+.kcard-action.primary:hover{background:var(--accent);color:#fff}
+.kcard-empty{padding:20px;text-align:center;color:var(--t3);font-size:12.5px;line-height:1.6}
+
+/* ── PLANNER ── */
+.planner-layout{display:flex;height:100%;overflow:hidden}
+.planner-cal{width:300px;flex-shrink:0;border-left:1px solid var(--bd);padding:36px 16px 16px;overflow-y:auto;direction:rtl}
+.planner-cal::-webkit-scrollbar{width:3px}
+.planner-cal::-webkit-scrollbar-thumb{background:var(--bg3)}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-month{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px}
+.cal-year{font-size:12px;color:var(--t3);margin-top:2px}
+.cal-btn{width:28px;height:28px;border-radius:7px;background:var(--bg2);border:1px solid var(--bd);
+  color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .13s}
+.cal-btn:hover{background:var(--bg3);color:var(--t1)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:14px}
+.cal-dow{text-align:center;font-size:10.5px;color:var(--t3);padding:4px 0;font-family:'Space Grotesk',sans-serif}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:7px;
+  font-size:12.5px;cursor:pointer;transition:all .13s;position:relative;font-family:'Space Grotesk',sans-serif}
+.cal-day:hover{background:var(--bg2)}
+.cal-day.today{background:var(--accent-lo);color:var(--accent);font-weight:600}
+.cal-day.selected{background:var(--accent);color:#fff;font-weight:600}
+.cal-day.other-month{color:var(--t3);opacity:.4}
+.cal-day .has-event{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.cal-day.today .has-event{background:#fff}
+
+.planner-day{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.planner-day-header{padding:36px 24px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;direction:rtl}
+.planner-day-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px}
+.planner-day-sub{font-size:12px;color:var(--t2);margin-top:3px}
+.add-event-btn{display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:9px;
+  background:var(--accent-lo);border:1px solid var(--accent-mid);color:var(--accent);
+  font-size:12.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .15s}
+.add-event-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+.timeline{flex:1;overflow-y:auto;padding:12px 24px 24px;direction:rtl}
+.timeline::-webkit-scrollbar{width:5px}
+.timeline::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+.time-slot{display:flex;gap:12px;min-height:52px;position:relative}
+.time-slot::before{content:'';position:absolute;right:51px;top:0;bottom:0;width:1px;background:var(--bd)}
+.slot-label{width:40px;flex-shrink:0;text-align:right;font-size:11px;color:var(--t3);
+  font-variant-numeric:tabular-nums;padding-top:2px;direction:ltr}
+.slot-events{flex:1;padding:2px 0 2px 0;display:flex;flex-direction:column;gap:4px}
+.event-block{padding:8px 11px;border-radius:9px;border-right:3px solid var(--accent);
+  background:var(--accent-lo);cursor:pointer;transition:all .13s;direction:rtl}
+.event-block:hover{background:rgba(123,94,255,.2)}
+.event-block.done{opacity:.5;border-color:var(--t3)}
+.event-block.done .event-title{text-decoration:line-through}
+.event-title{font-size:13px;font-weight:500;margin-bottom:2px}
+.event-meta{font-size:11.5px;color:var(--t2)}
+.event-type-task{border-color:var(--accent);background:var(--accent-lo)}
+.event-type-habit{border-color:var(--ok);background:rgba(47,214,168,.1)}
+.event-type-note{border-color:var(--t3);background:rgba(255,255,255,.04)}
+.event-empty{padding:8px 0;font-size:12px;color:var(--t3)}
+
+/* ── SETTINGS ── */
+.settings-scroll{flex:1;overflow-y:auto;padding:40px 32px}
+.settings-scroll::-webkit-scrollbar{width:5px}
+.settings-scroll::-webkit-scrollbar-thumb{background:var(--bg3)}
+.settings-section{margin-bottom:32px}
+.settings-section-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;
+  margin-bottom:14px;color:var(--t1)}
+.settings-row{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg2);
+  border:1px solid var(--bd);border-radius:12px;margin-bottom:8px;direction:rtl}
+.settings-label{flex:1;font-size:13px}
+.settings-desc{font-size:11.5px;color:var(--t3);margin-top:3px}
+.settings-input{background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:7px 11px;color:var(--t1);font-size:13px;direction:ltr;outline:none;
+  width:260px;transition:border-color .15s;font-family:'Inter',sans-serif}
+.settings-input:focus{border-color:var(--accent-mid)}
+.settings-save-btn{padding:7px 14px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;font-size:12.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .13s}
+.settings-save-btn:hover{background:#8B6EFF}
+.settings-tag{font-size:11px;padding:3px 8px;border-radius:5px;background:var(--ok-lo,rgba(47,214,168,.12));color:var(--ok)}
+
+/* ── Modals ── */
+.modal-bg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.show{opacity:1;pointer-events:all}
+.modal-box{width:460px;background:var(--bg2);border:1px solid var(--bd2);border-radius:18px;padding:24px;
+  direction:rtl;box-shadow:0 24px 80px rgba(0,0,0,.85);max-height:88vh;overflow-y:auto}
+.modal-box::-webkit-scrollbar{width:4px}
+.modal-box::-webkit-scrollbar-thumb{background:var(--bg4)}
+.modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:18px;
+  display:flex;align-items:center;justify-content:space-between}
+.modal-close{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .13s}
+.modal-close:hover{background:var(--bg4);color:var(--t1)}
+.form-group{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--t3);margin-bottom:6px;display:block}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:9px;
+  padding:9px 12px;color:var(--t1);font-size:13px;direction:rtl;outline:none;font-family:'Inter',sans-serif;transition:border-color .15s}
+.form-input:focus{border-color:var(--accent-mid)}
+.form-textarea{height:72px;resize:none}
+.type-selector{display:flex;gap:6px}
+.type-opt{flex:1;padding:8px;border-radius:9px;border:1px solid var(--bd);text-align:center;
+  cursor:pointer;transition:all .13s;font-family:'Space Grotesk',sans-serif;font-size:12.5px;color:var(--t2)}
+.type-opt:hover{background:var(--bg3);color:var(--t1)}
+.type-opt.on{border-color:var(--accent-mid);background:var(--accent-lo);color:var(--accent)}
+.modal-actions{display:flex;gap:7px;justify-content:flex-end;margin-top:18px}
+.btn-cancel{padding:8px 16px;border-radius:9px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;font-size:13px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-cancel:hover{background:var(--bg4);color:var(--t1)}
+.btn-save{padding:8px 16px;border-radius:9px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;font-size:13px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-save:hover{background:#8B6EFF}
+</style>
+</head>
+<body>
+<div class="drag-area"></div>
+
+<div class="app no-drag">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="app-brand">
+    <div class="brand-icon">اثر</div>
+    <div>
+      <div class="brand-name">اثر</div>
+      <div class="brand-sub">تجربه‌های فرهنگی</div>
+    </div>
+  </div>
+
+  <div style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">منو</div>
+
+  <div class="nav-item active" onclick="showSection('home',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>
+    <span class="nav-label">خانه</span>
+  </div>
+
+  <div class="nav-item" onclick="showSection('library',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5"/></svg>
+    <span class="nav-label">کتابخانه</span>
+  </div>
+
+  <div class="nav-item" onclick="showSection('planner',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
+    <span class="nav-label">برنامه‌ریزی</span>
+  </div>
+
+  <div class="nav-divider"></div>
+  <div style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">اپ‌ها</div>
+
+  <div class="nav-item subapp" onclick="window.api.openMusicPlayer()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg>
+    <span class="nav-label">موزیک پلیر</span>
+    <span class="nav-badge">↗</span>
+  </div>
+
+  <div class="nav-item subapp" onclick="window.api.openVideoPlayer()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+    <span class="nav-label">ویدئو پلیر</span>
+    <span class="nav-badge">↗</span>
+  </div>
+
+  <div class="nav-item subapp" onclick="window.api.openBookReader()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+    <span class="nav-label">بوک ریدر</span>
+    <span class="nav-badge">↗</span>
+  </div>
+
+  <div class="nav-divider"></div>
+
+  <div class="nav-item" onclick="showSection('settings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    <span class="nav-label">تنظیمات</span>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+  <!-- HOME -->
+  <div class="section active" id="section-home">
+    <div class="home-scroll">
+      <div class="home-date-block">
+        <div class="shamsi-date" id="shamsi-date">...</div>
+        <div class="shamsi-day" id="shamsi-day">...</div>
+      </div>
+
+      <div class="stats-row" id="stats-row"></div>
+
+      <div class="home-section-title">
+        امروز
+        <span class="home-see-all" onclick="showSection('planner',document.querySelector('[onclick*=planner]'))">همه ←</span>
+      </div>
+      <div class="plan-list" id="today-plan-list">
+        <div class="plan-empty">امروز رویدادی نداری. یه برنامه اضافه کن!</div>
+      </div>
+
+      <div class="home-section-title" style="margin-top:8px">
+        در حال خواندن / دیدن / شنیدن
+        <span class="home-see-all" onclick="showSection('library',document.querySelector('[onclick*=library]'))">همه ←</span>
+      </div>
+      <div class="active-cards" id="active-cards">
+        <div style="font-size:12.5px;color:var(--t3);padding:8px 0">چیزی در حال بررسی نداری</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIBRARY -->
+  <div class="section" id="section-library">
+    <div class="lib-header">
+      <div class="lib-tabs" id="lib-tabs">
+        <div class="lib-tab on" data-type="all" onclick="filterLib(this,'all')">همه</div>
+        <div class="lib-tab" data-type="book" onclick="filterLib(this,'book')">📚 کتاب</div>
+        <div class="lib-tab" data-type="film" onclick="filterLib(this,'film')">🎬 فیلم</div>
+        <div class="lib-tab" data-type="music" onclick="filterLib(this,'music')">🎵 موزیک</div>
+      </div>
+      <button class="lib-add-btn no-drag" onclick="openAddItem()">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+        افزودن
+      </button>
+    </div>
+    <div class="kanban" id="kanban">
+      <div class="kanban-col">
+        <div class="kanban-col-hd"><div class="col-dot" style="background:#454568"></div><span class="col-title">می‌خوام</span><span class="col-count" id="cnt-queue">۰</span></div>
+        <div class="kanban-cards" id="col-queue"></div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-hd"><div class="col-dot" style="background:#7B5EFF"></div><span class="col-title">در حال بررسی</span><span class="col-count" id="cnt-active">۰</span></div>
+        <div class="kanban-cards" id="col-active"></div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-hd"><div class="col-dot" style="background:#2FD6A8"></div><span class="col-title">تمام شد</span><span class="col-count" id="cnt-done">۰</span></div>
+        <div class="kanban-cards" id="col-done"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLANNER -->
+  <div class="section" id="section-planner">
+    <div class="planner-layout">
+      <div class="planner-day">
+        <div class="planner-day-header">
+          <div>
+            <div class="planner-day-title" id="day-title">...</div>
+            <div class="planner-day-sub" id="day-sub"></div>
+          </div>
+          <button class="add-event-btn no-drag" onclick="openAddEvent()">
+            <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+            رویداد جدید
+          </button>
+        </div>
+        <div class="timeline no-drag" id="timeline"></div>
+      </div>
+      <div class="planner-cal no-drag">
+        <div class="cal-nav">
+          <div>
+            <div class="cal-month" id="cal-month">...</div>
+            <div class="cal-year" id="cal-year"></div>
+          </div>
+          <div style="display:flex;gap:5px">
+            <div class="cal-btn" onclick="calNav(-1)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg></div>
+            <div class="cal-btn" onclick="calNav(1)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg></div>
+          </div>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="section" id="section-settings">
+    <div class="settings-scroll">
+      <div class="settings-section">
+        <div class="settings-section-title">API ها</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">TMDB API Key</div>
+            <div class="settings-desc">برای دریافت پوستر و اطلاعات فیلم — از themoviedb.org</div>
+          </div>
+          <input class="settings-input no-drag" id="tmdb-key-input" placeholder="eyJhbGci..." type="password">
+          <button class="settings-save-btn no-drag" onclick="saveSetting('tmdb-key','tmdb-key-input')">ذخیره</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">درباره</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">اثر</div>
+            <div class="settings-desc">نسخه ۱.۰.۰ — ساخته شده با Electron</div>
+          </div>
+          <span class="settings-tag">v1.0.0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .main -->
+</div><!-- .app -->
+
+<!-- ADD ITEM MODAL -->
+<div class="modal-bg" id="add-item-modal" onclick="if(event.target===this)closeAddItem()">
+  <div class="modal-box no-drag">
+    <div class="modal-title">
+      افزودن به کتابخانه
+      <div class="modal-close" onclick="closeAddItem()">✕</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">نوع</label>
+      <div class="type-selector">
+        <div class="type-opt on" data-t="book" onclick="selectType(this,'book')">📚 کتاب</div>
+        <div class="type-opt" data-t="film" onclick="selectType(this,'film')">🎬 فیلم</div>
+        <div class="type-opt" data-t="music" onclick="selectType(this,'music')">🎵 موزیک</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">عنوان</label>
+      <input class="form-input" id="item-title" placeholder="نام کتاب، فیلم یا آهنگ...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">نویسنده / کارگردان / خواننده</label>
+      <input class="form-input" id="item-creator" placeholder="اختیاری">
+    </div>
+    <div class="form-group">
+      <label class="form-label">سال</label>
+      <input class="form-input" id="item-year" placeholder="مثلاً ۱۴۰۲" style="width:120px">
+    </div>
+    <div class="form-group">
+      <label class="form-label">یادداشت اولیه</label>
+      <textarea class="form-input form-textarea" id="item-notes" placeholder="چرا می‌خوای این رو ببینی/بخونی/بشنوی؟"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAddItem()">انصراف</button>
+      <button class="btn-save" onclick="saveItem()">افزودن</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD EVENT MODAL -->
+<div class="modal-bg" id="add-event-modal" onclick="if(event.target===this)closeAddEvent()">
+  <div class="modal-box no-drag">
+    <div class="modal-title">
+      رویداد جدید
+      <div class="modal-close" onclick="closeAddEvent()">✕</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">عنوان</label>
+      <input class="form-input" id="event-title" placeholder="عنوان رویداد...">
+    </div>
+    <div style="display:flex;gap:12px">
+      <div class="form-group" style="flex:1">
+        <label class="form-label">ساعت شروع</label>
+        <input class="form-input" id="event-time" type="time" value="09:00">
+      </div>
+      <div class="form-group" style="flex:1">
+        <label class="form-label">مدت (دقیقه)</label>
+        <input class="form-input" id="event-dur" type="number" value="60" min="5" max="480">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">نوع</label>
+      <div class="type-selector">
+        <div class="type-opt on" data-ev="task" onclick="selectEventType(this,'task')">وظیفه</div>
+        <div class="type-opt" data-ev="habit" onclick="selectEventType(this,'habit')">عادت</div>
+        <div class="type-opt" data-ev="note" onclick="selectEventType(this,'note')">یادداشت</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAddEvent()">انصراف</button>
+      <button class="btn-save" onclick="saveEvent()">ذخیره</button>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>

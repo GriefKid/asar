@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+let mainWindow = null;
 let musicWindow = null;
 let videoWindow = null;
 let bookWindow = null;
@@ -66,6 +67,28 @@ function createVideoPlayer() {
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
+function createMainApp() {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 820,
+    minWidth: 900,
+    minHeight: 600,
+    backgroundColor: '#04040C',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#08081A', symbolColor: '#8585AA', height: 32 },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false
+    },
+    show: false
+  });
+  mainWindow.loadFile('src/main-app/index.html');
+  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.on('closed', () => { mainWindow = null; });
+}
+
 function createBookReader() {
   bookWindow = new BrowserWindow({
     width: 1400,
@@ -88,11 +111,25 @@ function createBookReader() {
   bookWindow.on('closed', () => { bookWindow = null; });
 }
 
-app.whenReady().then(() => {
+// ── IPC: Open sub-apps ─────────────────────────────────────────────────
+ipcMain.handle('app:open-music', () => {
+  if (musicWindow) { musicWindow.focus(); return; }
+  createMusicPlayer();
+});
+ipcMain.handle('app:open-video', () => {
+  if (videoWindow) { videoWindow.focus(); return; }
+  createVideoPlayer();
+});
+ipcMain.handle('app:open-book', () => {
+  if (bookWindow) { bookWindow.focus(); return; }
   createBookReader();
+});
+
+app.whenReady().then(() => {
+  createMainApp();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createBookReader();
+    if (BrowserWindow.getAllWindows().length === 0) createMainApp();
   });
 });
 
