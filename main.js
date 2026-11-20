@@ -4,6 +4,7 @@ const fs = require('fs');
 
 let musicWindow = null;
 let videoWindow = null;
+let bookWindow = null;
 
 function createMusicPlayer() {
   musicWindow = new BrowserWindow({
@@ -65,11 +66,33 @@ function createVideoPlayer() {
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
+function createBookReader() {
+  bookWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 960,
+    minHeight: 600,
+    backgroundColor: '#04040C',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#08081A', symbolColor: '#8585AA', height: 32 },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false
+    },
+    show: false
+  });
+  bookWindow.loadFile('src/apps/book-reader/index.html');
+  bookWindow.once('ready-to-show', () => bookWindow.show());
+  bookWindow.on('closed', () => { bookWindow = null; });
+}
+
 app.whenReady().then(() => {
-  createVideoPlayer();
+  createBookReader();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createVideoPlayer();
+    if (BrowserWindow.getAllWindows().length === 0) createBookReader();
   });
 });
 
@@ -228,6 +251,21 @@ ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
       genre_ids: m.genre_ids
     };
   } catch { return null; }
+});
+
+// ── IPC: Book / PDF ───────────────────────────────────────────────────
+ipcMain.handle('dialog:openPdfFiles', async () => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+
+ipcMain.handle('file:readBuffer', async (_, filePath) => {
+  const buf = fs.readFileSync(filePath);
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 
 ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {

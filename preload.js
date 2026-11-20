@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   openSubtitleFile:  ()                    => ipcRenderer.invoke('dialog:openSubtitleFile'),
   tmdbSearch:        (title, key)          => ipcRenderer.invoke('tmdb:search', title, key),
   tmdbDetails:       (id, key)             => ipcRenderer.invoke('tmdb:details', id, key),
+  // Book reader
+  openPdfFiles:      ()                    => ipcRenderer.invoke('dialog:openPdfFiles'),
+  readFileBuffer:    (path)                => ipcRenderer.invoke('file:readBuffer', path),
 });
