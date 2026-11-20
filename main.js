@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 let musicWindow = null;
+let videoWindow = null;
 
 function createMusicPlayer() {
   musicWindow = new BrowserWindow({
@@ -37,11 +38,38 @@ function createMusicPlayer() {
   });
 }
 
+function createVideoPlayer() {
+  videoWindow = new BrowserWindow({
+    width: 1400,
+    height: 860,
+    minWidth: 960,
+    minHeight: 600,
+    backgroundColor: '#04040C',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#08081A',
+      symbolColor: '#8585AA',
+      height: 32
+    },
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false
+    },
+    show: false
+  });
+
+  videoWindow.loadFile('src/apps/video-player/index.html');
+  videoWindow.once('ready-to-show', () => videoWindow.show());
+  videoWindow.on('closed', () => { videoWindow = null; });
+}
+
 app.whenReady().then(() => {
-  createMusicPlayer();
+  createVideoPlayer();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMusicPlayer();
+    if (BrowserWindow.getAllWindows().length === 0) createVideoPlayer();
   });
 });
 
@@ -153,4 +181,73 @@ ipcMain.handle('cover:fetch', async (_, artist, title) => {
   } catch {
     return null;
   }
+});
+
+// ── IPC: Video file dialog ─────────────────────────────────────────────
+ipcMain.handle('dialog:openVideoFiles', async () => {
+  const win = videoWindow || BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Video Files', extensions: ['mp4','mkv','avi','mov','webm','m4v','wmv','flv','ts','mpg','mpeg'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  return result.canceled ? [] : result.filePaths;
+});
+
+ipcMain.handle('dialog:openSubtitleFile', async () => {
+  const win = videoWindow || BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile'],
+    filters: [{ name: 'Subtitle Files', extensions: ['srt','vtt'] }]
+  });
+  if (result.canceled) return null;
+  return fs.readFileSync(result.filePaths[0], 'utf8');
+});
+
+// ── IPC: TMDB search ───────────────────────────────────────────────────
+ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
+  try {
+    const q = encodeURIComponent(title);
+    const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${q}&language=en-US&page=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.results?.length) return null;
+    const m = data.results[0];
+    return {
+      id: m.id,
+      title: m.title,
+      original_title: m.original_title,
+      overview: m.overview,
+      release_date: m.release_date,
+      vote_average: m.vote_average,
+      poster_path: m.poster_path ? `https://image.tmdb.org/t/p/w300${m.poster_path}` : null,
+      backdrop_path: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : null,
+      genre_ids: m.genre_ids
+    };
+  } catch { return null; }
+});
+
+ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {
+  try {
+    const url = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}&append_to_response=credits&language=en-US`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const m = await res.json();
+    return {
+      title: m.title,
+      original_title: m.original_title,
+      overview: m.overview,
+      release_date: m.release_date,
+      runtime: m.runtime,
+      vote_average: m.vote_average,
+      genres: m.genres?.map(g => g.name) || [],
+      director: m.credits?.crew?.find(c => c.job === 'Director')?.name || null,
+      cast: m.credits?.cast?.slice(0, 5).map(c => c.name) || [],
+      poster_path: m.poster_path ? `https://image.tmdb.org/t/p/w300${m.poster_path}` : null,
+      backdrop_path: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : null,
+    };
+  } catch { return null; }
 });

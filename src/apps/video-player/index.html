@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="fa" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ویدئو پلیر — اثر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
+  --accent:#7B5EFF;--accent-lo:rgba(123,94,255,.14);--accent-mid:rgba(123,94,255,.3);
+  --ok:#2FD6A8;--warn:#F5A623;--err:#FF5F7E;
+  --t1:#EEEEF6;--t2:#8585AA;--t3:#454568;
+  --bd:rgba(255,255,255,.06);--bd2:rgba(255,255,255,.12);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);
+  font-family:'Inter',system-ui,sans-serif;font-size:13px}
+.app{display:flex;flex-direction:row-reverse;height:100%;position:relative}
+.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
+.no-drag{-webkit-app-region:no-drag}
+
+/* ── Sidebar ── */
+.sidebar{width:260px;flex-shrink:0;background:rgba(8,8,26,.96);
+  border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;z-index:2}
+.sb-top{padding:40px 14px 12px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;direction:rtl;flex-shrink:0}
+.sb-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px}
+.sb-btns{display:flex;gap:5px}
+.icon-btn{width:28px;height:28px;border-radius:8px;background:var(--bg2);border:1px solid var(--bd);
+  color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.icon-btn:hover{background:var(--bg3);color:var(--t1)}
+.icon-btn.accent{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+.icon-btn.accent:hover{background:var(--accent);color:#fff}
+.colls{overflow-y:auto;flex:1;padding:8px}
+.colls::-webkit-scrollbar{width:3px}
+.colls::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.empty-colls{padding:28px 16px;text-align:center;color:var(--t3);direction:rtl}
+.empty-colls p{font-size:13px;line-height:1.6;margin-bottom:12px}
+
+.coll{margin-bottom:4px;border-radius:10px;overflow:hidden}
+.coll-hd{display:flex;align-items:center;gap:9px;padding:8px 10px;direction:rtl;
+  cursor:pointer;transition:background .13s;user-select:none}
+.coll-hd:hover{background:var(--bg2)}
+.coll.active .coll-hd{background:var(--accent-lo)}
+.coll-thumb{width:36px;height:52px;border-radius:6px;flex-shrink:0;overflow:hidden;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px}
+.coll-thumb img{width:100%;height:100%;object-fit:cover}
+.coll-meta{flex:1;min-width:0}
+.coll-name{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.coll-cnt{font-size:11px;color:var(--t3);margin-top:2px}
+.coll-chev{font-size:11px;color:var(--t3);transition:transform .2s;flex-shrink:0}
+.coll.open .coll-chev{transform:rotate(90deg)}
+.coll-items{display:none;padding:3px 0 5px}
+.coll.open .coll-items{display:block}
+
+.movie-row{display:flex;align-items:center;gap:9px;padding:5px 10px 5px 12px;
+  direction:rtl;cursor:pointer;border-radius:8px;transition:all .13s;margin:1px 2px}
+.movie-row:hover{background:var(--bg2)}
+.movie-row.playing{background:var(--accent-lo)}
+.movie-thumb-sm{width:28px;height:40px;border-radius:4px;flex-shrink:0;overflow:hidden;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px}
+.movie-thumb-sm img{width:100%;height:100%;object-fit:cover}
+.movie-info{flex:1;min-width:0}
+.movie-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t1)}
+.movie-row.playing .movie-name{color:var(--accent);font-weight:500}
+.movie-year{font-size:11px;color:var(--t3);margin-top:1px}
+.play-ind{width:14px;height:14px;border-radius:50%;background:var(--accent);
+  display:none;align-items:center;justify-content:center;flex-shrink:0}
+.movie-row.playing .play-ind{display:flex}
+
+/* ── Video Area ── */
+.video-area{flex:1;position:relative;background:#000;overflow:hidden}
+.video-area.cursor-hidden{cursor:none}
+
+video#vid{width:100%;height:100%;display:block;object-fit:contain}
+
+.video-gradient{position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:linear-gradient(180deg,rgba(4,4,12,.5) 0%,transparent 25%,transparent 60%,rgba(4,4,12,.98) 100%);
+  opacity:0;transition:opacity .3s}
+.video-area.show-ctrl .video-gradient{opacity:1}
+
+/* no-track */
+.no-track{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;color:var(--t3);direction:rtl;text-align:center;
+  background:var(--bg0)}
+.no-track svg{width:52px;height:52px;opacity:.25}
+.no-track p{font-size:14px;line-height:1.6}
+.no-track.hidden{display:none}
+
+/* meta overlay */
+.meta-overlay{position:absolute;top:40px;right:0;padding:16px 20px 0;z-index:3;direction:rtl;
+  opacity:0;transition:opacity .3s;pointer-events:none}
+.video-area.show-ctrl .meta-overlay{opacity:1;pointer-events:all}
+.meta-overlay.has-video{opacity:1;pointer-events:all}
+.meta-eyebrow{font-size:11px;color:rgba(255,255,255,.5);letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px}
+.meta-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;
+  text-shadow:0 2px 12px rgba(0,0,0,.8);margin-bottom:5px;color:#fff}
+.meta-tags{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.meta-tag{padding:3px 7px;border-radius:5px;font-size:11px;background:rgba(0,0,0,.45);
+  color:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(4px)}
+.meta-tag.rating{background:rgba(123,94,255,.2);border-color:var(--accent-mid);color:var(--accent)}
+.info-pill{display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+  padding:4px 10px;border-radius:20px;font-size:11px;font-family:'Space Grotesk',sans-serif;font-weight:500;
+  background:rgba(123,94,255,.18);border:1px solid var(--accent-mid);color:var(--accent);
+  cursor:pointer;transition:all .15s}
+.info-pill:hover{background:rgba(123,94,255,.32)}
+
+/* subtitle */
+.subtitle-display{position:absolute;bottom:110px;left:50%;transform:translateX(-50%);
+  z-index:3;text-align:center;pointer-events:none;white-space:nowrap}
+.subtitle-display.hidden{display:none}
+.sub-en{display:inline-block;background:rgba(0,0,0,.78);border-radius:6px;
+  padding:4px 14px;font-size:16px;line-height:1.5;color:#fff;
+  text-shadow:0 1px 4px rgba(0,0,0,.8);direction:ltr;margin-bottom:4px}
+.sub-fa{display:inline-block;background:rgba(0,0,0,.72);border-radius:6px;
+  padding:4px 14px;font-size:14px;line-height:1.5;color:rgba(255,230,100,.95);
+  text-shadow:0 1px 4px rgba(0,0,0,.8);direction:rtl}
+
+/* controls */
+.controls{position:absolute;bottom:0;left:0;right:0;z-index:4;
+  padding:0 18px 14px;opacity:0;transition:opacity .3s;pointer-events:none}
+.video-area.show-ctrl .controls{opacity:1;pointer-events:all}
+
+.prog-wrap{padding-top:10px;cursor:pointer;margin-bottom:10px}
+.prog-track{width:100%;height:3px;background:rgba(255,255,255,.12);border-radius:2px;
+  position:relative;cursor:pointer;transition:height .15s}
+.prog-track:hover{height:5px}
+.prog-fill{height:100%;border-radius:2px;width:0%;
+  background:linear-gradient(90deg,var(--accent),#a082ff);position:relative;min-width:0}
+.prog-fill::after{content:'';position:absolute;right:-5px;top:50%;transform:translateY(-50%);
+  width:12px;height:12px;border-radius:50%;background:#fff;
+  box-shadow:0 0 8px rgba(123,94,255,.7);opacity:0;transition:opacity .15s}
+.prog-track:hover .prog-fill::after{opacity:1}
+.markers-bar{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+.marker{position:absolute;top:50%;transform:translateY(-50%);
+  width:9px;height:9px;border-radius:50%;border:1.5px solid #04040C;
+  cursor:pointer;pointer-events:all;transition:transform .15s;z-index:2}
+.marker:hover{transform:translateY(-50%) scale(1.6)}
+.marker-tip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:5px 10px;font-size:11.5px;color:var(--t1);white-space:nowrap;
+  pointer-events:none;opacity:0;transition:opacity .15s;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);direction:rtl;z-index:10}
+.marker:hover .marker-tip{opacity:1}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.45);
+  font-variant-numeric:tabular-nums;direction:ltr;margin-bottom:8px}
+
+.ctrl-row{display:flex;align-items:center;justify-content:space-between}
+.ctrl-left,.ctrl-right{display:flex;align-items:center;gap:3px}
+
+.c-btn{width:36px;height:36px;border-radius:50%;background:transparent;border:none;
+  color:rgba(255,255,255,.65);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.c-btn:hover{color:#fff;background:rgba(255,255,255,.08)}
+.c-btn svg{width:18px;height:18px}
+.c-btn.sm svg{width:16px;height:16px}
+.c-btn.on{color:var(--accent)}
+.play-btn{width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#5B3FDF);
+  border:none;color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(123,94,255,.5);transition:all .18s;margin:0 4px}
+.play-btn:hover{transform:scale(1.08)}
+.play-btn:active{transform:scale(.95)}
+.play-btn svg{width:20px;height:20px}
+
+.vol-wrap{display:flex;align-items:center;gap:7px;direction:ltr;margin-right:4px}
+.vol-track{width:70px;height:3px;background:rgba(255,255,255,.15);border-radius:2px;
+  position:relative;cursor:pointer}
+.vol-fill{height:100%;border-radius:2px;width:75%;background:linear-gradient(90deg,rgba(255,255,255,.4),rgba(255,255,255,.9))}
+.vol-val{font-size:11px;color:rgba(255,255,255,.4);min-width:24px;font-variant-numeric:tabular-nums}
+
+.sub-tabs{display:flex;gap:2px;background:rgba(255,255,255,.06);border-radius:7px;padding:2px}
+.stab{padding:4px 9px;border-radius:5px;font-size:11.5px;font-family:'Space Grotesk',sans-serif;
+  font-weight:500;cursor:pointer;transition:all .13s;color:rgba(255,255,255,.45);
+  background:transparent;border:none}
+.stab:hover{color:rgba(255,255,255,.8)}
+.stab.on{color:#fff;background:rgba(255,255,255,.1)}
+.stab.on[data-mode="both"]{background:var(--accent-lo);color:var(--accent)}
+
+.add-cmt-btn{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;
+  background:rgba(123,94,255,.07);border:1px dashed rgba(123,94,255,.28);
+  color:rgba(255,255,255,.45);font-size:12px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .15s}
+.add-cmt-btn:hover{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+
+/* ── Info Modal ── */
+.modal-bg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.show{opacity:1;pointer-events:all}
+.modal-box{width:580px;max-height:80vh;overflow-y:auto;
+  background:var(--bg2);border:1px solid var(--bd2);border-radius:18px;padding:26px;direction:rtl;
+  box-shadow:0 24px 80px rgba(0,0,0,.85)}
+.modal-box::-webkit-scrollbar{width:4px}
+.modal-box::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.modal-hd{display:flex;align-items:flex-start;gap:16px;margin-bottom:22px}
+.modal-poster{width:80px;height:116px;border-radius:10px;overflow:hidden;flex-shrink:0;
+  background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:32px}
+.modal-poster img{width:100%;height:100%;object-fit:cover}
+.modal-meta{flex:1}
+.modal-film-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;margin-bottom:4px}
+.modal-orig{font-size:13px;color:var(--t2);margin-bottom:8px;direction:ltr;text-align:right}
+.modal-tags{display:flex;gap:5px;flex-wrap:wrap}
+.modal-close{width:28px;height:28px;border-radius:8px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .13s}
+.modal-close:hover{background:var(--bg4);color:var(--t1)}
+.info-row{margin-bottom:16px}
+.info-lbl{font-size:11px;color:var(--t3);font-family:'Space Grotesk',sans-serif;font-weight:500;
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.info-en{font-size:13px;color:var(--t2);line-height:1.6;direction:ltr;text-align:left}
+.info-fa{font-size:13px;color:var(--t1);line-height:1.6;direction:rtl;
+  margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)}
+.info-loading{color:var(--t3);font-size:13px;text-align:center;padding:20px 0}
+
+/* ── TMDB key setup ── */
+.setup-banner{position:fixed;top:40px;right:270px;left:0;z-index:10;
+  background:var(--bg2);border-bottom:1px solid var(--bd2);padding:10px 18px;
+  display:flex;align-items:center;gap:10px;direction:rtl;display:none}
+.setup-banner.show{display:flex}
+.setup-input{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:7px 11px;color:var(--t1);font-size:13px;direction:ltr;outline:none;transition:border-color .15s}
+.setup-input:focus{border-color:var(--accent-mid)}
+.setup-save{padding:7px 14px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;font-size:12.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer}
+
+/* ── Comment Modal ── */
+.cmt-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .2s;padding-bottom:36px}
+.cmt-modal.show{opacity:1;pointer-events:all}
+.cmt-box{width:440px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;
+  padding:18px;direction:rtl;box-shadow:0 -8px 40px rgba(0,0,0,.5);
+  transform:translateY(16px);transition:transform .2s}
+.cmt-modal.show .cmt-box{transform:translateY(0)}
+.cmt-time{font-size:11.5px;color:var(--accent);font-family:'Space Grotesk',sans-serif;font-weight:600;margin-bottom:10px;direction:ltr;text-align:left}
+.cmt-input{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;
+  padding:10px 13px;color:var(--t1);font-size:13.5px;direction:rtl;
+  font-family:'Inter',sans-serif;resize:none;height:76px;outline:none;transition:border-color .15s}
+.cmt-input:focus{border-color:var(--accent-mid)}
+.cmt-actions{display:flex;gap:7px;margin-top:9px;justify-content:flex-end}
+.btn-cancel{padding:7px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-cancel:hover{background:var(--bg4);color:var(--t1)}
+.btn-save{padding:7px 14px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-save:hover{background:#8B6EFF}
+
+/* ── New Coll Modal ── */
+.newcoll-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.newcoll-modal.show{opacity:1;pointer-events:all}
+.newcoll-box{width:360px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;padding:24px;direction:rtl}
+.newcoll-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:16px}
+.newcoll-input{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;
+  padding:10px 13px;color:var(--t1);font-size:14px;direction:rtl;
+  font-family:'Space Grotesk',sans-serif;outline:none;transition:border-color .15s;margin-bottom:14px}
+.newcoll-input:focus{border-color:var(--accent-mid)}
+
+/* ── Sub load modal ── */
+.sub-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.sub-modal.show{opacity:1;pointer-events:all}
+.sub-box{width:380px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;padding:24px;direction:rtl}
+.sub-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:14px}
+.sub-status{font-size:12.5px;color:var(--t2);line-height:1.6;margin-bottom:14px;min-height:36px}
+.sub-status .ok{color:var(--ok)}
+.sub-status .translating{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="drag-area"></div>
+
+<!-- TMDB key banner -->
+<div class="setup-banner" id="setup-banner">
+  <span style="color:var(--t2);font-size:12.5px;direction:rtl;white-space:nowrap">برای اطلاعات فیلم، TMDB API key بده:</span>
+  <input class="setup-input no-drag" id="tmdb-key-input" placeholder="eyJhbGciOi...">
+  <button class="setup-save no-drag" onclick="saveTmdbKey()">ذخیره</button>
+  <button class="btn-cancel no-drag" style="font-size:11.5px" onclick="document.getElementById('setup-banner').classList.remove('show')">بعداً</button>
+</div>
+
+<div class="app">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-top">
+    <span class="sb-title">مجموعه‌ها</span>
+    <div class="sb-btns no-drag">
+      <div class="icon-btn" onclick="importFiles()" title="افزودن فایل">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+      </div>
+      <div class="icon-btn accent" onclick="showNewColl()" title="مجموعه جدید">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="colls no-drag" id="colls-list"></div>
+</div>
+
+<!-- VIDEO AREA -->
+<div class="video-area show-ctrl" id="video-area">
+
+  <video id="vid" preload="metadata"></video>
+
+  <div class="video-gradient"></div>
+
+  <!-- no track state -->
+  <div class="no-track" id="no-track">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+    <p>فیلمی انتخاب نشده<br><span style="font-size:12px">از مجموعه، روی یه فیلم بزن</span></p>
+  </div>
+
+  <!-- meta overlay -->
+  <div class="meta-overlay no-drag" id="meta-overlay">
+    <div class="meta-eyebrow">در حال پخش</div>
+    <div class="meta-title" id="meta-title">—</div>
+    <div class="meta-tags" id="meta-tags"></div>
+    <div class="info-pill" onclick="openInfo()">ℹ اطلاعات بیشتر</div>
+  </div>
+
+  <!-- subtitle display -->
+  <div class="subtitle-display hidden" id="sub-display">
+    <div class="sub-en" id="sub-en-line" style="display:none"></div>
+    <div class="sub-fa" id="sub-fa-line" style="display:none"></div>
+  </div>
+
+  <!-- controls -->
+  <div class="controls no-drag" id="controls">
+    <div class="prog-wrap">
+      <div class="prog-track" id="prog-track">
+        <div class="prog-fill" id="prog-fill">
+          <div class="markers-bar" id="markers-bar"></div>
+        </div>
+      </div>
+    </div>
+    <div class="time-row">
+      <span id="time-cur">0:00</span>
+      <span id="time-dur">0:00</span>
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-left">
+        <button class="c-btn" onclick="prevVideo()" title="قبلی">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9.195 18.44c1.25.713 2.805-.19 2.805-1.629v-2.34l6.945 3.968c1.25.714 2.805-.188 2.805-1.628V8.688c0-1.44-1.555-2.342-2.805-1.628L12 11.03v-2.34c0-1.44-1.555-2.343-2.805-1.629l-7.108 4.062c-1.26.72-1.26 2.536 0 3.256l7.108 4.061z"/></svg>
+        </button>
+        <button class="play-btn" id="play-btn" onclick="togglePlay()">
+          <svg id="play-icon" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clip-rule="evenodd"/></svg>
+        </button>
+        <button class="c-btn" onclick="nextVideo()" title="بعدی">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.055 7.06c-1.25-.714-2.805.189-2.805 1.628v8.123c0 1.44 1.555 2.342 2.805 1.628L12 14.471v2.34c0 1.44 1.555 2.342 2.805 1.628l7.108-4.061c1.26-.72 1.26-2.536 0-3.256l-7.108-4.061c-1.25-.714-2.805.188-2.805 1.628v2.34L5.055 7.06z"/></svg>
+        </button>
+        <div class="vol-wrap">
+          <button class="c-btn sm" onclick="toggleMute()">
+            <svg id="vol-svg" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.241 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 5.106a.75.75 0 011.06 0c3.808 3.807 3.808 9.98 0 13.788a.75.75 0 11-1.06-1.06 8.25 8.25 0 000-11.668.75.75 0 010-1.06z"/><path d="M15.932 7.757a.75.75 0 011.061 0 6 6 0 010 8.486.75.75 0 01-1.06-1.061 4.5 4.5 0 000-6.364.75.75 0 010-1.061z"/></svg>
+          </button>
+          <div class="vol-track" id="vol-track"><div class="vol-fill" id="vol-fill"></div></div>
+          <span class="vol-val" id="vol-val">75</span>
+        </div>
+      </div>
+
+      <div class="ctrl-right">
+        <button class="add-cmt-btn" onclick="openCmt()">
+          <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+          کامنت
+        </button>
+        <!-- subtitle mode -->
+        <div class="sub-tabs" id="sub-tabs">
+          <button class="stab on" data-mode="both" onclick="setSubMode(this,'both')">EN+FA</button>
+          <button class="stab" data-mode="en" onclick="setSubMode(this,'en')">EN</button>
+          <button class="stab" data-mode="fa" onclick="setSubMode(this,'fa')">FA</button>
+        </div>
+        <!-- load subtitle -->
+        <button class="c-btn sm" onclick="loadSubtitle()" title="بارگذاری زیرنویس">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path stroke-linecap="round" d="M6 12h4M6 15h8M14 12h4"/></svg>
+        </button>
+        <!-- fullscreen -->
+        <button class="c-btn sm" onclick="toggleFullscreen()" title="تمام صفحه (F)">
+          <svg id="fs-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .video-area -->
+</div><!-- .app -->
+
+<!-- INFO MODAL -->
+<div class="modal-bg" id="info-modal" onclick="if(event.target===this)closeInfo()">
+  <div class="modal-box no-drag">
+    <div class="modal-hd">
+      <div class="modal-poster" id="modal-poster">🎬</div>
+      <div class="modal-meta">
+        <div class="modal-film-title" id="modal-film-title">—</div>
+        <div class="modal-orig" id="modal-orig"></div>
+        <div class="modal-tags" id="modal-tags"></div>
+      </div>
+      <div class="modal-close" onclick="closeInfo()">✕</div>
+    </div>
+    <div id="info-content"><div class="info-loading">در حال بارگذاری...</div></div>
+  </div>
+</div>
+
+<!-- COMMENT MODAL -->
+<div class="cmt-modal" id="cmt-modal" onclick="if(event.target===this)closeCmt()">
+  <div class="cmt-box no-drag">
+    <div class="cmt-time" id="cmt-time">⏱ ۰:۰۰</div>
+    <textarea class="cmt-input" id="cmt-input" placeholder="یادداشت خود را بنویسید..."></textarea>
+    <div class="cmt-actions">
+      <button class="btn-cancel" onclick="closeCmt()">انصراف</button>
+      <button class="btn-save" onclick="saveCmt()">ذخیره</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW COLLECTION MODAL -->
+<div class="newcoll-modal" id="newcoll-modal" onclick="if(event.target===this)closeNewColl()">
+  <div class="newcoll-box no-drag">
+    <div class="newcoll-title">مجموعه جدید</div>
+    <input class="newcoll-input" id="newcoll-name" placeholder="نام مجموعه..." onkeydown="if(event.key==='Enter')createColl()">
+    <div class="cmt-actions">
+      <button class="btn-cancel" onclick="closeNewColl()">انصراف</button>
+      <button class="btn-save" onclick="createColl()">ساخت</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUBTITLE STATUS MODAL -->
+<div class="sub-modal" id="sub-modal" onclick="if(event.target===this)document.getElementById('sub-modal').classList.remove('show')">
+  <div class="sub-box no-drag">
+    <div class="sub-title">زیرنویس</div>
+    <div class="sub-status" id="sub-status">در حال بارگذاری...</div>
+    <div class="cmt-actions">
+      <button class="btn-cancel" onclick="document.getElementById('sub-modal').classList.remove('show')">بستن</button>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>
