@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="fa" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>موزیک پلیر — اثر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
+  --accent:#7B5EFF;--accent-lo:rgba(123,94,255,.14);--accent-mid:rgba(123,94,255,.3);
+  --ok:#2FD6A8;--warn:#F5A623;--err:#FF5F7E;
+  --t1:#EEEEF6;--t2:#8585AA;--t3:#454568;
+  --bd:rgba(255,255,255,.06);--bd2:rgba(255,255,255,.12);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font-family:'Inter',system-ui,sans-serif;font-size:13px}
+.app{display:flex;flex-direction:row-reverse;height:100%;position:relative}
+
+/* Background glow */
+.bg-glow{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 50% 50% at 50% 0%,rgba(123,94,255,.14) 0%,transparent 55%),var(--bg0);
+  transition:background 1.2s ease}
+
+/* ── Sidebar: Collections ── */
+.sidebar{width:240px;flex-shrink:0;position:relative;z-index:1;background:rgba(8,8,26,.9);
+  border-left:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden}
+.sb-top{padding:16px 14px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;
+  justify-content:space-between;direction:rtl;flex-shrink:0}
+.sb-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px}
+.sb-btns{display:flex;gap:5px}
+.icon-btn{width:28px;height:28px;border-radius:8px;background:var(--bg2);border:1px solid var(--bd);
+  color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:all .15s;flex-shrink:0}
+.icon-btn:hover{background:var(--bg3);color:var(--t1)}
+.icon-btn.accent{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+.icon-btn.accent:hover{background:var(--accent);color:#fff}
+.colls{overflow-y:auto;flex:1;padding:8px}
+.colls::-webkit-scrollbar{width:3px}
+.colls::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+/* Collection item */
+.coll{border-radius:10px;overflow:hidden;margin-bottom:3px;cursor:pointer}
+.coll-hd{display:flex;align-items:center;gap:9px;padding:8px 10px;direction:rtl;user-select:none;transition:background .13s}
+.coll-hd:hover{background:var(--bg2)}
+.coll.active .coll-hd{background:var(--accent-lo)}
+.coll-icon{width:32px;height:32px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;background:var(--bg3)}
+.coll-meta{flex:1;min-width:0}
+.coll-name{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;color:var(--t1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.coll-cnt{font-size:11px;color:var(--t3);margin-top:1px}
+.coll-chev{font-size:11px;color:var(--t3);transition:transform .2s;flex-shrink:0}
+.coll.open .coll-chev{transform:rotate(90deg)}
+.coll-songs{display:none;padding:3px 0 5px}
+.coll.open .coll-songs{display:block}
+
+/* Song row */
+.song{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 12px;direction:rtl;
+  cursor:pointer;border-radius:8px;transition:all .13s;margin:1px 2px}
+.song:hover{background:var(--bg2)}
+.song.playing{background:var(--accent-lo)}
+.song-n{font-size:11px;color:var(--t3);width:16px;text-align:center;font-variant-numeric:tabular-nums;flex-shrink:0}
+.song.playing .song-n{display:none}
+.eq{display:none;align-items:flex-end;gap:1.5px;height:12px;width:16px;flex-shrink:0}
+.song.playing .eq{display:flex}
+.eq span{width:2.5px;border-radius:1px;background:var(--accent);animation:eq .5s ease-in-out infinite alternate}
+.eq span:nth-child(2){animation-delay:.12s;height:60%}
+.eq span:nth-child(3){animation-delay:.25s;height:35%}
+@keyframes eq{from{height:25%}to{height:100%}}
+.song-info{flex:1;min-width:0}
+.song-name{font-size:12.5px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song.playing .song-name{color:var(--accent);font-weight:500}
+.song-artist{font-size:11px;color:var(--t3);margin-top:1px}
+.song-dur{font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums;direction:ltr;flex-shrink:0}
+
+/* Empty state */
+.empty-colls{padding:28px 16px;text-align:center;color:var(--t3);direction:rtl}
+.empty-colls p{font-size:13px;line-height:1.6;margin-bottom:12px}
+
+/* ── Player (center) ── */
+.player{width:380px;flex-shrink:0;position:relative;z-index:1;
+  background:rgba(6,6,18,.55);backdrop-filter:blur(30px);
+  border-left:1px solid var(--bd);
+  display:flex;flex-direction:column;align-items:center;padding:24px 22px 18px;overflow:hidden}
+
+/* Title bar drag */
+.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
+.no-drag{-webkit-app-region:no-drag}
+
+/* Art */
+.art-wrap{position:relative;margin-bottom:20px;flex-shrink:0}
+.art{width:210px;height:210px;border-radius:16px;
+  box-shadow:0 16px 50px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.07),0 0 50px rgba(123,94,255,.18);
+  display:flex;align-items:center;justify-content:center;font-size:64px;overflow:hidden;
+  background:linear-gradient(135deg,#1a1035 0%,#2d1a55 40%,#4a2a7a 100%);
+  transition:transform .3s ease,box-shadow .5s ease}
+.art img{width:100%;height:100%;object-fit:cover}
+.art.has-art{font-size:0}
+#art-playing{animation:artFloat 4s ease-in-out infinite}
+@keyframes artFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.info-pill{position:absolute;top:-9px;left:-9px;
+  background:rgba(123,94,255,.18);border:1px solid var(--accent-mid);backdrop-filter:blur(8px);
+  border-radius:20px;padding:4px 10px;font-size:11px;color:var(--accent);
+  font-family:'Space Grotesk',sans-serif;font-weight:500;
+  cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px}
+.info-pill:hover{background:rgba(123,94,255,.32)}
+
+/* Song title */
+.now-wrap{text-align:center;margin-bottom:18px;width:100%;direction:rtl}
+.now-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;
+  letter-spacing:-.3px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.now-artist{font-size:13px;color:var(--t2)}
+.now-album{font-size:11.5px;color:var(--t3);margin-top:3px}
+
+/* Progress */
+.prog-wrap{width:100%;margin-bottom:14px}
+.prog-track{width:100%;height:4px;background:rgba(255,255,255,.1);border-radius:2px;
+  position:relative;cursor:pointer;margin-bottom:7px}
+.prog-track:hover .prog-fill::after{opacity:1;transform:translateY(-50%) scale(1)}
+.prog-fill{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--accent),#a082ff);
+  position:relative;transition:width .08s linear;min-width:4px}
+.prog-fill::after{content:'';position:absolute;right:-5px;top:50%;transform:translateY(-50%) scale(0);
+  width:12px;height:12px;border-radius:50%;background:#fff;
+  box-shadow:0 0 8px rgba(123,94,255,.7);transition:all .15s;opacity:0}
+.markers{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+.marker{position:absolute;top:50%;transform:translateY(-50%);
+  width:9px;height:9px;border-radius:50%;border:1.5px solid #04040C;
+  cursor:pointer;pointer-events:all;transition:transform .15s;z-index:2}
+.marker:hover{transform:translateY(-50%) scale(1.6)}
+.marker-tip{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:5px 10px;font-size:11.5px;color:var(--t1);white-space:nowrap;
+  pointer-events:none;opacity:0;transition:opacity .15s;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);direction:rtl;z-index:10}
+.marker:hover .marker-tip{opacity:1}
+.time-row{display:flex;justify-content:space-between;font-size:11px;color:var(--t3);
+  font-variant-numeric:tabular-nums;direction:ltr}
+
+/* Controls */
+.ctrls{display:flex;align-items:center;gap:0;margin-bottom:18px}
+.c-btn{width:40px;height:40px;border-radius:50%;background:transparent;border:none;
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0}
+.c-btn:hover{color:var(--t1);background:var(--bg2)}
+.c-btn svg{width:18px;height:18px}
+.c-btn.on{color:var(--accent)}
+.c-btn.on:hover{background:var(--accent-lo)}
+.play-btn{width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#5B3FDF);
+  border:none;color:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(123,94,255,.5);transition:all .18s;margin:0 6px;flex-shrink:0}
+.play-btn:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(123,94,255,.7)}
+.play-btn:active{transform:scale(.95)}
+.play-btn svg{width:22px;height:22px}
+
+/* Volume */
+.vol-row{width:100%;display:flex;align-items:center;gap:9px;margin-bottom:16px;direction:rtl}
+.vol-icon{color:var(--t2);flex-shrink:0;cursor:pointer;transition:color .13s}
+.vol-icon:hover{color:var(--t1)}
+.vol-track{flex:1;height:4px;background:rgba(255,255,255,.1);border-radius:2px;
+  position:relative;cursor:pointer}
+.vol-track:hover .vol-fill::after{opacity:1;transform:translateY(-50%) scale(1)}
+.vol-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--t3),var(--t1));position:relative}
+.vol-fill::after{content:'';position:absolute;right:-5px;top:50%;transform:translateY(-50%) scale(0);
+  width:10px;height:10px;border-radius:50%;background:#fff;transition:all .13s;opacity:0}
+.vol-val{font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums;
+  direction:ltr;min-width:26px;text-align:left;flex-shrink:0}
+
+/* Comment button */
+.add-cmt{width:100%;padding:8px 14px;border-radius:10px;
+  background:rgba(123,94,255,.07);border:1px dashed rgba(123,94,255,.28);
+  color:var(--t2);font-size:12.5px;font-family:'Space Grotesk',sans-serif;
+  cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px;direction:rtl}
+.add-cmt:hover{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+
+/* No track state */
+.no-track{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;height:100%;color:var(--t3);direction:rtl;text-align:center}
+.no-track svg{width:48px;height:48px;opacity:.3}
+.no-track p{font-size:14px;line-height:1.6}
+
+/* ── Lyrics Panel ── */
+.lyr-panel{flex:1;position:relative;z-index:1;display:flex;flex-direction:column;
+  overflow:hidden;background:rgba(4,4,12,.35);backdrop-filter:blur(10px)}
+.lyr-hd{padding:14px 20px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;direction:rtl;flex-shrink:0}
+.lyr-hd-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px}
+.lyr-tabs{display:flex;gap:3px}
+.ltab{padding:5px 11px;border-radius:7px;font-size:12px;font-family:'Space Grotesk',sans-serif;
+  font-weight:500;cursor:pointer;transition:all .13s;color:var(--t2);background:transparent;border:none}
+.ltab:hover{color:var(--t1);background:var(--bg3)}
+.ltab.on{color:var(--t1);background:var(--bg3)}
+.lyr-body{flex:1;overflow-y:auto;padding:22px 26px;direction:rtl;position:relative}
+.lyr-body::-webkit-scrollbar{width:4px}
+.lyr-body::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.lyr-loading{display:flex;align-items:center;justify-content:center;height:100%;
+  color:var(--t3);font-size:13px;gap:8px;direction:rtl}
+.lyr-line{margin-bottom:26px;cursor:pointer;transition:all .2s;position:relative}
+.lyr-line:hover{transform:translateX(-3px)}
+.lyr-en{font-size:15px;line-height:1.65;color:var(--t2);direction:ltr;text-align:left;
+  font-weight:400;transition:all .2s}
+.lyr-line.active .lyr-en{color:var(--t1);font-weight:500;font-size:16px}
+.lyr-fa{font-size:12.5px;color:var(--t3);line-height:1.6;direction:rtl;
+  text-align:right;margin-top:5px;transition:all .2s}
+.lyr-line.active .lyr-fa{color:var(--t2)}
+.lyr-line.active::before{content:'';position:absolute;right:-14px;top:4px;bottom:4px;
+  width:3px;background:var(--accent);border-radius:2px}
+.lyr-no-data{padding:32px 0;text-align:center;color:var(--t3);direction:rtl;line-height:1.7;font-size:13px}
+
+/* ── Info Modal ── */
+.modal-bg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-bg.show{opacity:1;pointer-events:all}
+.modal-box{width:520px;max-height:78vh;overflow-y:auto;
+  background:var(--bg2);border:1px solid var(--bd2);border-radius:18px;padding:26px;direction:rtl;
+  box-shadow:0 24px 80px rgba(0,0,0,.85)}
+.modal-box::-webkit-scrollbar{width:4px}
+.modal-box::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px}
+.modal-close{width:28px;height:28px;border-radius:8px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .13s}
+.modal-close:hover{background:var(--bg4);color:var(--t1)}
+.info-row{margin-bottom:16px}
+.info-lbl{font-size:11px;color:var(--t3);font-family:'Space Grotesk',sans-serif;font-weight:500;
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.info-en{font-size:13px;color:var(--t2);line-height:1.6;direction:ltr;text-align:left}
+.info-fa{font-size:13px;color:var(--t1);line-height:1.6;direction:rtl;
+  margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)}
+.info-loading{color:var(--t3);font-size:13px;text-align:center;padding:20px 0}
+
+/* ── Comment Modal ── */
+.cmt-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .2s;padding-bottom:36px}
+.cmt-modal.show{opacity:1;pointer-events:all}
+.cmt-box{width:420px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;
+  padding:18px;direction:rtl;box-shadow:0 -8px 40px rgba(0,0,0,.5);
+  transform:translateY(16px);transition:transform .2s}
+.cmt-modal.show .cmt-box{transform:translateY(0)}
+.cmt-time{font-size:11.5px;color:var(--accent);font-family:'Space Grotesk',sans-serif;
+  font-weight:600;margin-bottom:10px;direction:ltr;text-align:left}
+.cmt-input{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;
+  padding:10px 13px;color:var(--t1);font-size:13.5px;direction:rtl;
+  font-family:'Inter',sans-serif;resize:none;height:76px;outline:none;transition:border-color .15s}
+.cmt-input:focus{border-color:var(--accent-mid)}
+.cmt-actions{display:flex;gap:7px;margin-top:9px;justify-content:flex-end}
+.btn-cancel{padding:7px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-cancel:hover{background:var(--bg4);color:var(--t1)}
+.btn-save{padding:7px 14px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.btn-save:hover{background:#8B6EFF}
+
+/* New collection modal */
+.newcoll-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.newcoll-modal.show{opacity:1;pointer-events:all}
+.newcoll-box{width:360px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;padding:24px;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.8)}
+.newcoll-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:16px}
+.newcoll-input{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:10px;
+  padding:10px 13px;color:var(--t1);font-size:14px;direction:rtl;
+  font-family:'Space Grotesk',sans-serif;outline:none;transition:border-color .15s;margin-bottom:14px}
+.newcoll-input:focus{border-color:var(--accent-mid)}
+</style>
+</head>
+<body>
+<div class="drag-area"></div>
+<div class="bg-glow" id="bg-glow"></div>
+
+<div class="app">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sb-top">
+    <span class="sb-title">مجموعه‌ها</span>
+    <div class="sb-btns no-drag">
+      <div class="icon-btn" onclick="importFiles()" title="افزودن فایل">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+      </div>
+      <div class="icon-btn" onclick="importFolder()" title="افزودن پوشه">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+      </div>
+      <div class="icon-btn accent" onclick="showNewColl()" title="مجموعه جدید">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="colls no-drag" id="colls-list">
+    <div class="empty-colls">
+      <p>هنوز مجموعه‌ای نداری.<br>یه مجموعه بساز و آهنگ اضافه کن.</p>
+      <div class="icon-btn accent" style="width:auto;padding:8px 16px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:12.5px;gap:6px;display:flex" onclick="showNewColl()">
+        + مجموعه جدید
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER -->
+<div class="player no-drag">
+  <div id="player-content">
+    <div class="no-track">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg>
+      <p>آهنگی انتخاب نشده<br><span style="font-size:12px">از مجموعه، روی یه آهنگ بزن</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- LYRICS -->
+<div class="lyr-panel no-drag">
+  <div class="lyr-hd">
+    <span class="lyr-hd-title">متن آهنگ</span>
+    <div class="lyr-tabs">
+      <button class="ltab on" onclick="setLyrMode(this,'both')">EN + FA</button>
+      <button class="ltab" onclick="setLyrMode(this,'en')">EN</button>
+      <button class="ltab" onclick="setLyrMode(this,'fa')">FA</button>
+    </div>
+  </div>
+  <div class="lyr-body" id="lyr-body">
+    <div class="lyr-loading" style="color:var(--t3);height:100%;display:flex;align-items:center;justify-content:center">
+      آهنگی انتخاب کن
+    </div>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<!-- INFO MODAL -->
+<div class="modal-bg" id="info-modal" onclick="if(event.target===this)closeInfo()">
+  <div class="modal-box">
+    <div class="modal-hd">
+      <span class="modal-title">اطلاعات آهنگ</span>
+      <div class="modal-close" onclick="closeInfo()">✕</div>
+    </div>
+    <div id="info-content"><div class="info-loading">در حال بارگذاری...</div></div>
+  </div>
+</div>
+
+<!-- COMMENT MODAL -->
+<div class="cmt-modal" id="cmt-modal" onclick="if(event.target===this)closeCmt()">
+  <div class="cmt-box">
+    <div class="cmt-time" id="cmt-time">⏱ ۰:۰۰</div>
+    <textarea class="cmt-input" id="cmt-input" placeholder="یادداشت خود را بنویسید... (برای نقد بعداً استفاده میشه)"></textarea>
+    <div class="cmt-actions">
+      <button class="btn-cancel" onclick="closeCmt()">انصراف</button>
+      <button class="btn-save" onclick="saveCmt()">ذخیره</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW COLLECTION MODAL -->
+<div class="newcoll-modal" id="newcoll-modal" onclick="if(event.target===this)closeNewColl()">
+  <div class="newcoll-box">
+    <div class="newcoll-title">مجموعه جدید</div>
+    <input class="newcoll-input" id="newcoll-name" placeholder="نام مجموعه..." onkeydown="if(event.key==='Enter')createColl()">
+    <div class="cmt-actions">
+      <button class="btn-cancel" onclick="closeNewColl()">انصراف</button>
+      <button class="btn-save" onclick="createColl()">ساخت</button>
+    </div>
+  </div>
+</div>
+
+<audio id="audio-el"></audio>
+<script src="renderer.js"></script>
+</body>
+</html>
