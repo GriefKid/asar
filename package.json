@@ -28,13 +28,14 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Lifestyle",
-      "artifactName": "mylife.exe"
+      "shortcutName": "اثر",
+      "artifactName": "asar-setup.exe"
     },
     "files": [
       "main.js",

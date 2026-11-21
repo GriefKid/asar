@@ -14,29 +14,31 @@ const WEB_PREFS = {
   webSecurity: false
 };
 
+const APP_ICON = path.join(__dirname, 'assets', 'icon.ico');
+
 function createMusicPlayer() {
-  musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
+  musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
   musicWindow.loadFile('src/apps/music-player/index.html');
   musicWindow.once('ready-to-show', () => musicWindow.show());
   musicWindow.on('closed', () => { musicWindow = null; });
 }
 
 function createVideoPlayer() {
-  videoWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
+  videoWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
   videoWindow.loadFile('src/apps/video-player/index.html');
   videoWindow.once('ready-to-show', () => videoWindow.show());
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
 function createMainApp() {
-  mainWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
+  mainWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
   mainWindow.loadFile('src/main-app/index.html');
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 function createBookReader() {
-  bookWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
+  bookWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
   bookWindow.loadFile('src/apps/book-reader/index.html');
   bookWindow.once('ready-to-show', () => bookWindow.show());
   bookWindow.on('closed', () => { bookWindow = null; });
@@ -168,18 +170,38 @@ ipcMain.handle('info:fetch', async (_, artist, title) => {
   }
 });
 
-// ── IPC: Cover fetch (iTunes) ──────────────────────────────────────
+// ── IPC: Cover fetch (iTunes → Deezer fallback) ───────────────────
 ipcMain.handle('cover:fetch', async (_, artist, title) => {
+  const q = encodeURIComponent(`${artist} ${title}`);
+
+  // 1. iTunes
   try {
-    const q = encodeURIComponent(`${artist} ${title}`);
-    const url = `https://itunes.apple.com/search?term=${q}&media=music&limit=1`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`https://itunes.apple.com/search?term=${q}&media=music&limit=3`, { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
-    if (!data.results?.length) return null;
-    return data.results[0].artworkUrl100.replace('100x100', '300x300');
-  } catch {
-    return null;
-  }
+    if (data.results?.length) return data.results[0].artworkUrl100.replace('100x100', '600x600bb');
+  } catch {}
+
+  // 2. Deezer — better coverage for Persian/Iranian music
+  try {
+    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    if (data.data?.length) return data.data[0].album?.cover_big || data.data[0].album?.cover_medium || null;
+  } catch {}
+
+  // 3. Deezer search by artist only (فارسی اسم هنرمند)
+  try {
+    const qa = encodeURIComponent(artist);
+    const res = await fetch(`https://api.deezer.com/search/artist?q=${qa}&limit=1`, { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    const artistId = data.data?.[0]?.id;
+    if (artistId) {
+      const r2 = await fetch(`https://api.deezer.com/artist/${artistId}/top?limit=1`, { signal: AbortSignal.timeout(5000) });
+      const d2 = await r2.json();
+      return d2.data?.[0]?.album?.cover_big || null;
+    }
+  } catch {}
+
+  return null;
 });
 
 // ── IPC: Video file dialog ─────────────────────────────────────────────

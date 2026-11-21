@@ -5,8 +5,17 @@
   window._sb = null;
   window._currentUser = null;
 
+  // Default config — pre-configured for اثر
+  var _DEFAULT_CFG = {
+    url: 'https://yejayyntjxxncpvcevzl.supabase.co',
+    anonKey: 'sb_publishable_3xwD6HdcXm8PrLgmcHtGyw_s8pciLHw'
+  };
+
   window.getSupabaseConfig = function() {
-    try { const s = localStorage.getItem('asar-supabase-config'); return s ? JSON.parse(s) : null; } catch { return null; }
+    try {
+      const s = localStorage.getItem('asar-supabase-config');
+      return s ? JSON.parse(s) : _DEFAULT_CFG;
+    } catch { return _DEFAULT_CFG; }
   };
 
   window.initFirebase = window.initSupabase = function() {
