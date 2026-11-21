@@ -333,6 +333,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   if (!provider) {
     if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
     else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
+    else if (apiKey && apiKey.startsWith('sk-or-')) provider = 'openrouter';
     else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 50) provider = 'siliconflow';
     else if (apiKey && apiKey.startsWith('sk-')) provider = 'deepseek';
     else provider = 'claude';
@@ -342,15 +343,9 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
 
   if (provider === 'gemini') {
     const model = 'gemini-1.5-flash';
-    // AQ. keys are OAuth2 bearer tokens; AIza keys go in URL as ?key=
-    if (apiKey.startsWith('AQ.')) {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-      headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-    } else {
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      headers = { 'Content-Type': 'application/json' };
-    }
-    // Gemini needs at least one user message
+    // Both AQ. and AIza keys use x-goog-api-key header
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
     const geminiMsgs = messages
       .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content || ' ' }] }))
       .filter(m => m.parts[0].text.trim());
@@ -363,7 +358,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
       generationConfig: { maxOutputTokens: 2048 }
     });
     extractText = d => {
-      if (d.error) throw new Error(d.error.message);
+      if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
       return d.candidates[0].content.parts[0].text;
     };
 
@@ -385,6 +380,13 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     url = 'https://api.deepseek.com/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
     body = JSON.stringify({ model: 'deepseek-chat', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else if (provider === 'openrouter') {
+    url = 'https://openrouter.ai/api/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] });
     extractText = d => d.choices[0].message.content;
 
