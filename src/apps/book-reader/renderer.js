@@ -15,6 +15,9 @@ let activeTab = 0;
 let translating = false;
 let translationAborted = false;
 let pendingHighlight = null;  // {text, page, color}
+let pendingRectAnnot = null;
+let currentRectColor = 'y';
+let activeRectPreview = null;
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
@@ -22,7 +25,7 @@ function loadState() {
     const raw = localStorage.getItem(DATA_KEY);
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { books: [], bookmarks: [], highlights: [] };
+  return { books: [], bookmarks: [], highlights: [], rectAnnotations: [] };
 }
 
 function saveState() {
@@ -243,6 +246,11 @@ async function renderPdfCanvas(container) {
     textLayerDiv.style.height = viewport.height + 'px';
     wrap.appendChild(textLayerDiv);
 
+    // annotation layer (rect marks)
+    const annotLayer = document.createElement('div');
+    annotLayer.className = 'annot-layer';
+    wrap.appendChild(annotLayer);
+
     container.innerHTML = '';
     container.appendChild(wrap);
     container.appendChild(makePageNum());
@@ -259,7 +267,14 @@ async function renderPdfCanvas(container) {
       textDivs: []
     }).promise;
 
+    // render saved rect annotations
+    renderRectAnnotations(annotLayer, viewport);
+
     wrap.addEventListener('mouseup', onTextSelect);
+    wrap.addEventListener('contextmenu', e => e.preventDefault());
+    wrap.addEventListener('mousedown', e => {
+      if (e.button === 2) startRectDraw(e, wrap, annotLayer, viewport);
+    });
   } catch (e) {
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
@@ -386,6 +401,10 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('#hl-tooltip') && !e.target.closest('.text-page') && !e.target.closest('.textLayer')) {
     hideHlTooltip();
   }
+  if (!e.target.closest('#rect-popup') && !e.target.closest('.rect-annot')) {
+    cancelRectAnnot();
+    document.getElementById('rect-edit-popup')?.remove();
+  }
 });
 
 function applyHighlight(color) {
@@ -437,6 +456,161 @@ function applyHighlightsToElement(el, text) {
     }
   });
   el.innerHTML = html;
+}
+
+// ── Rect Annotations ───────────────────────────────────────────────────
+const RECT_COLORS = {
+  y: { border: 'rgba(255,214,0,.85)',   bg: 'rgba(255,214,0,.18)' },
+  b: { border: 'rgba(100,180,255,.85)', bg: 'rgba(100,180,255,.16)' },
+  g: { border: 'rgba(80,210,160,.85)',  bg: 'rgba(80,210,160,.16)' },
+  r: { border: 'rgba(255,100,120,.85)', bg: 'rgba(255,100,120,.16)' },
+};
+
+function renderRectAnnotations(annotLayer, viewport) {
+  annotLayer.innerHTML = '';
+  if (!state.rectAnnotations) state.rectAnnotations = [];
+  const annots = state.rectAnnotations.filter(a =>
+    a.path === currentBookPath && a.page === currentPage
+  );
+  annots.forEach(a => {
+    const col = RECT_COLORS[a.color] || RECT_COLORS.y;
+    const div = document.createElement('div');
+    div.className = 'rect-annot' + (a.note ? ' has-note' : '');
+    div.style.left        = (a.nx * viewport.width)  + 'px';
+    div.style.top         = (a.ny * viewport.height) + 'px';
+    div.style.width       = (a.nw * viewport.width)  + 'px';
+    div.style.height      = (a.nh * viewport.height) + 'px';
+    div.style.borderColor = col.border;
+    div.style.background  = col.bg;
+    if (a.note) div.title = a.note;
+    div.addEventListener('click', e => { e.stopPropagation(); editRectAnnot(a.id, e); });
+    annotLayer.appendChild(div);
+  });
+}
+
+function startRectDraw(e, wrap, annotLayer, viewport) {
+  e.preventDefault();
+  const wrapRect = wrap.getBoundingClientRect();
+  const startX = e.clientX - wrapRect.left;
+  const startY = e.clientY - wrapRect.top;
+
+  if (activeRectPreview) activeRectPreview.remove();
+  activeRectPreview = document.createElement('div');
+  activeRectPreview.className = 'rect-preview';
+  wrap.appendChild(activeRectPreview);
+
+  function onMove(ev) {
+    const cx = ev.clientX - wrapRect.left;
+    const cy = ev.clientY - wrapRect.top;
+    const x = Math.min(startX, cx), y = Math.min(startY, cy);
+    const w = Math.abs(cx - startX), h = Math.abs(cy - startY);
+    activeRectPreview.style.cssText = `position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+  }
+
+  function onUp(ev) {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    const cx = ev.clientX - wrapRect.left;
+    const cy = ev.clientY - wrapRect.top;
+    const px = Math.min(startX, cx), py = Math.min(startY, cy);
+    const pw = Math.abs(cx - startX), ph = Math.abs(cy - startY);
+    if (activeRectPreview) { activeRectPreview.remove(); activeRectPreview = null; }
+    if (pw < 10 || ph < 10) return;
+    const nx = Math.max(0, px / viewport.width);
+    const ny = Math.max(0, py / viewport.height);
+    const nw = Math.min(1 - nx, pw / viewport.width);
+    const nh = Math.min(1 - ny, ph / viewport.height);
+    pendingRectAnnot = { nx, ny, nw, nh, page: currentPage, color: currentRectColor };
+    showRectPopup(ev.clientX, ev.clientY);
+  }
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function showRectPopup(x, y) {
+  currentRectColor = 'y';
+  document.querySelectorAll('.rect-color-btn').forEach((b, i) => b.classList.toggle('on', i === 0));
+  document.getElementById('rect-popup-note').value = '';
+  const popup = document.getElementById('rect-popup');
+  const left = Math.min(x + 12, window.innerWidth - 276);
+  const top  = Math.min(y + 12, window.innerHeight - 200);
+  popup.style.left = left + 'px';
+  popup.style.top  = top  + 'px';
+  popup.classList.add('show');
+  setTimeout(() => document.getElementById('rect-popup-note').focus(), 80);
+}
+
+function selectRectColor(color, btn) {
+  currentRectColor = color;
+  if (pendingRectAnnot) pendingRectAnnot.color = color;
+  document.querySelectorAll('.rect-color-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function saveRectAnnot() {
+  if (!pendingRectAnnot) return;
+  if (!state.rectAnnotations) state.rectAnnotations = [];
+  const note = document.getElementById('rect-popup-note').value.trim();
+  state.rectAnnotations.push({
+    ...pendingRectAnnot,
+    path: currentBookPath,
+    note,
+    id: 'ra' + Date.now(),
+    color: currentRectColor,
+  });
+  saveState();
+  cancelRectAnnot();
+  renderCurrentPage();
+  if (activeTab === 2) renderHighlightsPanel();
+}
+
+function cancelRectAnnot() {
+  pendingRectAnnot = null;
+  document.getElementById('rect-popup').classList.remove('show');
+}
+
+function editRectAnnot(id, e) {
+  document.getElementById('rect-edit-popup')?.remove();
+  const annot = (state.rectAnnotations || []).find(a => a.id === id);
+  if (!annot) return;
+  const div = document.createElement('div');
+  div.id = 'rect-edit-popup';
+  div.className = 'rect-popup show';
+  const left = e ? Math.min(e.clientX + 12, window.innerWidth - 276) : 200;
+  const top  = e ? Math.min(e.clientY + 12, window.innerHeight - 180) : 200;
+  div.style.left = left + 'px';
+  div.style.top  = top  + 'px';
+  div.innerHTML = `
+    <div class="rect-popup-title">ویرایش مارک</div>
+    <textarea class="rect-popup-note" id="rect-edit-note" placeholder="یادداشت...">${esc(annot.note || '')}</textarea>
+    <div class="rect-popup-actions">
+      <button class="btn-cancel" style="background:var(--err);color:#fff;border-color:var(--err)" onclick="deleteRectAnnot('${id}')">حذف</button>
+      <button class="btn-cancel" onclick="document.getElementById('rect-edit-popup').remove()">لغو</button>
+      <button class="btn-save" onclick="updateRectAnnot('${id}')">ذخیره</button>
+    </div>`;
+  document.body.appendChild(div);
+  setTimeout(() => document.getElementById('rect-edit-note')?.focus(), 80);
+}
+
+function updateRectAnnot(id) {
+  const annot = (state.rectAnnotations || []).find(a => a.id === id);
+  if (annot) {
+    annot.note = document.getElementById('rect-edit-note')?.value.trim() || '';
+    saveState();
+    renderCurrentPage();
+    if (activeTab === 2) renderHighlightsPanel();
+  }
+  document.getElementById('rect-edit-popup')?.remove();
+}
+
+function deleteRectAnnot(id) {
+  if (state.rectAnnotations)
+    state.rectAnnotations = state.rectAnnotations.filter(a => a.id !== id);
+  saveState();
+  renderCurrentPage();
+  if (activeTab === 2) renderHighlightsPanel();
+  document.getElementById('rect-edit-popup')?.remove();
 }
 
 // ── Translation ────────────────────────────────────────────────────────
@@ -672,18 +846,26 @@ function renderBookmarksPanel() {
 function renderHighlightsPanel() {
   const body = document.getElementById('panel-body');
   if (activeTab !== 2) return;
-  const hls = (state.highlights || []).filter(h => h.path === currentBookPath);
-  if (!hls.length) {
-    body.innerHTML = `<div class="empty-panel">هایلایتی نداری.<br>در حالت متنی، متن انتخاب کن.</div>`;
+  const hls  = (state.highlights     || []).filter(h => h.path === currentBookPath);
+  const rects = (state.rectAnnotations || []).filter(a => a.path === currentBookPath);
+  if (!hls.length && !rects.length) {
+    body.innerHTML = `<div class="empty-panel">هایلایتی نداری.<br>در حالت متنی، متن انتخاب کن.<br>یا کلیک راست + drag روی PDF.</div>`;
     return;
   }
   const colors = { y: 'rgba(255,214,0,.7)', b: 'rgba(100,180,255,.7)', g: 'rgba(80,210,160,.7)', r: 'rgba(255,100,120,.7)' };
-  body.innerHTML = hls.map(h => `
+  const hlHTML = hls.map(h => `
     <div class="hl-item" style="border-right-color:${colors[h.color]||colors.y}" onclick="goToPage(${h.page})">
       <div class="hl-text">"${esc(h.text.slice(0,120))}${h.text.length>120?'...':''}"</div>
       ${h.note ? `<div class="hl-note">${esc(h.note)}</div>` : ''}
       <div class="hl-page">صفحه ${h.page}</div>
     </div>`).join('');
+  const rectHTML = rects.map(a => `
+    <div class="hl-item" style="border-right-color:${colors[a.color]||colors.y}" onclick="goToPage(${a.page})">
+      <div class="hl-text">🔲 مارک ناحیه — صفحه ${a.page}</div>
+      ${a.note ? `<div class="hl-note">${esc(a.note)}</div>` : ''}
+      <div class="hl-page">صفحه ${a.page}</div>
+    </div>`).join('');
+  body.innerHTML = hlHTML + rectHTML;
 }
 
 // ── Theme & font ───────────────────────────────────────────────────────

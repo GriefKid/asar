@@ -255,6 +255,33 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   color:#fff;cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
 .btn-save:hover{background:#8B6EFF}
 
+/* rect annotation layer */
+.annot-layer{position:absolute;inset:0;pointer-events:none;z-index:5}
+.rect-preview{position:absolute;border:2px dashed var(--accent);background:rgba(123,94,255,.1);pointer-events:none;z-index:10}
+.rect-annot{position:absolute;border:2px solid;border-radius:2px;cursor:pointer;pointer-events:auto;transition:opacity .15s;z-index:6}
+.rect-annot:hover{opacity:.65}
+.rect-annot.has-note::after{content:'💬';position:absolute;top:-9px;right:-3px;font-size:9px;
+  background:var(--bg2);border-radius:3px;padding:0 2px;pointer-events:none;line-height:1.6}
+
+/* rect annotation popup */
+.rect-popup{position:fixed;z-index:300;background:var(--bg2);border:1px solid var(--bd2);
+  border-radius:12px;padding:14px;width:256px;box-shadow:0 12px 40px rgba(0,0,0,.8);direction:rtl;
+  opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;transform:translateY(4px)}
+.rect-popup.show{opacity:1;pointer-events:all;transform:translateY(0)}
+.rect-popup-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;
+  margin-bottom:10px;color:var(--t1)}
+.rect-popup-colors{display:flex;gap:5px;margin-bottom:10px}
+.rect-color-btn{width:26px;height:26px;border-radius:7px;border:2px solid transparent;
+  cursor:pointer;transition:all .13s;flex-shrink:0}
+.rect-color-btn:hover{transform:scale(1.12)}
+.rect-color-btn.on{border-color:var(--t1)!important;transform:scale(1.08)}
+.rect-popup-note{width:100%;background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:7px 10px;color:var(--t1);font-size:12.5px;direction:rtl;outline:none;
+  font-family:'Inter',sans-serif;resize:none;height:60px;margin-bottom:9px;
+  transition:border-color .15s;display:block}
+.rect-popup-note:focus{border-color:var(--accent-mid)}
+.rect-popup-actions{display:flex;gap:6px;justify-content:flex-end}
+
 /* highlight tooltip */
 .hl-tooltip{position:fixed;background:var(--bg2);border:1px solid var(--bd2);border-radius:10px;
   padding:6px;display:none;gap:4px;box-shadow:0 8px 24px rgba(0,0,0,.7);z-index:50}
@@ -423,6 +450,22 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <div id="binfo-desc-en" style="font-size:13px;color:var(--t2);line-height:1.7;direction:ltr;text-align:left;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
     <div id="binfo-desc-fa" style="font-size:13px;color:var(--t1);line-height:1.8;border-top:1px solid var(--bd);padding-top:10px;max-height:140px;overflow-y:auto"></div>
     <div id="binfo-loading" style="font-size:12.5px;color:var(--t3);text-align:center;padding:8px 0"></div>
+  </div>
+</div>
+
+<!-- RECT ANNOTATION POPUP -->
+<div class="rect-popup" id="rect-popup">
+  <div class="rect-popup-title">مارک کردن ناحیه</div>
+  <div class="rect-popup-colors">
+    <div class="rect-color-btn on" style="background:rgba(255,214,0,.5);border-color:rgba(255,214,0,.9)" onclick="selectRectColor('y',this)"></div>
+    <div class="rect-color-btn" style="background:rgba(100,180,255,.4);border-color:rgba(100,180,255,.8)" onclick="selectRectColor('b',this)"></div>
+    <div class="rect-color-btn" style="background:rgba(80,210,160,.4);border-color:rgba(80,210,160,.8)" onclick="selectRectColor('g',this)"></div>
+    <div class="rect-color-btn" style="background:rgba(255,100,120,.4);border-color:rgba(255,100,120,.8)" onclick="selectRectColor('r',this)"></div>
+  </div>
+  <textarea class="rect-popup-note" id="rect-popup-note" placeholder="یادداشت (اختیاری)..."></textarea>
+  <div class="rect-popup-actions">
+    <button class="btn-cancel" onclick="cancelRectAnnot()">لغو</button>
+    <button class="btn-save" onclick="saveRectAnnot()">ذخیره</button>
   </div>
 </div>
 
