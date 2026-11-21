@@ -74,14 +74,38 @@ function renderLibrary() {
 async function importPdf() {
   const paths = await window.api.openPdfFiles();
   if (!paths.length) return;
+  const newPaths = [];
   for (const p of paths) {
     if (state.books.find(b => b.path === p)) continue;
     const fileName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
     state.books.push({ path: p, title: fileName, author: '', totalPages: 0, lastPage: 1, cover: null });
+    newPaths.push(p);
   }
   saveState();
   renderLibrary();
   if (paths.length === 1) openBook(paths[0]);
+  // fetch covers in background
+  for (const p of newPaths) fetchAndSaveBookMeta(p);
+}
+
+async function fetchAndSaveBookMeta(path) {
+  const book = state.books.find(b => b.path === path);
+  if (!book || book.cover) return;
+  try {
+    const meta = await window.api.fetchBookMeta(book.title);
+    if (!meta) return;
+    if (meta.cover)   book.cover  = meta.cover;
+    if (meta.authors?.length) book.author = meta.authors[0];
+    if (meta.title)   book.title  = meta.title;
+    if (meta.description) book.description = meta.description;
+    if (meta.publishedDate) book.year = meta.publishedDate.slice(0, 4);
+    saveState();
+    renderLibrary();
+    // update title bar if this is the open book
+    if (path === currentBookPath) {
+      document.getElementById('book-name-tb').textContent = book.title;
+    }
+  } catch {}
 }
 
 async function openBook(path) {
@@ -653,6 +677,55 @@ function esc(str) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Book info modal ────────────────────────────────────────────────────
+async function openBookInfo() {
+  if (!currentBookPath) return;
+  const book = state.books.find(b => b.path === currentBookPath);
+  if (!book) return;
+
+  const modal = document.getElementById('book-info-modal');
+  modal.classList.add('show');
+
+  // cover
+  const coverEl = document.getElementById('binfo-cover');
+  coverEl.innerHTML = book.cover ? `<img src="${esc(book.cover)}" style="width:100%;height:100%;object-fit:cover">` : '📖';
+
+  document.getElementById('binfo-title').textContent  = book.title || '—';
+  document.getElementById('binfo-author').textContent = book.author || '';
+  document.getElementById('binfo-year').textContent   = book.year   || '';
+  document.getElementById('binfo-desc-en').textContent = '';
+  document.getElementById('binfo-desc-fa').textContent = '';
+  document.getElementById('binfo-cats').innerHTML = (book.categories||[])
+    .slice(0,3).map(c => `<span style="font-size:11px;padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--t2)">${esc(c)}</span>`).join('');
+
+  if (book.description) {
+    document.getElementById('binfo-desc-en').textContent = book.description;
+    document.getElementById('binfo-loading').textContent = 'در حال ترجمه...';
+    const fa = await window.api.translate(book.description.slice(0, 1200)).catch(() => null);
+    document.getElementById('binfo-loading').textContent = '';
+    if (fa) document.getElementById('binfo-desc-fa').textContent = fa;
+  } else if (!book.cover) {
+    // try to fetch meta now
+    document.getElementById('binfo-loading').textContent = 'در حال جستجو...';
+    await fetchAndSaveBookMeta(currentBookPath);
+    const updated = state.books.find(b => b.path === currentBookPath);
+    document.getElementById('binfo-loading').textContent = '';
+    if (updated?.cover) coverEl.innerHTML = `<img src="${esc(updated.cover)}" style="width:100%;height:100%;object-fit:cover">`;
+    if (updated?.author) document.getElementById('binfo-author').textContent = updated.author;
+    if (updated?.description) {
+      document.getElementById('binfo-desc-en').textContent = updated.description;
+      const fa = await window.api.translate(updated.description.slice(0, 1200)).catch(() => null);
+      if (fa) document.getElementById('binfo-desc-fa').textContent = fa;
+    }
+  } else {
+    document.getElementById('binfo-loading').textContent = 'توضیحاتی پیدا نشد';
+  }
+}
+
+function closeBookInfo() {
+  document.getElementById('book-info-modal').classList.remove('show');
+}
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();

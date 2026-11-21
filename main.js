@@ -290,6 +290,29 @@ ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
   } catch { return null; }
 });
 
+// ── IPC: Book metadata (Google Books) ────────────────────────────────
+ipcMain.handle('book:fetchMeta', async (_, title) => {
+  try {
+    const q = encodeURIComponent(title.replace(/[_\-\.]/g, ' ').trim());
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data.items?.[0];
+    if (!item) return null;
+    const vol = item.volumeInfo;
+    const thumb = vol.imageLinks?.thumbnail || vol.imageLinks?.smallThumbnail || null;
+    return {
+      title:       vol.title || null,
+      authors:     vol.authors || [],
+      description: vol.description || null,
+      cover:       thumb ? thumb.replace('http:', 'https:').replace('zoom=1', 'zoom=3') : null,
+      publishedDate: vol.publishedDate || null,
+      categories:  vol.categories || [],
+    };
+  } catch { return null; }
+});
+
 // ── IPC: Book / PDF ───────────────────────────────────────────────────
 ipcMain.handle('dialog:openPdfFiles', async () => {
   const win = BrowserWindow.getFocusedWindow();

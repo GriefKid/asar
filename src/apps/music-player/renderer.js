@@ -401,9 +401,9 @@ function toggleRepeat() {
 
 // ── Cover ──────────────────────────────────────────────────────────────
 async function fetchCover(song) {
-  if (!song.artist || song.artist === 'Unknown') return;
   try {
-    const url = await window.api.fetchCover(song.artist, song.title);
+    const artist = (!song.artist || song.artist === 'Unknown') ? '' : song.artist;
+    const url = await window.api.fetchCover(artist, song.title);
     if (!url) return;
     const img = document.getElementById('art-img');
     const emoji = document.getElementById('art-emoji');

@@ -217,6 +217,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .modal-bg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
   background:rgba(0,0,0,.72);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-bg.show{opacity:1;pointer-events:all}
+.modal-close{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;
+  transition:all .13s;flex-shrink:0}
+.modal-close:hover{background:var(--bg4);color:var(--t1)}
 .modal-box{width:420px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;
   padding:22px;direction:rtl;box-shadow:0 24px 80px rgba(0,0,0,.85)}
 .modal-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:14px}
@@ -265,6 +269,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 <div class="reader-area">
   <!-- Toolbar -->
   <div class="reader-toolbar">
+    <!-- book info -->
+    <button class="tb-btn no-drag" id="btn-book-info" onclick="openBookInfo()" title="اطلاعات کتاب">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"/></svg>
+    </button>
     <!-- bookmark -->
     <button class="tb-btn no-drag" id="btn-bookmark" onclick="toggleBookmark()" title="بوکمارک">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/></svg>
@@ -375,6 +383,27 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <button class="btn-cancel" onclick="closeHlNote()">انصراف</button>
       <button class="btn-save" onclick="saveHlWithNote()">ذخیره</button>
     </div>
+  </div>
+</div>
+
+<!-- BOOK INFO MODAL -->
+<div class="modal-bg" id="book-info-modal" onclick="if(event.target===this)closeBookInfo()">
+  <div class="modal-box no-drag" style="width:480px;direction:rtl">
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px">
+      <div id="binfo-cover" style="width:80px;height:116px;border-radius:8px;flex-shrink:0;
+        background:var(--bg3);display:flex;align-items:center;justify-content:center;
+        font-size:32px;overflow:hidden">📖</div>
+      <div style="flex:1;min-width:0">
+        <div id="binfo-title" style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:4px">—</div>
+        <div id="binfo-author" style="font-size:13px;color:var(--t2);margin-bottom:6px"></div>
+        <div id="binfo-year" style="font-size:12px;color:var(--t3)"></div>
+        <div id="binfo-cats" style="margin-top:7px;display:flex;gap:5px;flex-wrap:wrap"></div>
+      </div>
+      <div class="modal-close" onclick="closeBookInfo()" style="flex-shrink:0">✕</div>
+    </div>
+    <div id="binfo-desc-en" style="font-size:13px;color:var(--t2);line-height:1.7;direction:ltr;text-align:left;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
+    <div id="binfo-desc-fa" style="font-size:13px;color:var(--t1);line-height:1.8;border-top:1px solid var(--bd);padding-top:10px;max-height:140px;overflow-y:auto"></div>
+    <div id="binfo-loading" style="font-size:12.5px;color:var(--t3);text-align:center;padding:8px 0"></div>
   </div>
 </div>
 
