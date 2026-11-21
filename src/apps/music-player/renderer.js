@@ -553,7 +553,7 @@ async function fetchLyricsWithAI() {
     const result = await window.api.claudeChat(
       'You are a lyrics database. When asked for lyrics, output only the song lyrics text, line by line. No explanations, no headers, just the lyrics.',
       [{ role: 'user', content: prompt }],
-      key, null
+      key, getAIProvider()
     );
     if (result && result.length > 30) {
       lyrLines = result.split('\n').map(l => l.trim()).filter(l => l.length > 0);
@@ -755,10 +755,15 @@ let aiOpen = false, aiHistory = [], aiCtxOn = false;
 const AI_CTX_LABEL_MUSIC = 'اضافه کردن اطلاعات آهنگ';
 
 function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
+function getAIProvider() { try { const p = localStorage.getItem('claude-api-provider') || 'auto'; return p === 'auto' ? null : p; } catch { return null; } }
 function saveAIKey() {
   const k = document.getElementById('ai-key-inp').value.trim();
   if (!k) return;
-  try { localStorage.setItem('claude-api-key', k); } catch {}
+  try {
+    localStorage.setItem('claude-api-key', k);
+    const sel = document.getElementById('ai-provider-sel');
+    if (sel) localStorage.setItem('claude-api-provider', sel.value);
+  } catch {}
   document.getElementById('ai-key-box').style.display = 'none';
 }
 function toggleAI() {
@@ -806,7 +811,7 @@ async function sendAI() {
   document.getElementById('ai-send-btn').disabled = true;
   try {
     const sys = `You are a helpful AI assistant in a music player app. Help the user understand lyrics, learn about the song, or discuss music. Be concise. Match user's language (Persian or English).`;
-    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    const reply = await window.api.claudeChat(sys, aiHistory, key, getAIProvider());
     typingDiv.classList.remove('typing'); typingDiv.textContent = reply;
     aiHistory.push({ role: 'assistant', content: reply });
     if (aiCtxOn) { aiCtxOn = false; document.getElementById('ai-ctx-btn').classList.remove('on'); document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_MUSIC; }

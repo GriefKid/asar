@@ -563,9 +563,19 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
     <button class="ai-ph-close" onclick="toggleAI()">✕</button>
   </div>
   <div class="ai-key-box" id="ai-key-box" style="display:none">
-    <div class="ai-key-label">برای چت با AI نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">🟢 Gemini رایگان: aistudio.google.com</span></div>
-    <div class="ai-key-row">
-      <input class="ai-key-inp" id="ai-key-inp" type="password" placeholder="sk-ant-api03-...">
+    <div class="ai-key-label">برای چت با AI نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">🟢 Mistral رایگان: console.mistral.ai</span></div>
+    <div class="ai-key-row" style="margin-bottom:6px">
+      <select class="ai-key-inp" id="ai-provider-sel" style="flex:0 0 auto;width:110px;cursor:pointer">
+        <option value="auto">خودکار</option>
+        <option value="mistral">Mistral</option>
+        <option value="huggingface">HuggingFace</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="gemini">Gemini</option>
+        <option value="groq">Groq</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="claude">Claude</option>
+      </select>
+      <input class="ai-key-inp" id="ai-key-inp" type="password" placeholder="API key...">
       <button class="ai-key-save" onclick="saveAIKey()">ذخیره</button>
     </div>
   </div>

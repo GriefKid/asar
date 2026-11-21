@@ -349,6 +349,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
     else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
     else if (apiKey && apiKey.startsWith('sk-or-')) provider = 'openrouter';
+    else if (apiKey && apiKey.startsWith('hf_')) provider = 'huggingface';
     else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 50) provider = 'siliconflow';
     else if (apiKey && apiKey.startsWith('sk-')) provider = 'deepseek';
     else provider = 'claude';
@@ -402,6 +403,20 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     url = 'https://openrouter.ai/api/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
     body = JSON.stringify({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else if (provider === 'huggingface') {
+    url = 'https://router.huggingface.co/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'meta-llama/Llama-3.2-3B-Instruct', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else if (provider === 'mistral') {
+    url = 'https://api.mistral.ai/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'mistral-small-latest', max_tokens: 2048,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] });
     extractText = d => d.choices[0].message.content;
 
