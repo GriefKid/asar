@@ -26,7 +26,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 /* ── Library sidebar ── */
 .sidebar{width:260px;flex-shrink:0;background:rgba(8,8,26,.96);border-right:1px solid var(--bd);
   display:flex;flex-direction:column;overflow:hidden;order:3;z-index:2}
-.sb-top{padding:40px 14px 12px;border-bottom:1px solid var(--bd);
+.sb-top{padding:16px 14px 12px;border-bottom:1px solid var(--bd);
   display:flex;align-items:center;justify-content:space-between;direction:rtl;flex-shrink:0}
 .sb-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px}
 .sb-btns{display:flex;gap:5px}
@@ -101,7 +101,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .reader-area{flex:1;order:2;display:flex;flex-direction:column;overflow:hidden;position:relative}
 
 /* toolbar */
-.reader-toolbar{padding:36px 14px 10px;border-bottom:1px solid var(--bd);
+.reader-toolbar{padding:14px 14px 10px;border-bottom:1px solid var(--bd);
   display:flex;align-items:center;gap:8px;background:rgba(8,8,26,.92);backdrop-filter:blur(10px);flex-shrink:0}
 .tb-mid{flex:1;text-align:center;min-width:0}
 .book-name-tb{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;
@@ -266,8 +266,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 </style>
 </head>
 <body>
-<div class="drag-area"></div>
-
 <div class="drop-overlay" id="drop-overlay">
   <div class="drop-msg">📄 PDF رو اینجا بنداز</div>
 </div>

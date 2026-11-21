@@ -454,6 +454,12 @@ vid.addEventListener('pause', () => {
 vid.addEventListener('click', togglePlay);
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Escape') {
+    const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show,.sub-modal.show');
+    if (openModal) { openModal.classList.remove('show'); return; }
+    window.api.closeWindow();
+    return;
+  }
   if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
   if (e.code === 'KeyF') toggleFullscreen();
   if (e.code === 'ArrowRight') vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 10);

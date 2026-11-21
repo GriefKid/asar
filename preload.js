@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('api', {
   // Subtitles (OpenSubtitles)
   subtitleSearch:    (title, year, key) => ipcRenderer.invoke('subtitle:search', title, year, key),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
+  // Window controls
+  closeWindow:     () => ipcRenderer.invoke('window:close'),
+  quitApp:         () => ipcRenderer.invoke('app:quit'),
   // Main app — open sub-apps
   openMusicPlayer:   ()                    => ipcRenderer.invoke('app:open-music'),
   openVideoPlayer:   ()                    => ipcRenderer.invoke('app:open-video'),

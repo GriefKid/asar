@@ -473,6 +473,21 @@ function esc(s) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────
+// ── Exit modal (Esc = PS5 home button) ───────────────────────────────
+const exitModal = document.getElementById('exit-modal');
+document.getElementById('exit-cancel-btn').onclick  = () => exitModal.classList.remove('show');
+document.getElementById('exit-confirm-btn').onclick = () => window.api.quitApp();
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (exitModal.classList.contains('show')) {
+      exitModal.classList.remove('show');
+    } else {
+      exitModal.classList.add('show');
+    }
+  }
+});
+
 load();
 
 const today = todayJalali();

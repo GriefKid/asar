@@ -594,6 +594,12 @@ function updateProgress() {
 // keyboard navigation
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'Escape') {
+    const openModal = document.querySelector('.modal-bg.show');
+    if (openModal) { openModal.classList.remove('show'); return; }
+    window.api.closeWindow();
+    return;
+  }
   if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
     e.preventDefault();
     if (e.code === 'ArrowRight') prevPage();

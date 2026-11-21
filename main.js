@@ -7,105 +7,36 @@ let musicWindow = null;
 let videoWindow = null;
 let bookWindow = null;
 
+const WEB_PREFS = {
+  preload: path.join(__dirname, 'preload.js'),
+  contextIsolation: true,
+  nodeIntegration: false,
+  webSecurity: false
+};
+
 function createMusicPlayer() {
-  musicWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#04040C',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#08081A',
-      symbolColor: '#8585AA',
-      height: 32
-    },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: false
-    },
-    show: false
-  });
-
+  musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
   musicWindow.loadFile('src/apps/music-player/index.html');
-
-  musicWindow.once('ready-to-show', () => {
-    musicWindow.show();
-  });
-
-  musicWindow.on('closed', () => {
-    musicWindow = null;
-  });
+  musicWindow.once('ready-to-show', () => musicWindow.show());
+  musicWindow.on('closed', () => { musicWindow = null; });
 }
 
 function createVideoPlayer() {
-  videoWindow = new BrowserWindow({
-    width: 1400,
-    height: 860,
-    minWidth: 960,
-    minHeight: 600,
-    backgroundColor: '#04040C',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#08081A',
-      symbolColor: '#8585AA',
-      height: 32
-    },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: false
-    },
-    show: false
-  });
-
+  videoWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
   videoWindow.loadFile('src/apps/video-player/index.html');
   videoWindow.once('ready-to-show', () => videoWindow.show());
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
 function createMainApp() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#04040C',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#08081A', symbolColor: '#8585AA', height: 32 },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: false
-    },
-    show: false
-  });
+  mainWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
   mainWindow.loadFile('src/main-app/index.html');
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 function createBookReader() {
-  bookWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 960,
-    minHeight: 600,
-    backgroundColor: '#04040C',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#08081A', symbolColor: '#8585AA', height: 32 },
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webSecurity: false
-    },
-    show: false
-  });
+  bookWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', webPreferences: WEB_PREFS, show: false });
   bookWindow.loadFile('src/apps/book-reader/index.html');
   bookWindow.once('ready-to-show', () => bookWindow.show());
   bookWindow.on('closed', () => { bookWindow = null; });
@@ -135,6 +66,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+// ── IPC: Window controls ───────────────────────────────────────────────
+ipcMain.handle('window:close', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.close();
+});
+ipcMain.handle('app:quit', () => {
+  app.quit();
 });
 
 // ── IPC: File dialogs ──────────────────────────────────────────────

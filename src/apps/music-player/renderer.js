@@ -643,5 +643,14 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// ── Esc → back to main app ─────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show');
+    if (openModal) { openModal.classList.remove('show'); return; }
+    window.api.closeWindow();
+  }
+});
+
 // ── Init ───────────────────────────────────────────────────────────────
 renderColls();
