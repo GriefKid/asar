@@ -331,7 +331,8 @@ ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
 ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider) => {
   // Auto-detect provider from key prefix if not specified
   if (!provider) {
-    if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
+    if (apiKey && apiKey.startsWith('AIza')) provider = 'gemini';
+    else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
     else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 50) provider = 'siliconflow';
     else if (apiKey && apiKey.startsWith('sk-')) provider = 'deepseek';
     else provider = 'claude';
@@ -339,7 +340,14 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
 
   let url, headers, body, extractText;
 
-  if (provider === 'groq') {
+  if (provider === 'gemini') {
+    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    headers = { 'Content-Type': 'application/json' };
+    const geminiMsgs = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    body = JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: geminiMsgs });
+    extractText = d => d.candidates[0].content.parts[0].text;
+
+  } else if (provider === 'groq') {
     url = 'https://api.groq.com/openai/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
     body = JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 2048,
