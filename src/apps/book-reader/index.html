@@ -466,7 +466,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg>
     </button>
     <!-- summarize page -->
-    <button class="tb-btn no-drag" id="btn-summ" onclick="aiSummarizePage()" title="خلاصه صفحه با Claude">
+    <button class="tb-btn no-drag" id="btn-summ" onclick="aiSummarizePage()" title="خلاصه صفحه با AI">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
     </button>
     <!-- dual page -->
@@ -585,8 +585,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <div class="hl-swatch" style="background:rgba(255,100,120,.4);border-color:rgba(255,100,120,.8)" onclick="applyHighlight('r')"></div>
   <button class="hl-note-btn" onclick="openHlNote()" title="افزودن یادداشت">📝</button>
   <button class="hl-note-btn" onclick="addToVocab()" title="افزودن به واژه‌نامه">📌</button>
-  <button class="hl-note-btn" onclick="aiTranslateSelection()" title="ترجمه با Claude">🌐</button>
-  <button class="hl-note-btn" onclick="aiExplainSelection()" title="توضیح با Claude">🤖</button>
+  <button class="hl-note-btn" onclick="aiTranslateSelection()" title="ترجمه با AI">🌐</button>
+  <button class="hl-note-btn" onclick="aiExplainSelection()" title="توضیح با AI">🤖</button>
 </div>
 
 <!-- HIGHLIGHT NOTE MODAL -->
@@ -632,11 +632,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 </button>
 <div class="ai-panel" id="ai-panel">
   <div class="ai-ph">
-    <div class="ai-ph-title"><div class="ai-dot"></div>Claude</div>
+    <div class="ai-ph-title"><div class="ai-dot"></div>AI</div>
     <button class="ai-ph-close" onclick="toggleAI()">✕</button>
   </div>
   <div class="ai-key-box" id="ai-key-box" style="display:none">
-    <div class="ai-key-label">برای چت با Claude نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">از console.anthropic.com بگیر</span></div>
+    <div class="ai-key-label">برای چت با AI نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">🟢 Gemini رایگان: aistudio.google.com</span></div>
     <div class="ai-key-row">
       <input class="ai-key-inp" id="ai-key-inp" type="password" placeholder="sk-ant-api03-...">
       <button class="ai-key-save" onclick="saveAIKey()">ذخیره</button>
