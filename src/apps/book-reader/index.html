@@ -230,6 +230,45 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .read-stats{display:flex;gap:12px;font-size:11.5px;color:var(--t3)}
 .read-stats span{color:var(--t2)}
 
+/* ── TTS bar ── */
+.tts-bar{display:none;padding:5px 14px;background:linear-gradient(90deg,rgba(123,94,255,.12),rgba(80,210,160,.08));
+  border-bottom:1px solid var(--bd);align-items:center;gap:10px;flex-shrink:0;direction:rtl}
+.tts-bar.show{display:flex}
+.tts-wave{display:flex;align-items:center;gap:2px;height:18px}
+.tts-wave span{width:3px;border-radius:2px;background:var(--ok);animation:ttsBounce .6s ease-in-out infinite alternate}
+.tts-wave span:nth-child(2){animation-delay:.1s;height:8px}
+.tts-wave span:nth-child(3){animation-delay:.2s;height:14px}
+.tts-wave span:nth-child(4){animation-delay:.3s;height:10px}
+.tts-wave span:nth-child(5){animation-delay:.4s;height:6px}
+.tts-wave span{height:5px}
+@keyframes ttsBounce{to{height:14px}}
+.tts-label{font-size:11.5px;color:var(--t2);flex:1}
+.tts-ctrl{display:flex;gap:5px}
+.tts-btn{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:all .13s}
+.tts-btn:hover{background:var(--bg4);color:var(--t1)}
+
+/* ── Vocab panel ── */
+.vocab-item{padding:7px 8px;border-radius:8px;cursor:pointer;transition:all .13s;
+  direction:rtl;margin-bottom:4px;border-right:3px solid rgba(123,94,255,.5)}
+.vocab-item:hover{background:var(--bg2)}
+.vocab-word{font-size:13px;color:var(--t1);font-weight:500}
+.vocab-page{font-size:11px;color:var(--t3);margin-top:2px}
+.vocab-export-btn{width:100%;padding:7px;border-radius:8px;background:var(--accent-lo);border:1px solid var(--accent-mid);
+  color:var(--accent);font-size:12px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .13s;margin-top:8px}
+.vocab-export-btn:hover{background:var(--accent);color:#fff}
+
+/* ── Dual page ── */
+.dual-wrap{display:flex;gap:16px;align-items:flex-start;justify-content:center;width:100%}
+.dual-wrap .pdf-page-wrap{margin:0}
+
+/* ── Font family ── */
+.font-fam-grp{display:flex;gap:2px;background:rgba(255,255,255,.05);border-radius:7px;padding:2px}
+.ff-btn{padding:4px 8px;border-radius:5px;font-size:11.5px;cursor:pointer;transition:all .13s;
+  color:var(--t3);background:transparent;border:none;font-family:'Space Grotesk',sans-serif;font-weight:500}
+.ff-btn:hover{color:var(--t2)}
+.ff-btn.on{color:var(--t1);background:rgba(255,255,255,.08)}
+
 /* ── Modals ── */
 .modal-bg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
   background:rgba(0,0,0,.72);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -386,6 +425,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <div class="ptab on" onclick="switchTab(this,0)">فهرست</div>
     <div class="ptab" onclick="switchTab(this,1)">بوکمارک</div>
     <div class="ptab" onclick="switchTab(this,2)">هایلایت</div>
+    <div class="ptab" onclick="switchTab(this,3)">واژه</div>
   </div>
   <div class="panel-body" id="panel-body">
     <div class="empty-panel">کتابی باز نشده</div>
@@ -421,6 +461,24 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <button class="rmode-btn" data-mode="both" onclick="setReadMode(this,'both')">هر دو</button>
       <button class="rmode-btn" data-mode="persian" onclick="setReadMode(this,'persian')">فارسی</button>
     </div>
+    <!-- TTS -->
+    <button class="tb-btn no-drag" id="btn-tts" onclick="toggleTTS()" title="خواندن صدا">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z"/></svg>
+    </button>
+    <!-- summarize page -->
+    <button class="tb-btn no-drag" id="btn-summ" onclick="aiSummarizePage()" title="خلاصه صفحه با Claude">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12"/></svg>
+    </button>
+    <!-- dual page -->
+    <button class="tb-btn no-drag" id="btn-dual" onclick="toggleDualPage()" title="نمای دو صفحه">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="18" rx="1"/><rect x="13" y="3" width="8" height="18" rx="1"/></svg>
+    </button>
+    <!-- font family -->
+    <div class="font-fam-grp no-drag">
+      <button class="ff-btn on" data-ff="serif" onclick="setFontFamily('serif')" title="Serif">S</button>
+      <button class="ff-btn" data-ff="sans" onclick="setFontFamily('sans')" title="Sans">A</button>
+      <button class="ff-btn" data-ff="mono" onclick="setFontFamily('mono')" title="Mono">M</button>
+    </div>
     <!-- search -->
     <button class="tb-btn no-drag" onclick="openPdfSearch()" title="جستجو Ctrl+F">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
@@ -441,6 +499,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <button class="theme-btn on" data-theme="dark" onclick="setTheme(this,'dark','#1A1A28','#DDDDEF','rgba(0,0,0,.7)')">تاریک</button>
       <button class="theme-btn" data-theme="sepia" onclick="setTheme(this,'sepia','#2C2416','#D4C9A8','rgba(0,0,0,.5)')">سپیا</button>
       <button class="theme-btn" data-theme="light" onclick="setTheme(this,'light','#F9F7F3','#1A1A1A','rgba(0,0,0,.2)')">روشن</button>
+    </div>
+  </div>
+
+  <!-- TTS bar -->
+  <div class="tts-bar" id="tts-bar">
+    <div class="tts-wave"><span></span><span></span><span></span><span></span><span></span></div>
+    <span class="tts-label" id="tts-label">در حال خواندن...</span>
+    <div class="tts-ctrl">
+      <button class="tts-btn" onclick="ttsSkipBack()" title="قبلی">⏮</button>
+      <button class="tts-btn" id="tts-pause-btn" onclick="ttsPauseResume()" title="مکث">⏸</button>
+      <button class="tts-btn" onclick="stopTTS()" title="توقف">⏹</button>
     </div>
   </div>
 
@@ -488,6 +557,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <div class="read-stats">
       <span id="read-pct">۰٪</span>
       <span id="read-eta"></span>
+      <span id="read-wpm" style="color:var(--ok)"></span>
     </div>
   </div>
 </div>
@@ -514,6 +584,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <div class="hl-swatch" style="background:rgba(80,210,160,.4);border-color:rgba(80,210,160,.8)" onclick="applyHighlight('g')"></div>
   <div class="hl-swatch" style="background:rgba(255,100,120,.4);border-color:rgba(255,100,120,.8)" onclick="applyHighlight('r')"></div>
   <button class="hl-note-btn" onclick="openHlNote()" title="افزودن یادداشت">📝</button>
+  <button class="hl-note-btn" onclick="addToVocab()" title="افزودن به واژه‌نامه">📌</button>
+  <button class="hl-note-btn" onclick="aiTranslateSelection()" title="ترجمه با Claude">🌐</button>
+  <button class="hl-note-btn" onclick="aiExplainSelection()" title="توضیح با Claude">🤖</button>
 </div>
 
 <!-- HIGHLIGHT NOTE MODAL -->

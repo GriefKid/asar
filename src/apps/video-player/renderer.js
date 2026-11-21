@@ -12,6 +12,10 @@ let isDraggingProg = false;
 let isDraggingVol = false;
 let hideCtrlTimer = null;
 let currentMovieInfo = null;
+let abA = null, abB = null, abActive = false;
+let vidSpeed = 1.0;
+let resumeSaveTimer = null;
+const VID_SPEED_OPTS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 const vid = document.getElementById('vid');
 const area = document.getElementById('video-area');
@@ -20,9 +24,14 @@ const area = document.getElementById('video-area');
 function loadState() {
   try {
     const raw = localStorage.getItem(DATA_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (!s.resume) s.resume = {};
+      if (!s.watchData) s.watchData = {};
+      return s;
+    }
   } catch {}
-  return { collections: [], comments: [] };
+  return { collections: [], comments: [], resume: {}, watchData: {} };
 }
 
 function saveState() {
@@ -139,13 +148,17 @@ function renderColls() {
       <div class="coll-items">
         ${videos.map((v, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === v.path && activeColl === c.id;
+          const wd = state.watchData?.[v.path];
+          const isWatched = wd?.watched;
+          const rating = wd?.rating || 0;
+          const ratingStr = rating ? ' · ' + '★'.repeat(rating) : '';
           return `<div class="movie-row ${playing ? 'playing' : ''}" onclick="playVideo('${c.id}',${i})">
             <div class="movie-thumb-sm">
               ${v.poster ? `<img src="${esc(v.poster)}" alt="">` : '🎥'}
             </div>
             <div class="movie-info">
               <div class="movie-name">${esc(v.title || v.fileName)}</div>
-              <div class="movie-year">${v.year ? v.year + ' · ' : ''}${v.duration ? fmtTime(v.duration) : ''}</div>
+              <div class="movie-year">${v.year ? v.year + ' · ' : ''}${v.duration ? fmtTime(v.duration) : ''}${isWatched ? '<span class="wd">✓</span>' : ''}${ratingStr}</div>
             </div>
             <div class="play-ind">
               <svg width="8" height="8" viewBox="0 0 8 8" fill="#fff"><path d="M2 1.5l4 2.5-4 2.5V1.5z"/></svg>
@@ -264,7 +277,30 @@ function loadVideo(video) {
   const path = video.path.replace(/\\/g, '/');
   vid.src = `file:///${path}`;
   vid.load();
+
+  // restore resume position
+  const savedPos = state.resume?.[video.path];
+  if (savedPos && savedPos > 10) {
+    vid.addEventListener('canplay', function restorePos() {
+      vid.removeEventListener('canplay', restorePos);
+      if (savedPos < (vid.duration || 0) - 15) {
+        vid.currentTime = savedPos;
+        showResumeToast(savedPos);
+      }
+    }, { once: true });
+  }
+
   vid.play();
+  addToHistory(video);
+
+  // reset AB loop
+  abA = null; abB = null; abActive = false;
+  updateABUI();
+
+  // restore speed
+  vid.playbackRate = vidSpeed;
+  const speedBtn = document.getElementById('vid-speed-btn');
+  if (speedBtn) speedBtn.textContent = vidSpeed === 1 ? '1×' : vidSpeed + '×';
 
   // hide no-track, show meta
   document.getElementById('no-track').classList.add('hidden');
@@ -340,9 +376,33 @@ vid.addEventListener('timeupdate', () => {
   if (fill) fill.style.width = pct + '%';
   if (cur) cur.textContent = fmtTime(vid.currentTime);
   updateSubtitle();
+
+  // A-B loop check
+  if (abActive && abA !== null && abB !== null && vid.currentTime >= abB) {
+    vid.currentTime = abA;
+  }
+
+  // save resume position every 5s
+  if (queue[queueIdx] && vid.currentTime > 5) {
+    clearTimeout(resumeSaveTimer);
+    resumeSaveTimer = setTimeout(() => {
+      if (queue[queueIdx]) {
+        if (!state.resume) state.resume = {};
+        state.resume[queue[queueIdx].path] = vid.currentTime;
+        saveState();
+      }
+    }, 5000);
+  }
 });
 
-vid.addEventListener('ended', () => { nextVideo(); });
+vid.addEventListener('ended', () => {
+  if (queue[queueIdx]) {
+    addToHistory(queue[queueIdx]);
+    if (state.resume) delete state.resume[queue[queueIdx].path];
+    saveState();
+  }
+  nextVideo();
+});
 vid.addEventListener('play', updatePlayBtn);
 vid.addEventListener('pause', updatePlayBtn);
 
@@ -701,6 +761,8 @@ async function openInfo() {
   if (video.genres?.length) video.genres.forEach(g => tagParts.push(`<span class="meta-tag">${esc(g)}</span>`));
   tags.innerHTML = tagParts.join('');
 
+  renderWatchRow(video);
+
   const content = document.getElementById('info-content');
 
   if (!video.overview) {
@@ -797,6 +859,230 @@ function renderMarkers() {
   }).join('');
 }
 
+// ── A-B Loop ───────────────────────────────────────────────────────────
+function setAbA() {
+  abA = vid.currentTime;
+  abB = null;
+  abActive = false;
+  updateABUI();
+}
+
+function setAbB() {
+  if (abA === null) { setAbA(); return; }
+  abB = vid.currentTime;
+  if (abB <= abA) { const t = abA; abA = abB; abB = t; }
+  abActive = true;
+  updateABUI();
+}
+
+function clearAb() {
+  abA = null; abB = null; abActive = false;
+  updateABUI();
+}
+
+function updateABUI() {
+  const btnA = document.getElementById('ab-a-btn');
+  const btnB = document.getElementById('ab-b-btn');
+  if (!btnA || !btnB) return;
+  btnA.classList.toggle('set', abA !== null);
+  btnB.classList.toggle('set', abB !== null);
+  btnA.classList.toggle('active', abActive);
+  btnB.classList.toggle('active', abActive);
+  btnA.title = abA !== null ? `A: ${fmtTime(abA)} (کلیک = ریست)` : 'نقطه شروع A-B Loop';
+  btnB.title = abB !== null ? `B: ${fmtTime(abB)} (کلیک = ریست)` : 'نقطه پایان A-B Loop';
+  if (abActive) {
+    btnA.onclick = clearAb;
+    btnB.onclick = clearAb;
+  } else {
+    btnA.onclick = setAbA;
+    btnB.onclick = setAbB;
+  }
+}
+
+// ── Speed ──────────────────────────────────────────────────────────────
+function cycleVidSpeed() {
+  const cur = VID_SPEED_OPTS.indexOf(vidSpeed);
+  vidSpeed = VID_SPEED_OPTS[(cur + 1) % VID_SPEED_OPTS.length];
+  vid.playbackRate = vidSpeed;
+  const btn = document.getElementById('vid-speed-btn');
+  if (btn) {
+    btn.textContent = vidSpeed === 1 ? '1×' : vidSpeed + '×';
+    btn.classList.toggle('on', vidSpeed !== 1.0);
+  }
+}
+
+// ── Resume toast ───────────────────────────────────────────────────────
+let resumeToastTimer = null;
+function showResumeToast(pos) {
+  const toast = document.getElementById('resume-toast');
+  if (!toast) return;
+  toast.textContent = `ادامه از ${fmtTime(pos)} ⏩`;
+  toast.classList.add('show');
+  clearTimeout(resumeToastTimer);
+  resumeToastTimer = setTimeout(() => toast.classList.remove('show'), 4000);
+}
+
+// ── Watch status & rating ──────────────────────────────────────────────
+function getWatchData(path) {
+  if (!state.watchData) state.watchData = {};
+  if (!state.watchData[path]) state.watchData[path] = { watched: false, rating: 0 };
+  return state.watchData[path];
+}
+
+function toggleWatched() {
+  const video = queue[queueIdx];
+  if (!video) return;
+  const wd = getWatchData(video.path);
+  wd.watched = !wd.watched;
+  saveState();
+  renderColls();
+  renderWatchRow(video);
+}
+
+function setVideoRating(n) {
+  const video = queue[queueIdx];
+  if (!video) return;
+  const wd = getWatchData(video.path);
+  wd.rating = wd.rating === n ? 0 : n;
+  saveState();
+  renderColls();
+  renderWatchRow(video);
+}
+
+function renderWatchRow(video) {
+  const el = document.getElementById('watch-row');
+  if (!el || !video) return;
+  const wd = getWatchData(video.path);
+  const stars = [1,2,3,4,5].map(n =>
+    `<span class="star ${wd.rating >= n ? 'on' : ''}" onclick="setVideoRating(${n})">★</span>`
+  ).join('');
+  el.innerHTML = `
+    <div class="watch-row">
+      <button class="watched-toggle ${wd.watched ? 'on' : ''}" onclick="toggleWatched()">
+        ${wd.watched ? '✓ دیده شد' : '○ دیده نشده'}
+      </button>
+      <div class="star-row">${stars}</div>
+    </div>`;
+}
+
+// ── Picture-in-Picture ─────────────────────────────────────────────────
+async function togglePiP() {
+  try {
+    if (document.pictureInPictureElement) {
+      await document.exitPictureInPicture();
+    } else {
+      await vid.requestPictureInPicture();
+    }
+  } catch {}
+}
+
+// ── Watch History ──────────────────────────────────────────────────────
+const HIST_KEY = 'video-history';
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; }
+}
+function saveHistory(h) {
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 100))); } catch {}
+}
+function addToHistory(video) {
+  if (!video?.path) return;
+  const h = loadHistory().filter(x => x.path !== video.path);
+  h.unshift({ path: video.path, title: video.title || video.fileName, poster: video.poster || '', date: Date.now() });
+  saveHistory(h);
+}
+function showHistory() {
+  const modal = document.getElementById('hist-modal');
+  const list = document.getElementById('hist-list');
+  if (!modal || !list) return;
+  const h = loadHistory();
+  if (!h.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3)">هنوز فیلمی تماشا نکردی.</div>';
+  } else {
+    list.innerHTML = h.map((item, i) => {
+      const d = new Date(item.date);
+      const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const thumb = item.poster ? `<img src="${esc(item.poster)}" style="width:60px;height:38px;object-fit:cover;border-radius:4px;flex-shrink:0">` : `<div style="width:60px;height:38px;background:var(--glass);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">🎬</div>`;
+      return `<div class="hist-item" onclick="playHistoryItem(${i})">
+        ${thumb}
+        <div class="hist-info">
+          <div class="hist-title-txt">${esc(item.title || item.path.split(/[\\/]/).pop())}</div>
+          <div class="hist-date">${dateStr}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  modal.classList.add('show');
+}
+function closeHistory() {
+  document.getElementById('hist-modal')?.classList.remove('show');
+}
+function playHistoryItem(idx) {
+  const h = loadHistory();
+  const item = h[idx];
+  if (!item) return;
+  closeHistory();
+  const coll = state.collections.find(c => c.movies?.some(m => m.path === item.path));
+  if (coll) {
+    const vidIdx = coll.movies.findIndex(m => m.path === item.path);
+    if (vidIdx >= 0) {
+      selectColl(coll.id);
+      loadVideo(coll.movies[vidIdx]);
+    }
+  }
+}
+
+// ── Thumbnail Preview ──────────────────────────────────────────────────
+let thumbCanvas, thumbCtx, thumbPreview, thumbTimeEl;
+let thumbHidden; // hidden video element for frame capture
+function initThumbPreview() {
+  thumbCanvas = document.getElementById('thumb-canvas');
+  thumbCtx = thumbCanvas?.getContext('2d');
+  thumbPreview = document.getElementById('thumb-preview');
+  thumbTimeEl = document.getElementById('thumb-time-lbl');
+  const progTrack = document.getElementById('prog-track');
+  if (!progTrack) return;
+  progTrack.addEventListener('mousemove', onProgMouseMove);
+  progTrack.addEventListener('mouseleave', () => {
+    if (thumbPreview) thumbPreview.classList.remove('show');
+  });
+}
+let thumbReqTimer = null;
+function onProgMouseMove(e) {
+  if (!vid.duration || !thumbPreview) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const hoverTime = pct * vid.duration;
+  // position preview above cursor
+  const previewW = 164;
+  let left = e.clientX - rect.left;
+  left = Math.max(previewW/2, Math.min(rect.width - previewW/2, left));
+  thumbPreview.style.left = left + 'px';
+  thumbPreview.classList.add('show');
+  if (thumbTimeEl) thumbTimeEl.textContent = fmtTime(hoverTime);
+  // throttle frame capture
+  clearTimeout(thumbReqTimer);
+  thumbReqTimer = setTimeout(() => captureThumbAt(hoverTime), 120);
+}
+function captureThumbAt(t) {
+  if (!thumbCtx || !vid.src) return;
+  // use a hidden video clone for seeking without disturbing main playback
+  if (!thumbHidden) {
+    thumbHidden = document.createElement('video');
+    thumbHidden.style.display = 'none';
+    thumbHidden.muted = true;
+    thumbHidden.preload = 'metadata';
+    document.body.appendChild(thumbHidden);
+  }
+  if (thumbHidden.src !== vid.src) {
+    thumbHidden.src = vid.src;
+    thumbHidden.load();
+  }
+  thumbHidden.currentTime = t;
+  thumbHidden.onseeked = () => {
+    try { thumbCtx.drawImage(thumbHidden, 0, 0, 160, 90); } catch {}
+  };
+}
+
 // ── Utils ──────────────────────────────────────────────────────────────
 function fmtTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -821,6 +1107,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 // ── Init ───────────────────────────────────────────────────────────────
 updateVolUI(0.75);
 renderColls();
+initThumbPreview();
 
 // show TMDB banner if no key and there are collections
 if (!getTmdbKey() && state.collections.length > 0) {

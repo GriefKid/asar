@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
   // Claude AI
   claudeChat: (sys, msgs, key) => ipcRenderer.invoke('claude:chat', sys, msgs, key),
+  saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
   // Window controls
   closeWindow:     () => ipcRenderer.invoke('window:close'),
   quitApp:         () => ipcRenderer.invoke('app:quit'),

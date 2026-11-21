@@ -21,14 +21,25 @@ let activeRectPreview = null;
 let zoomLevel = 1.0;
 let srchMatches = [];
 let srchIdx = 0;
+let dualPage = false;
+let fontFamily = 'serif';
+let ttsActive = false;
+let ttsPaused = false;
+let ttsUtterance = null;
+let pageOpenTime = null;
+let pageWordCount = 0;
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
   try {
     const raw = localStorage.getItem(DATA_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (!s.ratings) s.ratings = {};
+      return s;
+    }
   } catch {}
-  return { books: [], bookmarks: [], highlights: [], rectAnnotations: [] };
+  return { books: [], bookmarks: [], highlights: [], rectAnnotations: [], vocabulary: [], ratings: {} };
 }
 
 function saveState() {
@@ -66,15 +77,27 @@ function renderLibrary() {
   el.innerHTML = state.books.map(b => {
     const isActive = b.path === currentBookPath;
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
+    const rating = (state.ratings || {})[b.path] || 0;
+    const stars = [1,2,3,4,5].map(n =>
+      `<span onclick="event.stopPropagation();setBookRating('${esc(b.path)}',${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
+    ).join('');
     return `<div class="book-item ${isActive ? 'active' : ''}" onclick="openBook('${esc(b.path)}')">
       <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
       <div class="book-meta">
         <div class="book-title">${esc(b.title)}</div>
         ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
         <div class="book-prog"><div class="book-prog-fill" style="width:${pct}%"></div></div>
+        <div style="display:flex;gap:1px;margin-top:3px">${stars}</div>
       </div>
     </div>`;
   }).join('');
+}
+
+function setBookRating(path, n) {
+  if (!state.ratings) state.ratings = {};
+  state.ratings[path] = state.ratings[path] === n ? 0 : n;
+  saveState();
+  renderLibrary();
 }
 
 async function importPdf() {
@@ -208,6 +231,7 @@ async function tocGo(dest) {
 // ── Rendering ──────────────────────────────────────────────────────────
 async function renderCurrentPage() {
   if (!pdfDoc) return;
+  recordReadSpeed(); // record time on prev page before switching
   const container = document.getElementById('pdf-container');
 
   if (readMode === 'original') {
@@ -218,6 +242,7 @@ async function renderCurrentPage() {
 
   updateNav();
   updateProgress();
+  updateSpeedDisplay();
   renderHighlightsPanel();
 
   // save last page
@@ -225,9 +250,55 @@ async function renderCurrentPage() {
   if (book) { book.lastPage = currentPage; saveState(); }
 }
 
+async function renderSinglePageWrap(pageNum, availWidth) {
+  const page = await pdfDoc.getPage(pageNum);
+  const scale = ((availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
+  const viewport = page.getViewport({ scale });
+  const wrap = document.createElement('div');
+  wrap.className = 'pdf-page-wrap';
+  wrap.style.width = viewport.width + 'px';
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  wrap.appendChild(canvas);
+  const textLayerDiv = document.createElement('div');
+  textLayerDiv.className = 'textLayer';
+  textLayerDiv.style.width = viewport.width + 'px';
+  textLayerDiv.style.height = viewport.height + 'px';
+  wrap.appendChild(textLayerDiv);
+  const annotLayer = document.createElement('div');
+  annotLayer.className = 'annot-layer';
+  wrap.appendChild(annotLayer);
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  const textContent = await page.getTextContent();
+  await pdfjsLib.renderTextLayer({ textContent, container: textLayerDiv, viewport, textDivs: [] }).promise;
+  renderRectAnnotations(annotLayer, viewport);
+  wrap.addEventListener('mouseup', onTextSelect);
+  wrap.addEventListener('contextmenu', e => e.preventDefault());
+  wrap.addEventListener('mousedown', e => { if (e.button === 2) startRectDraw(e, wrap, annotLayer, viewport); });
+  // start reading speed timer
+  const wc = textContent.items.map(i => i.str).join(' ').split(/\s+/).length;
+  startReadTimer(wc);
+  return { wrap, viewport };
+}
+
 async function renderPdfCanvas(container) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
+    if (dualPage && currentPage < totalPages) {
+      const avail = (container.clientWidth - 60) / 2;
+      const [r1, r2] = await Promise.all([
+        renderSinglePageWrap(currentPage, avail),
+        renderSinglePageWrap(currentPage + 1, avail),
+      ]);
+      const dw = document.createElement('div');
+      dw.className = 'dual-wrap';
+      dw.appendChild(r1.wrap);
+      dw.appendChild(r2.wrap);
+      container.innerHTML = '';
+      container.appendChild(dw);
+      container.appendChild(makePageNum());
+      return;
+    }
     const page = await pdfDoc.getPage(currentPage);
     const scale = ((container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
     const viewport = page.getViewport({ scale });
@@ -272,6 +343,10 @@ async function renderPdfCanvas(container) {
 
     // render saved rect annotations
     renderRectAnnotations(annotLayer, viewport);
+
+    // start reading timer
+    const wc = textContent.items.map(i => i.str).join(' ').split(/\s+/).length;
+    startReadTimer(wc);
 
     wrap.addEventListener('mouseup', onTextSelect);
     wrap.addEventListener('contextmenu', e => e.preventDefault());
@@ -894,6 +969,7 @@ function switchTab(el, idx) {
   if (idx === 0 && pdfDoc) loadToc();
   if (idx === 1) renderBookmarksPanel();
   if (idx === 2) renderHighlightsPanel();
+  if (idx === 3) renderVocabPanel();
 }
 
 function renderBookmarksPanel() {
@@ -935,7 +1011,8 @@ function renderHighlightsPanel() {
       ${a.note ? `<div class="hl-note">${esc(a.note)}</div>` : ''}
       <div class="hl-page">صفحه ${a.page}</div>
     </div>`).join('');
-  body.innerHTML = hlHTML + rectHTML;
+  const exportBtn = `<button class="vocab-export-btn" onclick="exportHighlights()">📤 Export هایلایت‌ها</button>`;
+  body.innerHTML = hlHTML + rectHTML + exportBtn;
 }
 
 // ── Theme & font ───────────────────────────────────────────────────────
@@ -1140,6 +1217,243 @@ document.addEventListener('drop', async e => {
   if (newPaths.length === 1) openBook(newPaths[0]);
   for (const p of newPaths) fetchAndSaveBookMeta(p);
 });
+
+// ── Dual page ─────────────────────────────────────────────────────────
+function toggleDualPage() {
+  dualPage = !dualPage;
+  document.getElementById('btn-dual').classList.toggle('on', dualPage);
+  document.getElementById('pdf-container').style.maxWidth = dualPage ? '1440px' : '720px';
+  if (pdfDoc && readMode === 'original') renderCurrentPage();
+}
+
+// ── Font family ────────────────────────────────────────────────────────
+const FONT_FAMILIES = {
+  serif: "'Crimson Pro',Georgia,serif",
+  sans: "Inter,system-ui,sans-serif",
+  mono: "'JetBrains Mono','Courier New',monospace"
+};
+
+function setFontFamily(ff) {
+  fontFamily = ff;
+  document.querySelectorAll('.text-page').forEach(el => { el.style.fontFamily = FONT_FAMILIES[ff]; });
+  document.querySelectorAll('.ff-btn').forEach(b => b.classList.toggle('on', b.dataset.ff === ff));
+}
+
+// ── TTS (Text-to-Speech) ───────────────────────────────────────────────
+function getPageText() {
+  const spans = document.querySelectorAll('.textLayer span');
+  if (spans.length > 0) return [...spans].map(s => s.textContent).join(' ').replace(/\s+/g, ' ').trim();
+  return [...document.querySelectorAll('.text-page p')].map(p => p.textContent).join('. ').trim();
+}
+
+function toggleTTS() {
+  if (ttsActive) { stopTTS(); return; }
+  const text = getPageText();
+  if (!text) return;
+  ttsUtterance = new SpeechSynthesisUtterance(text);
+  ttsUtterance.rate = 0.9;
+  ttsUtterance.onend = () => { ttsActive = false; ttsPaused = false; updateTTSUI(); };
+  ttsUtterance.onerror = () => { ttsActive = false; ttsPaused = false; updateTTSUI(); };
+  ttsActive = true; ttsPaused = false;
+  speechSynthesis.speak(ttsUtterance);
+  updateTTSUI();
+}
+
+function stopTTS() {
+  speechSynthesis.cancel();
+  ttsActive = false; ttsPaused = false;
+  updateTTSUI();
+}
+
+function ttsPauseResume() {
+  if (!ttsActive) return;
+  if (ttsPaused) { speechSynthesis.resume(); ttsPaused = false; }
+  else { speechSynthesis.pause(); ttsPaused = true; }
+  document.getElementById('tts-pause-btn').textContent = ttsPaused ? '▶' : '⏸';
+}
+
+function ttsSkipBack() { stopTTS(); toggleTTS(); }
+
+function updateTTSUI() {
+  document.getElementById('btn-tts').classList.toggle('on', ttsActive);
+  document.getElementById('tts-bar').classList.toggle('show', ttsActive);
+  if (ttsActive) document.getElementById('tts-label').textContent = 'در حال خواندن صفحه ' + currentPage + '...';
+}
+
+// ── Reading speed tracker ──────────────────────────────────────────────
+function startReadTimer(wordCount) {
+  pageOpenTime = Date.now();
+  pageWordCount = wordCount;
+}
+
+function recordReadSpeed() {
+  if (!pageOpenTime || !pageWordCount || !currentBookPath) return;
+  const elapsed = (Date.now() - pageOpenTime) / 60000; // minutes
+  if (elapsed < 0.15 || elapsed > 20) { pageOpenTime = null; return; }
+  const wpm = Math.round(pageWordCount / elapsed);
+  if (wpm < 50 || wpm > 1200) { pageOpenTime = null; return; }
+  const book = state.books.find(b => b.path === currentBookPath);
+  if (book) {
+    if (!book.speedSamples) book.speedSamples = [];
+    book.speedSamples.push(wpm);
+    if (book.speedSamples.length > 30) book.speedSamples = book.speedSamples.slice(-30);
+    book.avgWPM = Math.round(book.speedSamples.reduce((a, b) => a + b, 0) / book.speedSamples.length);
+    saveState();
+  }
+  pageOpenTime = null;
+}
+
+function updateSpeedDisplay() {
+  const book = state.books.find(b => b.path === currentBookPath);
+  const el = document.getElementById('read-wpm');
+  if (el && book?.avgWPM) el.textContent = `${book.avgWPM} کلمه/دق`;
+  else if (el) el.textContent = '';
+}
+
+// ── Vocabulary list ────────────────────────────────────────────────────
+function addToVocab() {
+  if (!selectionText) return;
+  if (!state.vocabulary) state.vocabulary = [];
+  const word = selectionText.slice(0, 300);
+  if (state.vocabulary.find(v => v.word === word && v.path === currentBookPath)) { hideHlTooltip(); return; }
+  state.vocabulary.push({ word, page: currentPage, path: currentBookPath, id: 'vc' + Date.now(), ts: Date.now() });
+  saveState();
+  hideHlTooltip();
+  if (activeTab === 3) renderVocabPanel();
+}
+
+function renderVocabPanel() {
+  const body = document.getElementById('panel-body');
+  const vocab = (state.vocabulary || []).filter(v => v.path === currentBookPath);
+  if (!vocab.length) {
+    body.innerHTML = `<div class="empty-panel">واژه‌نامه خالیه.<br>متن انتخاب کن و روی 📌 بزن.</div>`;
+    return;
+  }
+  body.innerHTML = vocab.slice().reverse().map(v => `
+    <div class="vocab-item" onclick="goToPage(${v.page})">
+      <div class="vocab-word">${esc(v.word.slice(0, 100))}</div>
+      <div class="vocab-page">صفحه ${v.page}</div>
+    </div>`).join('') +
+    `<button class="vocab-export-btn" onclick="exportVocab()">📤 Export واژه‌نامه</button>`;
+}
+
+async function exportVocab() {
+  const book = state.books.find(b => b.path === currentBookPath);
+  const vocab = (state.vocabulary || []).filter(v => v.path === currentBookPath);
+  if (!vocab.length) return;
+  let md = `# واژه‌نامه — ${book?.title || 'کتاب'}\n\n`;
+  vocab.forEach((v, i) => { md += `${i + 1}. **${v.word}** — صفحه ${v.page}\n`; });
+  try { await window.api.saveTextFile(md, `vocab_${book?.title || 'book'}.md`); } catch {
+    navigator.clipboard.writeText(md).catch(() => {});
+  }
+}
+
+// ── Export highlights ──────────────────────────────────────────────────
+async function exportHighlights() {
+  const book = state.books.find(b => b.path === currentBookPath);
+  const hls = (state.highlights || []).filter(h => h.path === currentBookPath);
+  const rects = (state.rectAnnotations || []).filter(a => a.path === currentBookPath);
+  if (!hls.length && !rects.length) return;
+
+  const pages = {};
+  hls.forEach(h => { if (!pages[h.page]) pages[h.page] = { hls: [], rects: [] }; pages[h.page].hls.push(h); });
+  rects.forEach(a => { if (!pages[a.page]) pages[a.page] = { hls: [], rects: [] }; pages[a.page].rects.push(a); });
+
+  let md = `# هایلایت‌ها — ${book?.title || 'کتاب'}\n\n`;
+  Object.keys(pages).sort((a, b) => a - b).forEach(pg => {
+    md += `## صفحه ${pg}\n\n`;
+    pages[pg].hls.forEach(h => {
+      md += `> ${h.text}\n`;
+      if (h.note) md += `\n*یادداشت: ${h.note}*\n`;
+      md += '\n';
+    });
+    pages[pg].rects.forEach(a => {
+      md += `> 🔲 مارک ناحیه\n`;
+      if (a.note) md += `\n*یادداشت: ${a.note}*\n`;
+      md += '\n';
+    });
+  });
+  try { await window.api.saveTextFile(md, `highlights_${book?.title || 'book'}.md`); } catch {
+    navigator.clipboard.writeText(md).catch(() => {});
+  }
+}
+
+// ── AI: translate / explain selection ─────────────────────────────────
+async function aiTranslateSelection() {
+  if (!selectionText) return;
+  hideHlTooltip();
+  if (!aiOpen) toggleAI();
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  const q = `ترجمه کن به فارسی روان:\n\n"${selectionText}"`;
+  appendAIMsg('user', `🌐 ترجمه: "${selectionText.slice(0, 80)}${selectionText.length > 80 ? '...' : ''}"`);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  try {
+    const reply = await window.api.claudeChat(
+      'You are a translator. Translate the given text to natural Persian (Farsi). Return only the translation.',
+      [{ role: 'user', content: q }], key
+    );
+    typingDiv.classList.remove('typing');
+    typingDiv.textContent = reply;
+    aiHistory.push({ role: 'user', content: q }, { role: 'assistant', content: reply });
+    if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  } catch (err) {
+    typingDiv.classList.remove('typing');
+    typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${err.message}`;
+  }
+}
+
+async function aiExplainSelection() {
+  if (!selectionText) return;
+  hideHlTooltip();
+  if (!aiOpen) toggleAI();
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  const q = `توضیح بده و تحلیل کن به فارسی:\n\n"${selectionText}"`;
+  appendAIMsg('user', `🤖 توضیح: "${selectionText.slice(0, 80)}${selectionText.length > 80 ? '...' : ''}"`);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  document.getElementById('ai-send-btn').disabled = true;
+  try {
+    const book = state.books.find(b => b.path === currentBookPath);
+    const sys = `You are a helpful book assistant. The user is reading "${book?.title || 'a book'}". Explain and analyze the selected text in natural Persian. Be insightful but concise.`;
+    const reply = await window.api.claudeChat(sys, [{ role: 'user', content: q }], key);
+    typingDiv.classList.remove('typing');
+    typingDiv.textContent = reply;
+    aiHistory.push({ role: 'user', content: q }, { role: 'assistant', content: reply });
+    if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  } catch (err) {
+    typingDiv.classList.remove('typing');
+    typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${err.message}`;
+  }
+  document.getElementById('ai-send-btn').disabled = false;
+}
+
+async function aiSummarizePage() {
+  if (!aiOpen) toggleAI();
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  const context = getAIContext();
+  appendAIMsg('user', `📝 خلاصه صفحه ${currentPage}`);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  document.getElementById('ai-send-btn').disabled = true;
+  try {
+    const book = state.books.find(b => b.path === currentBookPath);
+    const sys = `You are a helpful book assistant reading "${book?.title || 'a book'}". Summarize the given page content in natural Persian. Be concise and extract the key ideas.`;
+    const q = `خلاصه کن این صفحه رو:\n\n${context}`;
+    const reply = await window.api.claudeChat(sys, [{ role: 'user', content: q }], key);
+    typingDiv.classList.remove('typing');
+    typingDiv.textContent = reply;
+    aiHistory.push({ role: 'user', content: q }, { role: 'assistant', content: reply });
+    if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  } catch (err) {
+    typingDiv.classList.remove('typing');
+    typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${err.message}`;
+  }
+  document.getElementById('ai-send-btn').disabled = false;
+}
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();

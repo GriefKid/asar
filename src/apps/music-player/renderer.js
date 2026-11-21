@@ -14,15 +14,42 @@ let cmtTimestamp = 0;
 let isDraggingProg = false;
 let isDraggingVol = false;
 
+let audioCtx = null;
+let analyser = null;
+let gainNode = null;
+let eqFilters = [];
+let vizFrameId = null;
+let currentCoverUrl = null;
+let sleepTimeout = null;
+let sleepInterval = null;
+let sleepEndTime = 0;
+let playbackSpeed = 1.0;
+let statsListenInterval = null;
+let statsListenStart = 0;
+let statsCurrentPath = null;
+
+const SPEED_OPTS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+const EQ_PRESETS = {
+  flat:      [0, 0, 0, 0, 0],
+  bass:      [8, 5, 0, -1, -2],
+  vocal:     [-2, 0, 5, 4, -1],
+  classical: [4, 2, -2, 1, 4],
+};
+
 const audio = document.getElementById('audio-el');
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
   try {
     const raw = localStorage.getItem(DATA_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (!s.stats) s.stats = { plays: {}, listenTime: {} };
+      if (!s.ratings) s.ratings = {};
+      return s;
+    }
   } catch {}
-  return { collections: [], comments: [] };
+  return { collections: [], comments: [], stats: { plays: {}, listenTime: {} }, ratings: {} };
 }
 
 function saveState() {
@@ -59,11 +86,13 @@ function renderColls() {
       <div class="coll-songs">
         ${songs.map((s, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === s.path && activeColl === c.id;
+          const songRating = getSongRating(s.path);
+          const ratingDot = songRating > 0 ? `<span style="color:var(--warn);font-size:9px;margin-right:2px">${'★'.repeat(songRating)}</span>` : '';
           return `<div class="song ${playing ? 'playing' : ''}" onclick="playSong('${c.id}',${i})">
             <span class="song-n">${i + 1}</span>
             <div class="eq"><span></span><span></span><span></span></div>
             <div class="song-info">
-              <div class="song-name">${esc(s.title || s.fileName)}</div>
+              <div class="song-name">${esc(s.title || s.fileName)}${ratingDot}</div>
               <div class="song-artist">${esc(s.artist || '')}</div>
             </div>
             <span class="song-dur">${s.duration ? fmtTime(s.duration) : ''}</span>
@@ -178,12 +207,38 @@ async function playSong(collId, idx) {
 }
 
 async function loadTrack(song) {
+  if (audioCtx && gainNode && !audio.paused) {
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+    gainNode.gain.linearRampToValueAtTime(0, now + 0.26);
+    await sleep(260);
+  }
+
+  currentCoverUrl = null;
   const path = song.path.replace(/\\/g, '/');
   audio.src = `file:///${path}`;
   audio.load();
-  audio.play();
+  audio.playbackRate = playbackSpeed;
+  audio.play().catch(() => {});
+
+  if (!audioCtx) initAudioCtx();
+  if (audioCtx && gainNode) {
+    audioCtx.resume().catch(() => {});
+    const now = audioCtx.currentTime;
+    gainNode.gain.cancelScheduledValues(now);
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(1, now + 0.4);
+  }
+
+  startVisualizer();
+  startWaveform();
+  trackPlayStat(song);
+  startListenTracking(song);
+
   renderPlayer(song);
   updateBgGlow(null);
+  updateFsInfo(song);
   fetchCover(song);
   fetchLyrics(song);
 }
@@ -191,7 +246,7 @@ async function loadTrack(song) {
 function renderPlayer(song) {
   document.getElementById('player-content').innerHTML = `
     <div class="art-wrap">
-      <div class="art" id="art-playing">
+      <div class="art" id="art-playing" onclick="openFullscreen()" style="cursor:pointer" title="نمایش تمام صفحه">
         <span id="art-emoji">🎵</span>
         <img id="art-img" style="display:none" alt="">
       </div>
@@ -203,6 +258,7 @@ function renderPlayer(song) {
       <div class="now-album" id="now-album"></div>
     </div>
     <div class="prog-wrap">
+      <canvas id="wave-canvas"></canvas>
       <div class="prog-track" id="prog-track">
         <div class="prog-fill" id="prog-fill" style="width:0%">
           <div class="markers" id="markers"></div>
@@ -242,7 +298,15 @@ function renderPlayer(song) {
     <button class="add-cmt no-drag" onclick="openCmt()">
       <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
       افزودن کامنت در این لحظه
-    </button>`;
+    </button>
+    <div class="extra-row">
+      <button class="ex-btn no-drag ${playbackSpeed !== 1.0 ? 'on' : ''}" id="btn-speed" onclick="cycleSpeed()" title="سرعت پخش — کلیک برای تغییر">⚡ <span id="speed-display">${playbackSpeed}×</span></button>
+      <button class="ex-btn no-drag" onclick="toggleEQ()" title="اکولایزر">🎚 EQ</button>
+      <button class="ex-btn no-drag ${sleepEndTime > Date.now() ? 'on' : ''}" id="btn-sleep" onclick="showSleep()" title="تایمر خواب">😴 <span id="sleep-display">${sleepEndTime > Date.now() ? fmtSleepTime() : 'خواب'}</span></button>
+      <button class="ex-btn no-drag" onclick="showStats()" title="آمار پخش">📊</button>
+      <button class="ex-btn no-drag" onclick="showQueue()" title="صف پخش">☰ صف</button>
+    </div>
+    <div class="rating-row" id="rating-row" style="display:flex;align-items:center;justify-content:center;gap:3px;margin-top:8px">${renderRatingStars(song)}</div>`;
 
   audio.volume = 0.8;
   setupProgDrag();
@@ -358,7 +422,7 @@ function prevSong() {
   if (!queue.length) return;
   if (audio.currentTime > 3) { audio.currentTime = 0; return; }
   if (shuffle) {
-    queueIdx = Math.floor(Math.random() * queue.length);
+    smartShuffleNext();
   } else {
     queueIdx = (queueIdx - 1 + queue.length) % queue.length;
   }
@@ -369,7 +433,7 @@ function prevSong() {
 function nextSong() {
   if (!queue.length) return;
   if (shuffle) {
-    queueIdx = Math.floor(Math.random() * queue.length);
+    smartShuffleNext();
   } else {
     if (repeatMode === 1) {
       queueIdx = (queueIdx + 1) % queue.length;
@@ -414,6 +478,16 @@ async function fetchCover(song) {
       if (emoji) emoji.style.display = 'none';
       art.classList.add('has-art');
       updateBgGlow(url);
+      currentCoverUrl = url;
+      const blurEl = document.getElementById('fs-blur');
+      if (blurEl) {
+        blurEl.style.backgroundImage = `url('${url.replace(/'/g, "\\'")}')`;
+        blurEl.classList.add('has-cover');
+      }
+      const artBox = document.getElementById('fs-art-box');
+      if (artBox && document.getElementById('fs-overlay')?.classList.contains('show')) {
+        artBox.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover">`;
+      }
     };
     img.src = url;
   } catch {}
@@ -714,8 +788,10 @@ async function sendAI() {
 // ── Esc → back to main app ─────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show');
+    if (document.getElementById('fs-overlay')?.classList.contains('show')) { closeFullscreen(); return; }
+    const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show,.sleep-modal.show,.stats-modal.show');
     if (openModal) { openModal.classList.remove('show'); return; }
+    if (document.getElementById('eq-panel')?.classList.contains('show')) { closeEQ(); return; }
     if (aiOpen) { toggleAI(); return; }
     window.api.closeWindow();
   }
@@ -723,3 +799,505 @@ document.addEventListener('keydown', e => {
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderColls();
+initEQUI();
+
+// ── Web Audio + Visualizer ─────────────────────────────────────────────
+function initAudioCtx() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new AudioContext();
+    const source = audioCtx.createMediaElementSource(audio);
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 1;
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8;
+    const specs = [
+      { freq: 60,    type: 'lowshelf' },
+      { freq: 250,   type: 'peaking',  Q: 1.0 },
+      { freq: 1000,  type: 'peaking',  Q: 1.0 },
+      { freq: 4000,  type: 'peaking',  Q: 1.0 },
+      { freq: 16000, type: 'highshelf' },
+    ];
+    eqFilters = specs.map(s => {
+      const f = audioCtx.createBiquadFilter();
+      f.type = s.type;
+      f.frequency.value = s.freq;
+      f.gain.value = 0;
+      if (s.Q !== undefined) f.Q.value = s.Q;
+      return f;
+    });
+    source.connect(gainNode);
+    let node = gainNode;
+    for (const f of eqFilters) { node.connect(f); node = f; }
+    node.connect(analyser);
+    analyser.connect(audioCtx.destination);
+  } catch { audioCtx = null; }
+}
+
+function startVisualizer() {
+  if (vizFrameId) cancelAnimationFrame(vizFrameId);
+  if (!analyser) return;
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  function draw() {
+    vizFrameId = requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(dataArray);
+    const cv = document.getElementById('viz-canvas');
+    const fv = document.getElementById('fs-canvas');
+    if (cv) drawViz(cv, dataArray, false);
+    if (fv && document.getElementById('fs-overlay')?.classList.contains('show')) drawViz(fv, dataArray, true);
+  }
+  draw();
+}
+
+function drawViz(canvas, data, large) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  if (!W || !H) return;
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+  }
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  const useBins = Math.floor(data.length * 0.6);
+  const count = large ? Math.min(useBins, 80) : Math.min(useBins, 60);
+  const step = Math.max(1, Math.floor(useBins / count));
+  for (let i = 0; i < count; i++) {
+    const v = data[i * step] / 255;
+    const barW = (w / count) * 0.72;
+    const gap = (w / count) * 0.28;
+    const barH = Math.max(2 * dpr, v * h * 0.95);
+    const x = i * (w / count) + gap / 2;
+    const hue = 250 - v * 55;
+    ctx.fillStyle = `hsla(${hue},75%,65%,${0.25 + v * 0.75})`;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, h - barH, barW, barH, Math.min(barW / 2, 3 * dpr));
+    else ctx.rect(x, h - barH, barW, barH);
+    ctx.fill();
+  }
+}
+
+// ── Fullscreen art ─────────────────────────────────────────────────────
+function openFullscreen() {
+  if (queueIdx < 0) return;
+  const song = queue[queueIdx];
+  const overlay = document.getElementById('fs-overlay');
+  if (!overlay) return;
+  updateFsInfo(song);
+  const artBox = document.getElementById('fs-art-box');
+  if (artBox) {
+    if (currentCoverUrl) artBox.innerHTML = `<img src="${currentCoverUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    else artBox.innerHTML = '🎵';
+  }
+  const blurEl = document.getElementById('fs-blur');
+  if (blurEl) {
+    if (currentCoverUrl) {
+      blurEl.style.backgroundImage = `url('${currentCoverUrl.replace(/'/g, "\\'")}')`;
+      blurEl.classList.add('has-cover');
+    } else {
+      blurEl.style.backgroundImage = '';
+      blurEl.classList.remove('has-cover');
+    }
+  }
+  overlay.classList.add('show');
+}
+
+function closeFullscreen() {
+  document.getElementById('fs-overlay')?.classList.remove('show');
+}
+
+function updateFsInfo(song) {
+  const t = document.getElementById('fs-t');
+  const a = document.getElementById('fs-a');
+  if (t) t.textContent = song.title || song.fileName || '';
+  if (a) a.textContent = song.artist || '';
+}
+
+// ── EQ ─────────────────────────────────────────────────────────────────
+function initEQUI() {
+  const container = document.getElementById('eq-bands');
+  if (!container) return;
+  const labels = ['60Hz', '250Hz', '1kHz', '4kHz', '16kHz'];
+  container.innerHTML = labels.map((lbl, i) => `
+    <div class="eq-band">
+      <div class="eq-val" id="eq-val-${i}">0</div>
+      <div class="eq-slider-wrap">
+        <div class="eq-center-line"></div>
+        <input class="eq-slider" type="range" id="eq-${i}" min="-12" max="12" step="0.5" value="0"
+          oninput="setEQBand(${i}, this.value)">
+      </div>
+      <div class="eq-label">${lbl}</div>
+    </div>`).join('');
+}
+
+function toggleEQ() {
+  const panel = document.getElementById('eq-panel');
+  const bg = document.getElementById('eq-bg');
+  panel?.classList.toggle('show');
+  bg?.classList.toggle('show');
+}
+
+function closeEQ() {
+  document.getElementById('eq-panel')?.classList.remove('show');
+  document.getElementById('eq-bg')?.classList.remove('show');
+}
+
+function setEQBand(i, value) {
+  const gain = parseFloat(value);
+  const valEl = document.getElementById(`eq-val-${i}`);
+  if (valEl) valEl.textContent = (gain > 0 ? '+' : '') + gain;
+  if (eqFilters[i]) eqFilters[i].gain.value = gain;
+  document.querySelectorAll('.eq-preset').forEach(el => el.classList.remove('on'));
+}
+
+function applyEQPreset(name, btn) {
+  const preset = EQ_PRESETS[name];
+  if (!preset) return;
+  document.querySelectorAll('.eq-preset').forEach(el => el.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  preset.forEach((gain, i) => {
+    const slider = document.getElementById(`eq-${i}`);
+    const valEl = document.getElementById(`eq-val-${i}`);
+    if (slider) slider.value = gain;
+    if (valEl) valEl.textContent = (gain > 0 ? '+' : '') + gain;
+    if (eqFilters[i]) eqFilters[i].gain.value = gain;
+  });
+}
+
+// ── Speed control ──────────────────────────────────────────────────────
+function cycleSpeed() {
+  const idx = SPEED_OPTS.indexOf(playbackSpeed);
+  const next = SPEED_OPTS[(idx + 1) % SPEED_OPTS.length];
+  setPlaybackSpeed(next);
+}
+
+function setPlaybackSpeed(rate) {
+  playbackSpeed = rate;
+  audio.playbackRate = rate;
+  const display = document.getElementById('speed-display');
+  if (display) display.textContent = rate + '×';
+  const btn = document.getElementById('btn-speed');
+  if (btn) btn.classList.toggle('on', rate !== 1.0);
+}
+
+// ── Sleep timer ────────────────────────────────────────────────────────
+function fmtSleepTime() {
+  if (!sleepEndTime) return 'خواب';
+  const remaining = Math.max(0, sleepEndTime - Date.now());
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function showSleep() {
+  document.getElementById('sleep-modal')?.classList.add('show');
+  refreshSleepModal();
+}
+
+function closeSleep() {
+  document.getElementById('sleep-modal')?.classList.remove('show');
+}
+
+function setSleepTimer(minutes) {
+  if (sleepTimeout) clearTimeout(sleepTimeout);
+  if (sleepInterval) clearInterval(sleepInterval);
+  sleepEndTime = Date.now() + minutes * 60000;
+
+  document.querySelectorAll('.sleep-opt').forEach(el => {
+    el.classList.toggle('on', parseInt(el.dataset.min) === minutes);
+  });
+
+  sleepTimeout = setTimeout(() => {
+    audio.pause();
+    sleepTimeout = null; sleepEndTime = 0;
+    updateSleepDisplay();
+    refreshSleepModal();
+  }, minutes * 60000);
+
+  sleepInterval = setInterval(() => {
+    if (!sleepEndTime) { clearInterval(sleepInterval); return; }
+    updateSleepDisplay();
+    refreshSleepModal();
+  }, 1000);
+
+  updateSleepDisplay();
+  refreshSleepModal();
+}
+
+function cancelSleepTimer() {
+  if (sleepTimeout) { clearTimeout(sleepTimeout); sleepTimeout = null; }
+  if (sleepInterval) { clearInterval(sleepInterval); sleepInterval = null; }
+  sleepEndTime = 0;
+  document.querySelectorAll('.sleep-opt').forEach(el => el.classList.remove('on'));
+  updateSleepDisplay();
+  refreshSleepModal();
+}
+
+function updateSleepDisplay() {
+  const display = document.getElementById('sleep-display');
+  const btn = document.getElementById('btn-sleep');
+  if (!sleepEndTime || sleepEndTime <= Date.now()) {
+    if (display) display.textContent = 'خواب';
+    if (btn) { btn.classList.remove('on'); btn.style.color = ''; }
+    return;
+  }
+  const remaining = sleepEndTime - Date.now();
+  if (display) display.textContent = fmtSleepTime();
+  if (btn) {
+    btn.classList.add('on');
+    btn.style.color = remaining < 120000 ? 'var(--warn)' : '';
+  }
+}
+
+function refreshSleepModal() {
+  const cd = document.getElementById('sleep-cd');
+  const cancelBtn = document.getElementById('sleep-cancel-btn');
+  if (!cd) return;
+  if (sleepEndTime > Date.now()) {
+    cd.textContent = fmtSleepTime().replace(':', ':');
+    cd.style.display = '';
+    if (cancelBtn) cancelBtn.style.display = '';
+  } else {
+    cd.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────
+function trackPlayStat(song) {
+  if (!song?.path) return;
+  if (!state.stats) state.stats = { plays: {}, listenTime: {} };
+  state.stats.plays[song.path] = (state.stats.plays[song.path] || 0) + 1;
+  saveState();
+}
+
+function startListenTracking(song) {
+  stopListenTracking();
+  statsCurrentPath = song?.path || null;
+  statsListenStart = Date.now();
+  statsListenInterval = setInterval(() => {
+    if (audio.paused || !statsCurrentPath) return;
+    const elapsed = (Date.now() - statsListenStart) / 1000;
+    statsListenStart = Date.now();
+    if (!state.stats) state.stats = { plays: {}, listenTime: {} };
+    state.stats.listenTime[statsCurrentPath] = (state.stats.listenTime[statsCurrentPath] || 0) + elapsed;
+    saveState();
+  }, 10000);
+}
+
+function stopListenTracking() {
+  if (statsListenInterval) {
+    clearInterval(statsListenInterval);
+    statsListenInterval = null;
+    if (statsCurrentPath && statsListenStart > 0 && !audio.paused) {
+      const elapsed = (Date.now() - statsListenStart) / 1000;
+      if (!state.stats) state.stats = { plays: {}, listenTime: {} };
+      state.stats.listenTime[statsCurrentPath] = (state.stats.listenTime[statsCurrentPath] || 0) + elapsed;
+      saveState();
+    }
+  }
+  statsListenStart = 0;
+}
+
+function showStats() {
+  document.getElementById('stats-modal')?.classList.add('show');
+  renderStats();
+}
+
+function closeStats() {
+  document.getElementById('stats-modal')?.classList.remove('show');
+}
+
+function fmtListenTime(seconds) {
+  if (seconds < 60) return `${Math.round(seconds)}ث`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}دق`;
+  return `${Math.floor(seconds / 3600)}س ${Math.floor((seconds % 3600) / 60)}دق`;
+}
+
+function renderStats() {
+  const content = document.getElementById('stats-content');
+  const sub = document.getElementById('stats-sub');
+  if (!content) return;
+  const plays = state.stats?.plays || {};
+  const listenTime = state.stats?.listenTime || {};
+  const songMap = {};
+  for (const coll of state.collections) {
+    for (const song of (coll.songs || [])) songMap[song.path] = song;
+  }
+  const entries = Object.keys(plays).map(path => ({
+    path, song: songMap[path] || { title: path.split(/[\\/]/).pop(), artist: '' },
+    plays: plays[path] || 0, listenTime: Math.round(listenTime[path] || 0)
+  })).sort((a, b) => b.plays - a.plays);
+
+  if (!entries.length) {
+    content.innerHTML = '<div style="text-align:center;color:var(--t3);padding:24px 0;direction:rtl">هنوز هیچ آهنگی پخش نشده.</div>';
+    if (sub) sub.textContent = '';
+    return;
+  }
+
+  const totalPlays = entries.reduce((s, e) => s + e.plays, 0);
+  const totalTime = entries.reduce((s, e) => s + e.listenTime, 0);
+  if (sub) sub.textContent = `${totalPlays} پخش · ${fmtListenTime(totalTime)} شنیده شده`;
+
+  const maxPlays = entries[0].plays;
+  content.innerHTML = entries.slice(0, 20).map((e, i) => `
+    <div class="stats-item">
+      <div class="stats-rank">${i + 1}</div>
+      <div class="stats-info">
+        <div class="stats-name">${esc(e.song.title || e.song.fileName || e.path.split(/[\\/]/).pop())}</div>
+        <div class="stats-detail">${esc(e.song.artist || '')}${e.listenTime > 0 ? ' · ' + fmtListenTime(e.listenTime) : ''}</div>
+        <div class="stats-bar"><div class="stats-bar-fill" style="width:${Math.round((e.plays / maxPlays) * 100)}%"></div></div>
+      </div>
+      <div class="stats-plays">${e.plays}×</div>
+    </div>`).join('');
+}
+
+// ── Rating ────────────────────────────────────────────────────────────
+function getSongRating(path) {
+  if (!state.ratings) state.ratings = {};
+  return state.ratings[path] || 0;
+}
+
+function setSongRating(n) {
+  const song = queue[queueIdx];
+  if (!song) return;
+  if (!state.ratings) state.ratings = {};
+  state.ratings[song.path] = state.ratings[song.path] === n ? 0 : n;
+  saveState();
+  const row = document.getElementById('rating-row');
+  if (row) row.innerHTML = renderRatingStars(song);
+}
+
+function renderRatingStars(song) {
+  const r = getSongRating(song?.path || '');
+  return [1,2,3,4,5].map(n =>
+    `<span onclick="setSongRating(${n})" style="cursor:pointer;font-size:18px;color:${r >= n ? 'var(--warn)' : 'var(--t3)'};" title="${n} ستاره">★</span>`
+  ).join('');
+}
+
+// ── Queue Manager ──────────────────────────────────────────────────────
+function showQueue() {
+  renderQueueModal();
+  document.getElementById('queue-modal')?.classList.add('show');
+}
+
+function closeQueue() {
+  document.getElementById('queue-modal')?.classList.remove('show');
+}
+
+function renderQueueModal() {
+  const list = document.getElementById('queue-list');
+  if (!list) return;
+  if (!queue.length) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--t3);direction:rtl">صف خالی است.</div>';
+    return;
+  }
+  list.innerHTML = queue.map((s, i) => {
+    const active = i === queueIdx;
+    return `<div class="queue-item ${active ? 'active' : ''}" onclick="playFromQueue(${i})">
+      <span class="queue-num">${i + 1}</span>
+      <div class="queue-info">
+        <div class="queue-name">${esc(s.title || s.fileName)}</div>
+        <div class="queue-artist">${esc(s.artist || '')}</div>
+      </div>
+      <span class="queue-dur">${s.duration ? fmtTime(s.duration) : ''}</span>
+      <div class="queue-move">
+        <button class="queue-move-btn" onclick="event.stopPropagation();queueMoveUp(${i})" title="بالا">▲</button>
+        <button class="queue-move-btn" onclick="event.stopPropagation();queueMoveDown(${i})" title="پایین">▼</button>
+      </div>
+    </div>`;
+  }).join('');
+  // scroll to active item
+  setTimeout(() => {
+    const active = list.querySelector('.queue-item.active');
+    if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 50);
+}
+
+function playFromQueue(idx) {
+  queueIdx = idx;
+  loadTrack(queue[queueIdx]);
+  renderColls();
+  renderQueueModal();
+}
+
+function queueMoveUp(idx) {
+  if (idx <= 0) return;
+  [queue[idx - 1], queue[idx]] = [queue[idx], queue[idx - 1]];
+  if (queueIdx === idx) queueIdx = idx - 1;
+  else if (queueIdx === idx - 1) queueIdx = idx;
+  renderQueueModal();
+}
+
+function queueMoveDown(idx) {
+  if (idx >= queue.length - 1) return;
+  [queue[idx + 1], queue[idx]] = [queue[idx], queue[idx + 1]];
+  if (queueIdx === idx) queueIdx = idx + 1;
+  else if (queueIdx === idx + 1) queueIdx = idx;
+  renderQueueModal();
+}
+
+// ── Smart Shuffle ──────────────────────────────────────────────────────
+function smartShuffleNext() {
+  if (!queue.length) return;
+  const plays = state.stats?.plays || {};
+  // weight = 1 / (playCount + 1) so less-played songs get higher weight
+  const weights = queue.map((s, i) => {
+    if (i === queueIdx) return 0;
+    const p = plays[s.path] || 0;
+    return 1 / (p + 1);
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total === 0) {
+    queueIdx = (queueIdx + 1) % queue.length;
+    return;
+  }
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { queueIdx = i; return; }
+  }
+  queueIdx = 0;
+}
+
+// ── Waveform on progress bar ───────────────────────────────────────────
+let waveFrameId = null;
+
+function startWaveform() {
+  if (waveFrameId) cancelAnimationFrame(waveFrameId);
+  if (!analyser) return;
+  const dataArray = new Uint8Array(analyser.fftSize);
+  function drawWave() {
+    waveFrameId = requestAnimationFrame(drawWave);
+    const cv = document.getElementById('wave-canvas');
+    if (!cv) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (!W || !H) return;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+      cv.width = Math.round(W * dpr);
+      cv.height = Math.round(H * dpr);
+    }
+    analyser.getByteTimeDomainData(dataArray);
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.strokeStyle = 'rgba(123,94,255,0.6)';
+    ctx.beginPath();
+    const sliceW = cv.width / dataArray.length;
+    let x = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const v = dataArray[i] / 128.0;
+      const y = (v * cv.height) / 2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      x += sliceW;
+    }
+    ctx.lineTo(cv.width, cv.height / 2);
+    ctx.stroke();
+  }
+  drawWave();
+}

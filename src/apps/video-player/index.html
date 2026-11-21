@@ -335,6 +335,67 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   font-size:16px;transition:all .15s;flex-shrink:0}
 .ai-send-btn:hover{background:#8B6EFF}
 .ai-send-btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── A-B Loop + Speed ── */
+.ab-btn{padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+  color:rgba(255,255,255,.5);font-size:11px;font-family:'Space Grotesk',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .13s}
+.ab-btn:hover{color:#fff;border-color:rgba(255,255,255,.26)}
+.ab-btn.set{background:rgba(47,214,168,.15);border-color:rgba(47,214,168,.4);color:var(--ok)}
+.ab-btn.active{background:rgba(245,166,35,.15);border-color:rgba(245,166,35,.4);color:var(--warn)}
+.vid-speed-btn{padding:4px 9px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+  color:rgba(255,255,255,.5);font-size:11px;font-family:'Space Grotesk',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .13s}
+.vid-speed-btn:hover{color:#fff;border-color:rgba(255,255,255,.26)}
+.vid-speed-btn.on{background:rgba(123,94,255,.2);border-color:var(--accent-mid);color:var(--accent)}
+/* ── Watch status + Rating ── */
+.watch-row{display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;
+  border-radius:10px;background:var(--bg3);border:1px solid var(--bd)}
+.watched-toggle{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:8px;
+  background:var(--bg2);border:1px solid var(--bd);color:var(--t2);cursor:pointer;
+  font-size:12px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
+.watched-toggle:hover{background:var(--bg4);color:var(--t1)}
+.watched-toggle.on{background:rgba(47,214,168,.12);border-color:rgba(47,214,168,.4);color:var(--ok)}
+.star-row{display:flex;align-items:center;gap:1px;margin-right:4px}
+.star{font-size:20px;cursor:pointer;color:var(--t3);transition:color .1s;user-select:none;line-height:1}
+.star.on{color:var(--warn)}
+.star:hover{color:var(--warn)}
+/* ── Resume toast ── */
+.resume-toast{position:fixed;bottom:120px;left:50%;transform:translateX(-50%);
+  background:rgba(14,14,36,.94);border:1px solid var(--bd2);border-radius:10px;
+  padding:7px 16px;font-size:12px;color:var(--t1);z-index:50;
+  opacity:0;transition:opacity .25s;white-space:nowrap;pointer-events:none}
+.resume-toast.show{opacity:1}
+/* ── Watched dot in sidebar ── */
+.movie-year .wd{color:var(--ok);font-size:10px;font-weight:600;margin-right:4px}
+/* ── Thumbnail preview ── */
+.thumb-preview{position:absolute;bottom:60px;background:#000;border:2px solid rgba(255,255,255,.18);
+  border-radius:8px;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .15s;z-index:30;transform:translateX(-50%)}
+.thumb-preview.show{opacity:1}
+.thumb-canvas{display:block}
+.thumb-time-lbl{background:rgba(0,0,0,.8);color:#fff;font-size:11px;text-align:center;padding:3px 6px;font-family:'Space Grotesk',sans-serif}
+/* ── PiP button ── */
+.pip-btn{padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+  color:rgba(255,255,255,.5);font-size:11px;font-family:'Space Grotesk',sans-serif;font-weight:700;cursor:pointer;transition:all .13s}
+.pip-btn:hover{color:#fff;border-color:rgba(255,255,255,.26)}
+/* ── Watch History ── */
+.hist-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.hist-modal.show{opacity:1;pointer-events:all}
+.hist-box{width:520px;max-height:70vh;background:var(--bg2);border:1px solid var(--bd2);border-radius:18px;
+  padding:24px;direction:rtl;box-shadow:0 24px 80px rgba(0,0,0,.85);overflow-y:auto}
+.hist-box::-webkit-scrollbar{width:4px}
+.hist-box::-webkit-scrollbar-thumb{background:var(--bg4)}
+.hist-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between}
+.hist-item{display:flex;align-items:center;gap:11px;padding:9px 12px;background:var(--bg3);
+  border-radius:10px;border:1px solid var(--bd);margin-bottom:6px;direction:rtl}
+.hist-thumb{width:40px;height:56px;border-radius:6px;background:var(--bg4);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden}
+.hist-thumb img{width:100%;height:100%;object-fit:cover}
+.hist-info{flex:1;min-width:0}
+.hist-title-txt{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-date{font-size:11px;color:var(--t3);margin-top:2px}
 </style>
 </head>
 <body>
@@ -404,7 +465,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 
   <!-- controls -->
   <div class="controls no-drag" id="controls">
-    <div class="prog-wrap">
+    <div class="prog-wrap" style="position:relative">
+      <div class="thumb-preview" id="thumb-preview">
+        <canvas class="thumb-canvas" id="thumb-canvas" width="160" height="90"></canvas>
+        <div class="thumb-time-lbl" id="thumb-time-lbl">0:00</div>
+      </div>
       <div class="prog-track" id="prog-track">
         <div class="prog-fill" id="prog-fill">
           <div class="markers-bar" id="markers-bar"></div>
@@ -436,6 +501,13 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
       </div>
 
       <div class="ctrl-right">
+        <button class="ab-btn no-drag" id="ab-a-btn" onclick="setAbA()" title="نقطه شروع A-B Loop">A</button>
+        <button class="ab-btn no-drag" id="ab-b-btn" onclick="setAbB()" title="نقطه پایان A-B Loop">B</button>
+        <button class="vid-speed-btn no-drag" id="vid-speed-btn" onclick="cycleVidSpeed()" title="سرعت پخش">1×</button>
+        <button class="pip-btn no-drag" id="pip-btn" onclick="togglePiP()" title="Picture in Picture">⧉</button>
+        <button class="c-btn sm no-drag" onclick="showHistory()" title="تاریخچه تماشا">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </button>
         <button class="add-cmt-btn" onclick="openCmt()">
           <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
           کامنت
@@ -473,6 +545,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
       </div>
       <div class="modal-close" onclick="closeInfo()">✕</div>
     </div>
+    <div id="watch-row"></div>
     <div id="info-content"><div class="info-loading">در حال بارگذاری...</div></div>
   </div>
 </div>
@@ -540,6 +613,16 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   <div class="ai-input-row">
     <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
     <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
+  </div>
+</div>
+
+<div class="resume-toast" id="resume-toast"></div>
+
+<!-- WATCH HISTORY MODAL -->
+<div class="hist-modal" id="hist-modal" onclick="if(event.target===this)closeHistory()">
+  <div class="hist-box no-drag">
+    <div class="hist-title">تاریخچه تماشا <button style="float:left;background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px" onclick="closeHistory()">✕</button></div>
+    <div class="hist-list" id="hist-list"></div>
   </div>
 </div>
 

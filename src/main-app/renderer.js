@@ -69,15 +69,22 @@ function toFarsiNum(n) {
 const KEY_LIB    = 'asar-library';
 const KEY_EVENTS = 'asar-events';
 const KEY_SETTINGS = 'asar-settings';
+const KEY_HABITS = 'asar-habits';
+const KEY_GOALS  = 'asar-goals';
 
 let library = [];
 let events  = {}; // keyed by "jy-jm-jd"
 let settings = {};
+let habits = [];   // [{id, name, doneByDay:{key:bool}}]
+let goals  = [];   // [{id, title, type, target, current}]
 let libFilter = 'all';
+let libSort   = 'default'; // 'default' | 'rating' | 'recent'
 let editingItemId = null;
 let editingEventId = null;
 let selectedItemType = 'book';
 let selectedEventType = 'task';
+let selectedRecur = 'none';
+let selectedGoalType = 'book';
 
 let calViewY, calViewM;
 let selectedDay; // {y,m,d} jalali
@@ -86,11 +93,15 @@ function load() {
   try { library  = JSON.parse(localStorage.getItem(KEY_LIB))  || []; } catch { library  = []; }
   try { events   = JSON.parse(localStorage.getItem(KEY_EVENTS)) || {}; } catch { events   = {}; }
   try { settings = JSON.parse(localStorage.getItem(KEY_SETTINGS)) || {}; } catch { settings = {}; }
+  try { habits   = JSON.parse(localStorage.getItem(KEY_HABITS)) || []; } catch { habits   = []; }
+  try { goals    = JSON.parse(localStorage.getItem(KEY_GOALS))  || []; } catch { goals    = []; }
 }
 
 function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
 function saveEvents()   { localStorage.setItem(KEY_EVENTS, JSON.stringify(events));  }
 function saveSettings() { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); }
+function saveHabits()   { localStorage.setItem(KEY_HABITS,  JSON.stringify(habits));  }
+function saveGoals()    { localStorage.setItem(KEY_GOALS,   JSON.stringify(goals));   }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
@@ -107,6 +118,82 @@ window.showSection = function(id, el) {
   if (id === 'library')  renderLibrary();
   if (id === 'planner')  renderPlanner();
   if (id === 'settings') renderSettings();
+};
+
+// ── Command Palette ───────────────────────────────────────────────────────
+let cmdPalSel = -1, cmdPalItems = [];
+
+window.openCmdPal = function() {
+  document.getElementById('cmdpal').classList.add('show');
+  const inp = document.getElementById('cmdpal-input');
+  inp.value = '';
+  cmdPalSel = -1;
+  searchCmdPal('');
+  setTimeout(() => inp.focus(), 50);
+};
+
+window.closeCmdPal = function() {
+  document.getElementById('cmdpal').classList.remove('show');
+};
+
+window.cmdPalKey = function(e) {
+  if (e.key === 'Escape') { closeCmdPal(); return; }
+  if (e.key === 'ArrowDown') { cmdPalSel = Math.min(cmdPalSel + 1, cmdPalItems.length - 1); highlightCmdPal(); e.preventDefault(); }
+  if (e.key === 'ArrowUp')   { cmdPalSel = Math.max(cmdPalSel - 1, 0); highlightCmdPal(); e.preventDefault(); }
+  if (e.key === 'Enter' && cmdPalSel >= 0) { cmdPalItems[cmdPalSel]?.action(); closeCmdPal(); }
+};
+
+function highlightCmdPal() {
+  document.querySelectorAll('.cmdpal-item').forEach((el, i) => el.classList.toggle('sel', i === cmdPalSel));
+}
+
+window.searchCmdPal = function(q) {
+  q = q.trim().toLowerCase();
+  cmdPalItems = [];
+  const res = document.getElementById('cmdpal-results');
+
+  // Actions
+  const actions = [
+    { icon:'🏠', title:'خانه', sub:'برو به بخش خانه', badge:'بخش', action:()=>showSection('home', document.querySelector('[onclick*="home"]')) },
+    { icon:'📚', title:'کتابخانه', sub:'برو به کتابخانه', badge:'بخش', action:()=>showSection('library', document.querySelector('[onclick*="library"]')) },
+    { icon:'📅', title:'برنامه‌ریزی', sub:'برو به تقویم', badge:'بخش', action:()=>showSection('planner', document.querySelector('[onclick*="planner"]')) },
+    { icon:'🎵', title:'موزیک پلیر', sub:'باز کردن موزیک پلیر', badge:'اپ', action:()=>window.api.openMusicPlayer() },
+    { icon:'🎬', title:'ویدئو پلیر', sub:'باز کردن ویدئو پلیر', badge:'اپ', action:()=>window.api.openVideoPlayer() },
+    { icon:'📖', title:'بوک ریدر', sub:'باز کردن بوک ریدر', badge:'اپ', action:()=>window.api.openBookReader() },
+    { icon:'➕', title:'اثر جدید', sub:'اضافه کردن به کتابخانه', badge:'عمل', action:()=>{ showSection('library',null); openAddItem(); } },
+  ].filter(a => !q || a.title.includes(q) || a.sub.includes(q));
+
+  // Library items
+  const libItems = library.filter(i => !q || (i.title||'').toLowerCase().includes(q) || (i.creator||'').toLowerCase().includes(q)).slice(0, 8).map(i => ({
+    icon: typeEmoji(i.type), title: i.title, sub: i.creator || typeLabel(i.type),
+    badge: typeLabel(i.type), action: () => { showSection('library', document.querySelector('[onclick*="library"]')); }
+  }));
+
+  // Events (today)
+  const today = todayJalali();
+  const todayKey = `${today.y}-${today.m}-${today.d}`;
+  const evItems = (events[todayKey] || []).filter(e => !q || e.title.toLowerCase().includes(q)).slice(0, 4).map(e => ({
+    icon: e.type==='habit'?'🔁':e.type==='note'?'📝':'✅', title: e.title, sub: `امروز ${e.time||''}`, badge:'رویداد',
+    action: () => showSection('planner', document.querySelector('[onclick*="planner"]'))
+  }));
+
+  cmdPalItems = [...actions, ...libItems, ...evItems];
+  if (!cmdPalItems.length) { res.innerHTML = '<div class="cmdpal-empty">نتیجه‌ای پیدا نشد</div>'; return; }
+
+  let html = '';
+  if (actions.length && !q) html += '<div class="cmdpal-section-label">دستورات سریع</div>';
+  if (libItems.length)  html += '<div class="cmdpal-section-label">کتابخانه</div>';
+  cmdPalItems.forEach((item, i) => {
+    html += `<div class="cmdpal-item ${i===cmdPalSel?'sel':''}" onclick="cmdPalItems[${i}].action();closeCmdPal()">
+      <div class="cmdpal-item-icon">${item.icon}</div>
+      <div class="cmdpal-item-info">
+        <div class="cmdpal-item-title">${esc(item.title)}</div>
+        <div class="cmdpal-item-sub">${esc(item.sub)}</div>
+      </div>
+      <span class="cmdpal-item-badge">${esc(item.badge)}</span>
+    </div>`;
+  });
+  res.innerHTML = html;
 };
 
 // ── HOME ──────────────────────────────────────────────────────────────────
@@ -157,6 +244,11 @@ function renderHome() {
       </div>`).join('');
   }
 
+  renderXP();
+  renderHeatmap();
+  renderTopRated();
+  renderGoalsHome();
+
   // Active items
   const activeItems = library.filter(i => i.stage === 'active');
   const acEl = document.getElementById('active-cards');
@@ -194,8 +286,19 @@ window.filterLib = function(el, type) {
   renderLibrary();
 };
 
+window.setSortMode = function(mode, el) {
+  libSort = mode;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('on'));
+  if (el) el.classList.add('on');
+  else { const btn = document.getElementById('sort-'+mode); if (btn) btn.classList.add('on'); }
+  renderLibrary();
+};
+
 function filteredItems() {
-  return libFilter === 'all' ? library : library.filter(i => i.type === libFilter);
+  let items = libFilter === 'all' ? library : library.filter(i => i.type === libFilter);
+  if (libSort === 'rating') items = [...items].sort((a,b) => (b.rating||0) - (a.rating||0));
+  if (libSort === 'recent') items = [...items].sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  return items;
 }
 
 function renderLibrary() {
@@ -321,6 +424,7 @@ window.saveItem = function() {
 function renderPlanner() {
   renderCalendar();
   renderDayView();
+  renderHabits();
 }
 
 function renderCalendar() {
@@ -395,13 +499,13 @@ window.quickAddEvent = function(time) {
 
 window.openAddEvent = function(prefillTime) {
   editingEventId = null;
+  selectedRecur = 'none';
   document.getElementById('event-title').value = '';
   document.getElementById('event-time').value  = prefillTime || '09:00';
   document.getElementById('event-dur').value   = '60';
   selectedEventType = 'task';
-  document.querySelectorAll('.type-opt[data-ev]').forEach(o => {
-    o.classList.toggle('on', o.dataset.ev === 'task');
-  });
+  document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.toggle('on', o.dataset.ev === 'task'));
+  document.querySelectorAll('[data-r]').forEach(o => o.classList.toggle('on', o.dataset.r === 'none'));
   document.getElementById('add-event-modal').classList.add('show');
   setTimeout(() => document.getElementById('event-title').focus(), 100);
 };
@@ -444,7 +548,9 @@ window.saveEvent = function() {
     const { y, m, d } = selectedDay;
     const key = `${y}-${m}-${d}`;
     if (!events[key]) events[key] = [];
-    events[key].push({ id: uid(), title, time, duration: dur, type: selectedEventType, done: false });
+    const newEv = { id: uid(), title, time, duration: dur, type: selectedEventType, done: false, recur: selectedRecur };
+    events[key].push(newEv);
+    if (selectedRecur !== 'none') generateRecurringEvents(newEv, { y, m, d });
   }
   saveEvents();
   closeAddEvent();
@@ -457,7 +563,16 @@ window.saveEvent = function() {
 function renderSettings() {
   const inp = document.getElementById('tmdb-key-input');
   if (inp) inp.value = settings['tmdb-key'] || '';
+  const cinp = document.getElementById('claude-key-input');
+  try { if (cinp) cinp.value = localStorage.getItem('claude-api-key') || ''; } catch {}
 }
+
+window.saveClaudeKey = function() {
+  const val = document.getElementById('claude-key-input').value.trim();
+  try { localStorage.setItem('claude-api-key', val); } catch {}
+  const btn = document.querySelector('[onclick="saveClaudeKey()"]');
+  if (btn) { const orig = btn.textContent; btn.textContent = '✓ ذخیره شد'; setTimeout(() => btn.textContent = orig, 1500); }
+};
 
 window.saveSetting = function(key, inputId) {
   const val = document.getElementById(inputId).value.trim();
@@ -466,6 +581,465 @@ window.saveSetting = function(key, inputId) {
   const btn = document.querySelector(`[onclick="saveSetting('${key}','${inputId}')"]`);
   if (btn) { const orig = btn.textContent; btn.textContent = '✓ ذخیره شد'; setTimeout(() => btn.textContent = orig, 1500); }
 };
+
+// ── Top Rated ─────────────────────────────────────────────────────────────
+function renderTopRated() {
+  const el = document.getElementById('top-rated-scroll');
+  if (!el) return;
+  const rated = library.filter(i => i.rating > 0).sort((a,b) => (b.rating||0)-(a.rating||0)).slice(0, 10);
+  if (!rated.length) { el.innerHTML = '<div style="font-size:12.5px;color:var(--t3);padding:8px 0">هنوز امتیاز ندادی</div>'; return; }
+  el.innerHTML = rated.map(item => `
+    <div class="rated-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
+      <div class="rated-cover">${item.cover ? `<img src="${item.cover}" onerror="this.style.display='none'">` : typeEmoji(item.type)}</div>
+      <div class="rated-body">
+        <div class="rated-title">${esc(item.title)}</div>
+        <div class="rated-stars">${'★'.repeat(item.rating||0)}${'☆'.repeat(5-(item.rating||0))}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Goals ─────────────────────────────────────────────────────────────────
+function renderGoalsHome() {
+  const el = document.getElementById('goals-home-list');
+  if (!el) return;
+  if (!goals.length) { el.innerHTML = '<div class="plan-empty">هیچ هدفی نداری. یه هدف برای خودت تعریف کن!</div>'; return; }
+  el.innerHTML = goals.map(g => {
+    const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+    const icon = g.type === 'book' ? '📚' : g.type === 'film' ? '🎬' : '🎯';
+    return `<div class="goal-item">
+      <div style="font-size:22px;flex-shrink:0">${icon}</div>
+      <div class="goal-info">
+        <div class="goal-title-txt">${esc(g.title)}</div>
+        <div class="goal-bar-track"><div class="goal-bar-fill" style="width:${pct}%"></div></div>
+        <div class="goal-meta">${toFarsiNum(g.current)} از ${toFarsiNum(g.target)} — ${toFarsiNum(pct)}٪</div>
+      </div>
+      <div class="goal-pct">${toFarsiNum(pct)}٪</div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <div class="goal-del" onclick="incrementGoal('${g.id}')" title="یک عدد اضافه کن">+</div>
+        <div class="goal-del" onclick="deleteGoal('${g.id}')">🗑</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+let _goalTypeEdit = 'book';
+window.openAddGoal = function() {
+  _goalTypeEdit = 'book';
+  document.getElementById('goal-title-inp').value = '';
+  document.getElementById('goal-target').value = '5';
+  document.getElementById('goal-current').value = '0';
+  document.querySelectorAll('[data-g]').forEach(o => o.classList.toggle('on', o.dataset.g === 'book'));
+  document.getElementById('add-goal-modal').classList.add('show');
+  setTimeout(() => document.getElementById('goal-title-inp').focus(), 100);
+};
+window.closeAddGoal = function() { document.getElementById('add-goal-modal').classList.remove('show'); };
+window.selectGoalType = function(el, t) {
+  _goalTypeEdit = t;
+  document.querySelectorAll('[data-g]').forEach(o => o.classList.toggle('on', o.dataset.g === t));
+};
+window.saveGoal = function() {
+  const title = document.getElementById('goal-title-inp').value.trim();
+  if (!title) return;
+  goals.push({ id: uid(), title, type: _goalTypeEdit,
+    target: parseInt(document.getElementById('goal-target').value) || 5,
+    current: parseInt(document.getElementById('goal-current').value) || 0 });
+  saveGoals();
+  closeAddGoal();
+  renderGoalsHome();
+};
+window.incrementGoal = function(id) {
+  const g = goals.find(g => g.id === id);
+  if (!g) return;
+  g.current = Math.min(g.target, g.current + 1);
+  saveGoals();
+  renderGoalsHome();
+};
+window.deleteGoal = function(id) {
+  goals = goals.filter(g => g.id !== id);
+  saveGoals();
+  renderGoalsHome();
+};
+
+// ── Habits ────────────────────────────────────────────────────────────────
+window.addHabit = function() {
+  const inp = document.getElementById('habit-inp');
+  const name = inp.value.trim();
+  if (!name) return;
+  habits.push({ id: uid(), name, doneByDay: {} });
+  inp.value = '';
+  saveHabits();
+  renderHabits();
+};
+
+function getTodayKey() { const t = todayJalali(); return `${t.y}-${t.m}-${t.d}`; }
+
+function habitStreak(habit) {
+  let streak = 0;
+  const g = new Date();
+  for (let i = 0; i < 365; i++) {
+    const j = toJalali(g.getFullYear(), g.getMonth()+1, g.getDate());
+    const key = `${j.y}-${j.m}-${j.d}`;
+    if (habit.doneByDay[key]) streak++;
+    else if (i > 0) break;
+    g.setDate(g.getDate() - 1);
+  }
+  return streak;
+}
+
+function renderHabits() {
+  const el = document.getElementById('habit-list');
+  if (!el) return;
+  if (!habits.length) { el.innerHTML = '<div class="habit-empty">عادتی تعریف نکردی.<br>چیزی که می‌خوای هر روز انجام بدی رو بنویس.</div>'; return; }
+  const todayKey = getTodayKey();
+  el.innerHTML = habits.map(h => {
+    const done = !!h.doneByDay[todayKey];
+    const streak = habitStreak(h);
+    const last7 = Array.from({length:7}, (_, i) => {
+      const g2 = new Date(); g2.setDate(g2.getDate()-6+i);
+      const j2 = toJalali(g2.getFullYear(), g2.getMonth()+1, g2.getDate());
+      const k2 = `${j2.y}-${j2.m}-${j2.d}`;
+      return h.doneByDay[k2] ? 'var(--ok)' : 'var(--bg4)';
+    });
+    return `<div class="habit-item ${done?'done-today':''}" onclick="toggleHabit('${h.id}')">
+      <div class="habit-check ${done?'done':''}">${done?'<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2 6l3 3 5-5"/></svg>':''}</div>
+      <div style="flex:1;min-width:0">
+        <div class="habit-name">${esc(h.name)}</div>
+        <div class="habit-week">${last7.map(c=>`<div class="habit-week-dot" style="background:${c}"></div>`).join('')}</div>
+      </div>
+      ${streak>0?`<div class="habit-streak">🔥${toFarsiNum(streak)}</div>`:''}
+      <div class="habit-del" onclick="event.stopPropagation();deleteHabit('${h.id}')">✕</div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleHabit = function(id) {
+  const h = habits.find(h => h.id === id);
+  if (!h) return;
+  const key = getTodayKey();
+  h.doneByDay[key] = !h.doneByDay[key];
+  saveHabits();
+  renderHabits();
+};
+
+window.deleteHabit = function(id) {
+  habits = habits.filter(h => h.id !== id);
+  saveHabits();
+  renderHabits();
+};
+
+// ── Recurrence ────────────────────────────────────────────────────────────
+window.selectRecur = function(el, r) {
+  selectedRecur = r;
+  document.querySelectorAll('[data-r]').forEach(o => o.classList.toggle('on', o.dataset.r === r));
+};
+
+function generateRecurringEvents(ev, { y, m, d }) {
+  if (!ev.recur || ev.recur === 'none') return;
+  const daysToGen = ev.recur === 'daily' ? 30 : ev.recur === 'weekly' ? 12 : 3; // weeks/months ahead
+  for (let i = 1; i <= daysToGen; i++) {
+    let nextG;
+    if (ev.recur === 'daily') {
+      const g = jalaliToGregorian(y, m, d);
+      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i);
+      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
+      nextG = { y: j2.y, m: j2.m, d: j2.d };
+    } else if (ev.recur === 'weekly') {
+      const g = jalaliToGregorian(y, m, d);
+      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i*7);
+      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
+      nextG = { y: j2.y, m: j2.m, d: j2.d };
+    } else { // monthly
+      let nm = m + i, ny = y;
+      while (nm > 12) { nm -= 12; ny++; }
+      const dl = jalaliMonthLen(ny, nm);
+      nextG = { y: ny, m: nm, d: Math.min(d, dl) };
+    }
+    const nextKey = `${nextG.y}-${nextG.m}-${nextG.d}`;
+    if (!events[nextKey]) events[nextKey] = [];
+    if (!events[nextKey].find(e => e.recurId === ev.id)) {
+      events[nextKey].push({ ...ev, id: uid(), recurId: ev.id, done: false });
+    }
+  }
+}
+
+// ── Theme ─────────────────────────────────────────────────────────────────
+const THEME_DEFAULTS = { accent:'#7B5EFF', accentDark:'#5B3FDF' };
+
+window.setTheme = function(accent, accentDark, el) {
+  document.documentElement.style.setProperty('--accent', accent);
+  document.documentElement.style.setProperty('--accent-lo', hexToRgba(accent, .14));
+  document.documentElement.style.setProperty('--accent-mid', hexToRgba(accent, .3));
+  try { localStorage.setItem('asar-theme', JSON.stringify({ accent, accentDark })); } catch {}
+  document.querySelectorAll('.theme-swatch').forEach(s => s.classList.remove('on'));
+  if (el) el.classList.add('on');
+};
+
+function hexToRgba(hex, a) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function applyStoredTheme() {
+  try {
+    const t = JSON.parse(localStorage.getItem('asar-theme'));
+    if (!t) return;
+    document.documentElement.style.setProperty('--accent', t.accent);
+    document.documentElement.style.setProperty('--accent-lo', hexToRgba(t.accent, .14));
+    document.documentElement.style.setProperty('--accent-mid', hexToRgba(t.accent, .3));
+    document.querySelectorAll('.theme-swatch').forEach(s => {
+      s.classList.toggle('on', s.dataset.color === t.accent);
+    });
+  } catch {}
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────
+window.exportData = function() {
+  const data = { library, events, habits, goals, settings, exportedAt: Date.now() };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `asar-backup-${Date.now()}.json`; a.click();
+  URL.revokeObjectURL(url);
+};
+
+window.importDataClick = function() { document.getElementById('import-file-inp').click(); };
+
+window.importData = function(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.library) { library = data.library; saveLib(); }
+      if (data.events)  { events  = data.events;  saveEvents(); }
+      if (data.habits)  { habits  = data.habits;  saveHabits(); }
+      if (data.goals)   { goals   = data.goals;   saveGoals(); }
+      renderHome(); renderHabits();
+      alert('داده‌ها با موفقیت وارد شدند ✓');
+    } catch { alert('فایل نامعتبر است'); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+};
+
+// ── XP / Level ───────────────────────────────────────────────────────────
+const XP_TITLES = ['تازه‌کار','علاقه‌مند','فرهنگی','هنردوست','اهل فرهنگ','حرفه‌ای','استاد','افسانه'];
+
+function calcXP() {
+  const doneItems = library.filter(i => i.stage === 'done').length;
+  const activeItems = library.filter(i => i.stage === 'active').length;
+  let doneEvents = 0;
+  for (const key of Object.keys(events)) {
+    doneEvents += (events[key] || []).filter(e => e.done).length;
+  }
+  return doneItems * 20 + activeItems * 5 + doneEvents * 2;
+}
+
+function renderXP() {
+  const xp = calcXP();
+  const level = Math.floor(xp / 100) + 1;
+  const xpInLevel = xp % 100;
+  const title = XP_TITLES[Math.min(level - 1, XP_TITLES.length - 1)];
+  document.getElementById('xp-lvl').textContent = level;
+  document.getElementById('xp-title').textContent = title;
+  document.getElementById('xp-bar').style.width = xpInLevel + '%';
+  document.getElementById('xp-sub').textContent = toFarsiNum(xpInLevel) + ' / ۱۰۰ XP (مجموع: ' + toFarsiNum(xp) + ')';
+}
+
+// ── Activity Heatmap ──────────────────────────────────────────────────────
+function getActivityScore(jy, jm, jd) {
+  const key = `${jy}-${jm}-${jd}`;
+  const dayEvs = events[key] || [];
+  const done = dayEvs.filter(e => e.done).length;
+  const total = dayEvs.length;
+  const score = done * 2 + (total - done);
+  if (score === 0) return 0;
+  if (score <= 1) return 1;
+  if (score <= 3) return 2;
+  if (score <= 5) return 3;
+  return 4;
+}
+
+function renderHeatmap() {
+  const today = todayJalali();
+  const grid = document.getElementById('heatmap-grid');
+  if (!grid) return;
+
+  // Build 365 days going back from today in weeks
+  const days = [];
+  for (let i = 364; i >= 0; i--) {
+    const g = new Date();
+    g.setDate(g.getDate() - i);
+    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
+    const dow = (g.getDay() + 1) % 7; // 0=Sat in Jalali week
+    days.push({ j, dow, g });
+  }
+
+  // Group into weeks (columns of 7)
+  const weeks = [];
+  let week = new Array(days[0].dow).fill(null);
+  for (const day of days) {
+    week.push(day);
+    if (week.length === 7) { weeks.push(week); week = []; }
+  }
+  if (week.length) {
+    while (week.length < 7) week.push(null);
+    weeks.push(week);
+  }
+
+  grid.innerHTML = weeks.map(w =>
+    `<div class="heatmap-week">${w.map(day => {
+      if (!day) return '<div style="width:11px;height:11px"></div>';
+      const score = getActivityScore(day.j.y, day.j.m, day.j.d);
+      const isToday = day.j.y === today.y && day.j.m === today.m && day.j.d === today.d;
+      const title = `${day.j.y}/${day.j.m}/${day.j.d}`;
+      return `<div class="heatmap-day l${score}" title="${title}" style="${isToday ? 'outline:1.5px solid var(--accent);' : ''}"></div>`;
+    }).join('')}</div>`
+  ).join('');
+}
+
+// ── Pomodoro ─────────────────────────────────────────────────────────────
+let pomoOpen = false, pomoRunning = false, pomoInterval = null;
+let pomoRemaining = 25 * 60, pomoMode = 'work', pomoSessions = 0;
+const POMO_TIMES = { work: 25*60, short: 5*60, long: 15*60 };
+
+window.togglePomo = function() {
+  pomoOpen = !pomoOpen;
+  document.getElementById('pomo-panel').classList.toggle('show', pomoOpen);
+};
+
+window.setPomoMode = function(mode, el) {
+  if (pomoRunning) return;
+  pomoMode = mode;
+  pomoRemaining = POMO_TIMES[mode];
+  document.querySelectorAll('.pomo-mode-btn').forEach(b => b.classList.remove('on'));
+  el.classList.add('on');
+  updatePomoClock();
+};
+
+window.togglePomoTimer = function() {
+  if (pomoRunning) {
+    clearInterval(pomoInterval);
+    pomoRunning = false;
+    document.getElementById('pomo-start-btn').textContent = '▶ ادامه';
+  } else {
+    pomoRunning = true;
+    document.getElementById('pomo-start-btn').textContent = '⏸ مکث';
+    pomoInterval = setInterval(() => {
+      pomoRemaining--;
+      updatePomoClock();
+      if (pomoRemaining <= 0) {
+        clearInterval(pomoInterval);
+        pomoRunning = false;
+        if (pomoMode === 'work') {
+          pomoSessions++;
+          savePomoSessions();
+          updatePomoCount();
+          document.getElementById('pomo-start-btn').textContent = '▶ شروع';
+        }
+        // Flash FAB
+        const fab = document.getElementById('pomo-fab');
+        fab.style.background = 'var(--ok)';
+        setTimeout(() => fab.style.background = '', 2000);
+      }
+    }, 1000);
+  }
+};
+
+window.resetPomoTimer = function() {
+  clearInterval(pomoInterval);
+  pomoRunning = false;
+  pomoRemaining = POMO_TIMES[pomoMode];
+  document.getElementById('pomo-start-btn').textContent = '▶ شروع';
+  updatePomoClock();
+};
+
+function updatePomoClock() {
+  const m = Math.floor(pomoRemaining / 60);
+  const s = pomoRemaining % 60;
+  document.getElementById('pomo-clock').textContent =
+    String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+
+function savePomoSessions() {
+  const today = todayJalali();
+  const key = `pomo-${today.y}-${today.m}-${today.d}`;
+  try { localStorage.setItem(key, pomoSessions); } catch {}
+}
+
+function loadPomoSessions() {
+  const today = todayJalali();
+  const key = `pomo-${today.y}-${today.m}-${today.d}`;
+  try { pomoSessions = parseInt(localStorage.getItem(key)) || 0; } catch {}
+  updatePomoCount();
+}
+
+function updatePomoCount() {
+  const el = document.getElementById('pomo-count');
+  if (el) el.textContent = `امروز: ${toFarsiNum(pomoSessions)} جلسه تموم شد`;
+}
+
+// ── AI Weekly Summary ──────────────────────────────────────────────────
+window.getWeeklySummary = async function(btn) {
+  const key = getClaudeKey();
+  if (!key) {
+    alert('برای این قابلیت نیاز به Claude API key داری. در تنظیمات وارد کن.');
+    return;
+  }
+
+  const box = document.getElementById('ai-sum-box');
+  btn.disabled = true;
+  btn.textContent = '⏳ در حال تهیه خلاصه...';
+  box.textContent = '';
+  box.classList.add('show');
+
+  const today = todayJalali();
+  const activityLines = [];
+  for (let i = 6; i >= 0; i--) {
+    const g = new Date();
+    g.setDate(g.getDate() - i);
+    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
+    const key2 = `${j.y}-${j.m}-${j.d}`;
+    const dayEvs = events[key2] || [];
+    const done = dayEvs.filter(e => e.done);
+    if (done.length || dayEvs.length) {
+      activityLines.push(`${j.d}/${j.m}: ${done.length} رویداد تمام شد از ${dayEvs.length} رویداد`);
+    }
+  }
+
+  const doneThisWeek = library.filter(i => i.stage === 'done').slice(-3);
+  const doneText = doneThisWeek.map(i => `${i.type === 'book' ? 'کتاب' : i.type === 'film' ? 'فیلم' : 'موزیک'}: "${i.title}"`).join(', ');
+
+  const prompt = `من از اپ فرهنگی "اثر" استفاده می‌کنم. این خلاصه فعالیت‌های هفته‌ام است:
+
+فعالیت‌ها:
+${activityLines.join('\n') || 'هیچ رویدادی ثبت نشده'}
+
+آثار اخیر کامل شده: ${doneText || 'هیچکدام'}
+کل آثار: ${library.length} | فعال: ${library.filter(i => i.stage === 'active').length} | تمام شده: ${library.filter(i => i.stage === 'done').length}
+
+لطفاً یک خلاصه کوتاه و انگیزشی از هفته‌ام به فارسی بنویس و یک پیشنهاد برای هفته بعد بده.`;
+
+  try {
+    const reply = await window.api.claudeChat(
+      'تو یک دستیار فرهنگی فارسی‌زبان هستی. به کاربر کمک می‌کنی تا مسیر فرهنگی و برنامه‌ریزیش را بهتر کند.',
+      [{ role: 'user', content: prompt }],
+      key
+    );
+    box.textContent = reply;
+  } catch (e) {
+    box.textContent = 'خطا در دریافت پاسخ: ' + (e.message || e);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<span>✦</span> خلاصه هفته با Claude';
+};
+
+function getClaudeKey() {
+  try { return localStorage.getItem('claude-api-key') || settings['claude-key'] || ''; } catch { return ''; }
+}
 
 // ── Utils ─────────────────────────────────────────────────────────────────
 function esc(s) {
@@ -479,7 +1053,10 @@ document.getElementById('exit-cancel-btn').onclick  = () => exitModal.classList.
 document.getElementById('exit-confirm-btn').onclick = () => window.api.quitApp();
 
 document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmdPal(); return; }
   if (e.key === 'Escape') {
+    if (document.getElementById('cmdpal').classList.contains('show')) { closeCmdPal(); return; }
+    if (document.getElementById('add-goal-modal').classList.contains('show')) { closeAddGoal(); return; }
     if (exitModal.classList.contains('show')) {
       exitModal.classList.remove('show');
     } else {
@@ -489,10 +1066,12 @@ document.addEventListener('keydown', e => {
 });
 
 load();
+applyStoredTheme();
 
 const today = todayJalali();
 calViewY   = today.y;
 calViewM   = today.m;
 selectedDay = { y: today.y, m: today.m, d: today.d };
 
+loadPomoSessions();
 renderHome();

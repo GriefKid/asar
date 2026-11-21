@@ -330,6 +330,19 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey) => {
   return data.content[0].text;
 });
 
+ipcMain.handle('save:textFile', async (_, content, defaultName) => {
+  const { dialog, BrowserWindow } = require('electron');
+  const win = BrowserWindow.getFocusedWindow();
+  const { filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: defaultName || 'export.md',
+    filters: [{ name: 'Markdown', extensions: ['md'] }, { name: 'Text', extensions: ['txt'] }, { name: 'All Files', extensions: ['*'] }]
+  });
+  if (!filePath) return false;
+  const fs = require('fs');
+  fs.writeFileSync(filePath, content, 'utf8');
+  return true;
+});
+
 ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {
   try {
     const url = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}&append_to_response=credits&language=en-US`;

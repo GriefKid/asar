@@ -324,6 +324,134 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   font-size:16px;transition:all .15s;flex-shrink:0}
 .ai-send-btn:hover{background:#8B6EFF}
 .ai-send-btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ── Visualizer ── */
+#viz-canvas{position:absolute;bottom:0;left:0;width:100%;height:46px;pointer-events:none;z-index:0;opacity:.65}
+.player{position:relative!important}
+
+/* ── Extra controls row ── */
+.extra-row{width:100%;display:flex;align-items:center;justify-content:center;gap:5px;margin-top:10px;flex-wrap:wrap}
+.ex-btn{height:28px;padding:0 10px;border-radius:8px;background:var(--bg2);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;font-size:11px;font-family:'Space Grotesk',sans-serif;
+  transition:all .15s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ex-btn:hover{background:var(--bg3);color:var(--t1);border-color:var(--bd2)}
+.ex-btn.on{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+
+/* ── Fullscreen overlay ── */
+.fs-overlay{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:40px 20px;opacity:0;pointer-events:none;transition:opacity .35s}
+.fs-overlay.show{opacity:1;pointer-events:all}
+.fs-bg{position:absolute;inset:0;background:var(--bg0)}
+.fs-blur{position:absolute;inset:-30px;background-size:cover;background-position:center;
+  filter:blur(50px);opacity:0;transition:opacity 1.2s;transform:scale(1.08)}
+.fs-blur.has-cover{opacity:.55}
+.fs-close{position:absolute;top:20px;right:22px;z-index:10;width:38px;height:38px;border-radius:50%;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:#fff;cursor:pointer;
+  font-size:17px;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(8px)}
+.fs-close:hover{background:rgba(255,255,255,.24)}
+.fs-art-box{position:relative;z-index:1;width:min(50vh,360px);height:min(50vh,360px);
+  border-radius:22px;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.85);
+  background:linear-gradient(135deg,#1a1035 0%,#2d1a55 40%,#4a2a7a 100%);
+  display:flex;align-items:center;justify-content:center;font-size:96px;
+  flex-shrink:0;cursor:pointer;transition:transform .3s}
+.fs-art-box:hover{transform:scale(1.015)}
+.fs-art-box img{width:100%;height:100%;object-fit:cover}
+.fs-info-wrap{position:relative;z-index:1;text-align:center;margin-top:20px}
+.fs-t{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:#fff;
+  text-shadow:0 2px 24px rgba(0,0,0,.8);max-width:min(70vw,500px);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-a{font-size:13.5px;color:rgba(255,255,255,.58);margin-top:5px}
+#fs-canvas{position:relative;z-index:1;margin-top:26px;border-radius:8px;
+  width:min(65vw,560px);height:52px;flex-shrink:0}
+
+/* ── EQ Panel ── */
+.eq-panel-bg{position:fixed;inset:0;z-index:149;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
+  opacity:0;pointer-events:none;transition:opacity .25s}
+.eq-panel-bg.show{opacity:1;pointer-events:all}
+.eq-panel{position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(102%);
+  width:min(500px,95vw);background:var(--bg2);border:1px solid var(--bd2);
+  border-radius:18px 18px 0 0;padding:22px 24px 32px;z-index:150;
+  transition:transform .3s cubic-bezier(.4,0,.2,1);box-shadow:0 -12px 50px rgba(0,0,0,.7)}
+.eq-panel.show{transform:translateX(-50%) translateY(0)}
+.eq-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.eq-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px}
+.eq-presets{display:flex;gap:5px;flex-wrap:wrap}
+.eq-preset{padding:4px 9px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);font-size:11px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .13s}
+.eq-preset:hover{color:var(--t1);border-color:var(--bd2)}
+.eq-preset.on{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+.eq-bands{display:flex;justify-content:space-around;align-items:flex-start;padding-top:8px}
+.eq-band{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.eq-slider-wrap{position:relative;height:130px;display:flex;align-items:center;justify-content:center;width:100%}
+.eq-center-line{position:absolute;width:calc(100% - 10px);height:1px;background:var(--bd2);top:50%;left:5px;pointer-events:none}
+input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
+  -webkit-appearance:slider-vertical;accent-color:var(--accent);cursor:pointer;position:relative;z-index:1}
+.eq-label{font-size:10px;color:var(--t3);font-family:'Space Grotesk',sans-serif;letter-spacing:.3px}
+.eq-val{font-size:10px;color:var(--accent);font-variant-numeric:tabular-nums;font-family:'Space Grotesk',sans-serif}
+
+/* ── Sleep timer ── */
+.sleep-modal{position:fixed;inset:0;z-index:155;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.sleep-modal.show{opacity:1;pointer-events:all}
+.sleep-box{width:300px;background:var(--bg2);border:1px solid var(--bd2);border-radius:18px;
+  padding:24px;direction:rtl;box-shadow:0 20px 60px rgba(0,0,0,.8)}
+.sleep-cd{font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:700;color:var(--warn);
+  text-align:center;margin:12px 0;font-variant-numeric:tabular-nums;letter-spacing:2px}
+.sleep-opts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:14px}
+.sleep-opt{padding:9px 6px;border-radius:10px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);font-size:12px;font-family:'Space Grotesk',sans-serif;cursor:pointer;text-align:center;transition:all .13s}
+.sleep-opt:hover{color:var(--t1);border-color:var(--bd2)}
+.sleep-opt.on{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+
+/* ── Stats modal ── */
+.stats-modal{position:fixed;inset:0;z-index:155;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.stats-modal.show{opacity:1;pointer-events:all}
+.stats-box{width:460px;max-height:78vh;overflow-y:auto;background:var(--bg2);border:1px solid var(--bd2);
+  border-radius:18px;padding:26px;direction:rtl;box-shadow:0 24px 80px rgba(0,0,0,.85)}
+.stats-box::-webkit-scrollbar{width:4px}
+.stats-box::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.stats-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bd)}
+.stats-item:last-child{border-bottom:none}
+.stats-rank{font-size:11px;color:var(--t3);min-width:18px;text-align:center;font-variant-numeric:tabular-nums}
+.stats-info{flex:1;min-width:0}
+.stats-name{font-size:13px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stats-detail{font-size:11px;color:var(--t3);margin-top:2px}
+.stats-plays{font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;
+  font-family:'Space Grotesk',sans-serif;min-width:50px;text-align:left;flex-shrink:0}
+.stats-bar{height:3px;background:rgba(123,94,255,.14);border-radius:2px;margin-top:4px}
+.stats-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),#a082ff);border-radius:2px}
+
+/* ── Queue modal ── */
+.queue-modal{position:fixed;inset:0;z-index:155;display:flex;align-items:flex-end;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(8px);opacity:0;pointer-events:none;transition:opacity .2s}
+.queue-modal.show{opacity:1;pointer-events:all}
+.queue-box{width:460px;max-height:72vh;display:flex;flex-direction:column;background:var(--bg2);
+  border:1px solid var(--bd2);border-radius:18px 18px 0 0;padding:20px 24px 28px;
+  box-shadow:0 -16px 60px rgba(0,0,0,.85)}
+.queue-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.queue-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px}
+.queue-list{overflow-y:auto;flex:1}
+.queue-list::-webkit-scrollbar{width:3px}
+.queue-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.queue-item{display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:9px;
+  cursor:pointer;direction:rtl;transition:background .13s}
+.queue-item:hover{background:var(--bg3)}
+.queue-item.active{background:var(--accent-lo)}
+.queue-item.active .queue-name{color:var(--accent)}
+.queue-num{font-size:11px;color:var(--t3);min-width:20px;text-align:center;font-variant-numeric:tabular-nums}
+.queue-info{flex:1;min-width:0}
+.queue-name{font-size:13px;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-artist{font-size:11px;color:var(--t3);margin-top:1px}
+.queue-dur{font-size:11px;color:var(--t3);font-variant-numeric:tabular-nums;flex-shrink:0}
+.queue-move{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
+.queue-move-btn{width:18px;height:14px;background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:9px;line-height:1;display:flex;align-items:center;justify-content:center;border-radius:3px}
+.queue-move-btn:hover{background:var(--bg4);color:var(--t1)}
+
+/* ── Waveform on progress bar ── */
+.prog-wrap{position:relative}
+#wave-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:6px;opacity:.5}
 </style>
 </head>
 <body>
@@ -359,6 +487,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
 <!-- PLAYER -->
 <div class="player no-drag">
+  <canvas id="viz-canvas"></canvas>
   <div id="player-content">
     <div class="no-track">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg>
@@ -450,6 +579,84 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <div class="ai-input-row">
     <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
     <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
+  </div>
+</div>
+
+<!-- FULLSCREEN OVERLAY -->
+<div class="fs-overlay" id="fs-overlay">
+  <div class="fs-bg"></div>
+  <div class="fs-blur" id="fs-blur"></div>
+  <button class="fs-close no-drag" onclick="closeFullscreen()">✕</button>
+  <div class="fs-art-box no-drag" id="fs-art-box" onclick="closeFullscreen()">🎵</div>
+  <div class="fs-info-wrap">
+    <div class="fs-t" id="fs-t"></div>
+    <div class="fs-a" id="fs-a"></div>
+  </div>
+  <canvas id="fs-canvas"></canvas>
+</div>
+
+<!-- EQ BACKDROP -->
+<div class="eq-panel-bg" id="eq-bg" onclick="closeEQ()"></div>
+
+<!-- EQ PANEL -->
+<div class="eq-panel" id="eq-panel">
+  <div class="eq-hd">
+    <span class="eq-title">🎚 اکولایزر</span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="eq-presets">
+        <button class="eq-preset on" onclick="applyEQPreset('flat',this)">Flat</button>
+        <button class="eq-preset" onclick="applyEQPreset('bass',this)">Bass</button>
+        <button class="eq-preset" onclick="applyEQPreset('vocal',this)">Vocal</button>
+        <button class="eq-preset" onclick="applyEQPreset('classical',this)">Classical</button>
+      </div>
+      <div class="modal-close" onclick="closeEQ()" style="margin-right:4px">✕</div>
+    </div>
+  </div>
+  <div class="eq-bands" id="eq-bands"></div>
+</div>
+
+<!-- SLEEP MODAL -->
+<div class="sleep-modal" id="sleep-modal" onclick="if(event.target===this)closeSleep()">
+  <div class="sleep-box">
+    <div class="modal-hd" style="margin-bottom:14px">
+      <span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px">😴 تایمر خواب</span>
+      <div class="modal-close" onclick="closeSleep()">✕</div>
+    </div>
+    <div class="sleep-cd" id="sleep-cd" style="display:none"></div>
+    <div class="sleep-opts">
+      <div class="sleep-opt" data-min="10" onclick="setSleepTimer(10)">۱۰ دقیقه</div>
+      <div class="sleep-opt" data-min="20" onclick="setSleepTimer(20)">۲۰ دقیقه</div>
+      <div class="sleep-opt" data-min="30" onclick="setSleepTimer(30)">۳۰ دقیقه</div>
+      <div class="sleep-opt" data-min="45" onclick="setSleepTimer(45)">۴۵ دقیقه</div>
+      <div class="sleep-opt" data-min="60" onclick="setSleepTimer(60)">۱ ساعت</div>
+      <div class="sleep-opt" data-min="90" onclick="setSleepTimer(90)">۱.۵ ساعت</div>
+    </div>
+    <button class="btn-cancel" id="sleep-cancel-btn" onclick="cancelSleepTimer()" style="display:none;width:100%;margin-top:4px">لغو تایمر</button>
+  </div>
+</div>
+
+<!-- QUEUE MODAL -->
+<div class="queue-modal" id="queue-modal" onclick="if(event.target===this)closeQueue()">
+  <div class="queue-box">
+    <div class="queue-hd">
+      <span class="queue-title">☰ صف پخش</span>
+      <div class="modal-close" onclick="closeQueue()">✕</div>
+    </div>
+    <div class="queue-list" id="queue-list"></div>
+  </div>
+</div>
+
+<!-- STATS MODAL -->
+<div class="stats-modal" id="stats-modal" onclick="if(event.target===this)closeStats()">
+  <div class="stats-box">
+    <div class="modal-hd" style="margin-bottom:4px">
+      <div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px">📊 آمار پخش</div>
+        <div id="stats-sub" style="font-size:12px;color:var(--t3);margin-top:3px"></div>
+      </div>
+      <div class="modal-close" onclick="closeStats()">✕</div>
+    </div>
+    <div id="stats-content" style="margin-top:16px"></div>
   </div>
 </div>
 

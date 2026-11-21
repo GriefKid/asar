@@ -1,17 +1,56 @@
 {
-  "name": "asar",
+  "name": "mylife",
   "version": "1.0.0",
   "description": "اثر — مدیریت تجربه‌های فرهنگی شخصی",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "build": "electron-builder"
   },
   "keywords": [],
   "author": "GriefKid",
   "license": "ISC",
+  "build": {
+    "appId": "com.griefkid.mylife",
+    "productName": "Lifestyle",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Lifestyle",
+      "artifactName": "mylife.exe"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "G:\\dist"
+    },
+    "asar": true
+  },
   "devDependencies": {
-    "electron": "^36.3.1"
+    "electron": "^36.3.1",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "electron-store": "^8.2.0"
