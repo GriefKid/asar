@@ -540,21 +540,22 @@ async function fetchLyrics(song) {
 
 async function fetchLyricsWithAI() {
   const body = document.getElementById('lyr-body');
-  if (!body || !currentSong) return;
+  const song = queue[queueIdx];
+  if (!body || !song) return;
+  const key = getAIKey();
+  if (!key) {
+    body.innerHTML = `<div class="lyr-no-data">ابتدا کلید API رو در پنل هوش مصنوعی وارد کن.</div>`;
+    return;
+  }
   body.innerHTML = `<div class="lyr-loading"><span>هوش مصنوعی داره دنبال متن می‌گرده...</span></div>`;
   try {
-    const cfg = JSON.parse(localStorage.getItem('asar-ai-config') || '{}');
-    if (!cfg.apiKey) {
-      body.innerHTML = `<div class="lyr-no-data">برای جستجو با AI، ابتدا کلید API رو در تنظیمات وارد کن.</div>`;
-      return;
-    }
-    const prompt = `متن کامل آهنگ "${currentSong.title}" از "${currentSong.artist}" رو بنویس. فقط متن آهنگ بنویس، بدون توضیح اضافه. هر خط یک سطر جداگانه باشه.`;
+    const prompt = `Write the complete lyrics of the song "${song.title}" by "${song.artist}". Output ONLY the lyrics, line by line, no explanations or headers.`;
     const result = await window.api.claudeChat(
-      'You are a lyrics expert. Provide the complete, accurate lyrics when asked. Only output the lyrics text, line by line, with no extra explanation.',
+      'You are a lyrics database. When asked for lyrics, output only the song lyrics text, line by line. No explanations, no headers, just the lyrics.',
       [{ role: 'user', content: prompt }],
-      cfg.apiKey, cfg.provider || null
+      key, null
     );
-    if (result && result.length > 50) {
+    if (result && result.length > 30) {
       lyrLines = result.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       lyrFaLines = [];
       renderLyrics();
@@ -562,8 +563,8 @@ async function fetchLyricsWithAI() {
     } else {
       body.innerHTML = `<div class="lyr-no-data">هوش مصنوعی متن این آهنگ رو پیدا نکرد.</div>`;
     }
-  } catch {
-    body.innerHTML = `<div class="lyr-no-data">خطا در جستجو با هوش مصنوعی.</div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="lyr-no-data">خطا: ${String(e.message).slice(0, 100)}</div>`;
   }
 }
 
