@@ -114,10 +114,12 @@ window.showSection = function(id, el) {
   document.getElementById('section-' + id).classList.add('active');
   if (el) el.classList.add('active');
   activeSection = id;
-  if (id === 'home')     renderHome();
-  if (id === 'library')  renderLibrary();
-  if (id === 'planner')  renderPlanner();
-  if (id === 'settings') renderSettings();
+  if (id === 'home')      renderHome();
+  if (id === 'library')   renderLibrary();
+  if (id === 'planner')   renderPlanner();
+  if (id === 'settings')  renderSettings();
+  if (id === 'community') loadCommunity(currentCommunityTab);
+  if (id === 'admin')     loadAdminData();
 };
 
 // ── Command Palette ───────────────────────────────────────────────────────
@@ -565,6 +567,11 @@ function renderSettings() {
   if (inp) inp.value = settings['tmdb-key'] || '';
   const cinp = document.getElementById('claude-key-input');
   try { if (cinp) cinp.value = localStorage.getItem('claude-api-key') || ''; } catch {}
+  // Firebase config
+  const fbInp = document.getElementById('firebase-config-inp');
+  const fbCfg = getFirebaseConfig();
+  if (fbInp && fbCfg) { try { fbInp.value = JSON.stringify(fbCfg, null, 2); } catch {} }
+  updateFirebaseStatus(!!(window._fbApp && window._currentUser), window._currentUser || null);
 }
 
 window.saveClaudeKey = function() {
@@ -1075,3 +1082,356 @@ selectedDay = { y: today.y, m: today.m, d: today.d };
 
 loadPomoSessions();
 renderHome();
+initFirebaseApp();
+
+// ── Firebase Integration ──────────────────────────────────────────────────
+
+let currentCommunityTab = 'film';
+let _syncTimer = null;
+let _authMode = 'login'; // 'login' | 'register'
+
+function initFirebaseApp() {
+  const ok = initFirebase();
+  if (!ok) {
+    // No config yet — show config hint in settings, skip auth overlay
+    updateFirebaseStatus(false, null);
+    return;
+  }
+  // Firebase initialized — auth state callback will fire automatically
+}
+
+window.onFirebaseAuthChange = function(user) {
+  if (user) {
+    // Logged in
+    document.getElementById('auth-overlay').classList.remove('show');
+    updateFirebaseStatus(true, user);
+    loadFromFirestore(user.uid);
+  } else {
+    // Not logged in — show auth overlay
+    updateFirebaseStatus(false, null);
+    const cfg = getFirebaseConfig();
+    if (cfg && cfg.apiKey) {
+      document.getElementById('auth-overlay').classList.add('show');
+    }
+  }
+};
+
+function updateFirebaseStatus(loggedIn, user) {
+  const statusEl = document.getElementById('firebase-status');
+  const userRow = document.getElementById('firebase-user-row');
+  const sidebarRow = document.getElementById('sidebar-user-row');
+  const adminNav = document.getElementById('nav-admin');
+  const syncBadge = document.getElementById('sidebar-sync-badge');
+
+  if (loggedIn && user) {
+    if (statusEl) statusEl.textContent = '✅ متصل — ' + (user.email || '');
+    if (statusEl) statusEl.style.color = 'var(--ok)';
+    if (userRow) userRow.style.display = 'flex';
+    const nameEl = document.getElementById('firebase-user-name-lbl');
+    const emailEl = document.getElementById('firebase-user-email-lbl');
+    if (nameEl) nameEl.textContent = user.displayName || 'کاربر';
+    if (emailEl) emailEl.textContent = user.email || '';
+    if (sidebarRow) sidebarRow.style.display = 'flex';
+    const avatarEl = document.getElementById('sidebar-user-avatar');
+    const nameLabel = document.getElementById('sidebar-user-name');
+    if (avatarEl) avatarEl.textContent = (user.displayName || user.email || '?')[0].toUpperCase();
+    if (nameLabel) nameLabel.textContent = user.displayName || user.email || 'کاربر';
+    if (syncBadge) syncBadge.style.display = 'inline-block';
+    // Check admin
+    checkAdmin(user.uid).then(isAdmin => {
+      if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
+    });
+  } else {
+    if (statusEl) statusEl.textContent = 'متصل نشده';
+    if (statusEl) statusEl.style.color = 'var(--t3)';
+    if (userRow) userRow.style.display = 'none';
+    if (sidebarRow) sidebarRow.style.display = 'none';
+    if (syncBadge) syncBadge.style.display = 'none';
+    if (adminNav) adminNav.style.display = 'none';
+  }
+}
+
+async function checkAdmin(uid) {
+  if (!window._fbDb || !uid) return false;
+  try {
+    const doc = await window._fbDb.collection('users').doc(uid).get();
+    return doc.exists && doc.data().isAdmin === true;
+  } catch { return false; }
+}
+
+window.saveFirebaseConfig = function() {
+  const val = document.getElementById('firebase-config-inp').value.trim();
+  if (!val) return;
+  try {
+    const cfg = JSON.parse(val);
+    if (!cfg.apiKey || !cfg.projectId) { alert('کانفیگ ناقصه. apiKey و projectId لازمه.'); return; }
+    localStorage.setItem('asar-firebase-config', JSON.stringify(cfg));
+    // Reinit
+    window._fbApp = null; window._fbAuth = null; window._fbDb = null; window._currentUser = null;
+    const ok = initFirebase();
+    if (ok) {
+      document.getElementById('firebase-status').textContent = '🔄 در حال اتصال...';
+    }
+  } catch(e) { alert('JSON نامعتبر: ' + e.message); }
+};
+
+window.switchAuthTab = function(el, mode) {
+  _authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('auth-submit-btn').textContent = mode === 'login' ? 'ورود' : 'ثبت‌نام';
+  const nameGroup = document.getElementById('auth-name-group');
+  if (nameGroup) nameGroup.style.display = mode === 'register' ? 'block' : 'none';
+  document.getElementById('auth-err').textContent = '';
+};
+
+window.submitAuth = async function() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-err');
+  const btn   = document.getElementById('auth-submit-btn');
+  if (!email || !pass) { errEl.textContent = 'ایمیل و رمز عبور رو وارد کن'; return; }
+  if (!window._fbAuth) { errEl.textContent = 'ابتدا Firebase رو تنظیم کن'; return; }
+  btn.textContent = '...';
+  btn.disabled = true;
+  errEl.textContent = '';
+  try {
+    if (_authMode === 'login') {
+      await window._fbAuth.signInWithEmailAndPassword(email, pass);
+    } else {
+      const name = (document.getElementById('auth-name') || {}).value || '';
+      const cred = await window._fbAuth.createUserWithEmailAndPassword(email, pass);
+      if (name && cred.user) await cred.user.updateProfile({ displayName: name });
+      // Create user doc
+      await window._fbDb.collection('users').doc(cred.user.uid).set({
+        email: cred.user.email, displayName: name, createdAt: new Date().toISOString(), isAdmin: false
+      });
+    }
+  } catch(e) {
+    const msgs = {
+      'auth/user-not-found': 'کاربر پیدا نشد',
+      'auth/wrong-password': 'رمز اشتباهه',
+      'auth/email-already-in-use': 'این ایمیل قبلاً ثبت شده',
+      'auth/weak-password': 'رمز باید حداقل ۶ کاراکتر باشه',
+      'auth/invalid-email': 'ایمیل نامعتبره',
+      'auth/invalid-credential': 'ایمیل یا رمز اشتباهه'
+    };
+    errEl.textContent = msgs[e.code] || e.message;
+  } finally {
+    btn.textContent = _authMode === 'login' ? 'ورود' : 'ثبت‌نام';
+    btn.disabled = false;
+  }
+};
+
+window.skipAuth = function() {
+  document.getElementById('auth-overlay').classList.remove('show');
+};
+
+window.fbLogout = async function() {
+  if (!window._fbAuth) return;
+  if (!confirm('از حساب خارج بشم؟')) return;
+  await window._fbAuth.signOut();
+  window._currentUser = null;
+  updateFirebaseStatus(false, null);
+};
+
+// ── Firestore Sync ───────────────────────────────────────────────────────
+
+function debouncedSync() {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(syncToFirestore, 3000);
+}
+
+async function syncToFirestore() {
+  const db = window._fbDb;
+  const uid = getUID();
+  if (!db || !uid) return;
+  try {
+    await db.collection('user_data').doc(uid).set({
+      library,
+      events,
+      habits,
+      goals,
+      updatedAt: new Date().toISOString()
+    });
+    // Update user doc
+    const user = window._currentUser;
+    await db.collection('users').doc(uid).set({
+      email: user.email || '', displayName: user.displayName || '',
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    const badge = document.getElementById('sidebar-sync-badge');
+    if (badge) { badge.textContent = '✓ سینک'; badge.style.background = 'var(--ok)'; }
+  } catch(e) {
+    console.error('Firestore sync error:', e);
+    const badge = document.getElementById('sidebar-sync-badge');
+    if (badge) { badge.textContent = '⚠ خطا'; badge.style.background = 'var(--err)'; }
+  }
+}
+
+async function loadFromFirestore(uid) {
+  const db = window._fbDb;
+  if (!db || !uid) return;
+  try {
+    const doc = await db.collection('user_data').doc(uid).get();
+    if (!doc.exists) { syncToFirestore(); return; }
+    const d = doc.data();
+    if (d.library)  { library  = d.library;  localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
+    if (d.events)   { events   = d.events;   localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
+    if (d.habits)   { habits   = d.habits;   localStorage.setItem(KEY_HABITS,  JSON.stringify(habits)); }
+    if (d.goals)    { goals    = d.goals;    localStorage.setItem(KEY_GOALS,   JSON.stringify(goals)); }
+    renderHome();
+    if (activeSection === 'library') renderLibrary();
+    if (activeSection === 'planner') renderPlanner();
+  } catch(e) { console.error('loadFromFirestore error:', e); }
+}
+
+// Patch save functions to trigger sync
+const _origSaveLib      = saveLib;
+const _origSaveEvents   = saveEvents;
+const _origSaveHabits   = saveHabits;
+const _origSaveGoals    = saveGoals;
+saveLib      = function() { _origSaveLib();      debouncedSync(); };
+saveEvents   = function() { _origSaveEvents();   debouncedSync(); };
+saveHabits   = function() { _origSaveHabits();   debouncedSync(); };
+saveGoals    = function() { _origSaveGoals();    debouncedSync(); };
+
+// ── Community Leaderboard ────────────────────────────────────────────────
+
+window.switchCommunityTab = function(el, type) {
+  currentCommunityTab = type;
+  document.querySelectorAll('.community-tab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  loadCommunity(type);
+};
+
+async function loadCommunity(type) {
+  const db = window._fbDb;
+  const grid = document.getElementById('community-grid');
+  if (!grid) return;
+  if (!db) {
+    grid.innerHTML = '<div class="community-loading">ابتدا Firebase رو در تنظیمات وصل کن</div>';
+    return;
+  }
+  grid.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
+  try {
+    const snap = await db.collection('community').where('type','==',type).orderBy('avg','desc').limit(100).get();
+    if (snap.empty) {
+      grid.innerHTML = '<div class="community-loading">هنوز کسی امتیاز نداده...</div>';
+      return;
+    }
+    const items = [];
+    snap.forEach(doc => items.push(doc.data()));
+    renderCommunityGrid(items);
+  } catch(e) {
+    console.error('loadCommunity error:', e);
+    grid.innerHTML = '<div class="community-loading">خطا در بارگذاری — ایندکس Firestore رو بساز</div>';
+  }
+}
+
+function renderCommunityGrid(items) {
+  const grid = document.getElementById('community-grid');
+  if (!grid) return;
+  const typeEmoji = { film: '🎬', book: '📚', music: '🎵' };
+  grid.innerHTML = items.map((item, i) => {
+    const stars = '★'.repeat(Math.round(item.avg)) + '☆'.repeat(5 - Math.round(item.avg));
+    const avg = item.avg ? item.avg.toFixed(1) : '0.0';
+    const coverHtml = item.cover
+      ? `<img src="${item.cover.replace(/"/g,'&quot;')}" alt="" loading="lazy" onerror="this.parentElement.textContent='${typeEmoji[item.type]||'★'}'">`
+      : (typeEmoji[item.type] || '★');
+    return `<div class="community-card">
+      <div class="community-rank">${i < 3 ? ['🥇','🥈','🥉'][i] : '#'+(i+1)}</div>
+      <div class="community-cover">${coverHtml}</div>
+      <div class="community-body">
+        <div class="community-title" title="${item.title.replace(/"/g,'&quot;')}">${item.title}</div>
+        ${item.artist ? `<div class="community-votes" style="margin-bottom:3px">${item.artist}</div>` : ''}
+        <div class="community-stars" title="${avg}">${stars} <span style="font-size:11px;color:var(--warn)">${avg}</span></div>
+        <div class="community-votes">${item.count} رأی</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Admin Panel ──────────────────────────────────────────────────────────
+
+async function loadAdminData() {
+  const db = window._fbDb;
+  const listEl = document.getElementById('admin-users-list');
+  const statsEl = document.getElementById('admin-stats-row');
+  if (!db) {
+    if (listEl) listEl.innerHTML = '<div class="community-loading">Firebase متصل نیست</div>';
+    return;
+  }
+  if (listEl) listEl.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
+  try {
+    const usersSnap = await db.collection('users').get();
+    const users = [];
+    usersSnap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+
+    // Stats
+    const communitySnap = await db.collection('community').get();
+    let totalVotes = 0;
+    communitySnap.forEach(doc => { const d = doc.data(); totalVotes += d.count || 0; });
+
+    if (statsEl) statsEl.innerHTML = `
+      <div class="admin-stat"><div class="admin-stat-num">${users.length}</div><div class="admin-stat-lbl">کاربران</div></div>
+      <div class="admin-stat"><div class="admin-stat-num">${communitySnap.size}</div><div class="admin-stat-lbl">آثار امتیازدار</div></div>
+      <div class="admin-stat"><div class="admin-stat-num">${totalVotes}</div><div class="admin-stat-lbl">کل رأی‌ها</div></div>
+    `;
+
+    if (!users.length) {
+      listEl.innerHTML = '<div class="community-loading">کاربری ثبت نشده</div>';
+      return;
+    }
+
+    listEl.innerHTML = users.map((u, i) => {
+      const initials = (u.displayName || u.email || '?')[0].toUpperCase();
+      const date = u.createdAt ? u.createdAt.slice(0,10) : '';
+      return `<div>
+        <div class="admin-user-row" onclick="toggleAdminUser('au-${i}','${u.id}')">
+          <div class="admin-user-avatar">${initials}</div>
+          <div class="admin-user-info">
+            <div class="admin-user-name">${u.displayName || 'بدون نام'}</div>
+            <div class="admin-user-email">${u.email || ''}</div>
+          </div>
+          <div class="admin-user-meta">${date}</div>
+        </div>
+        <div class="admin-user-lib" id="au-${i}">در حال بارگذاری...</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.error('loadAdminData error:', e);
+    if (listEl) listEl.innerHTML = '<div class="community-loading">خطا — باید Admin باشی</div>';
+  }
+}
+
+window.refreshAdmin = function() { loadAdminData(); };
+
+window.toggleAdminUser = async function(libId, uid) {
+  const libEl = document.getElementById(libId);
+  if (!libEl) return;
+  if (libEl.classList.contains('show')) { libEl.classList.remove('show'); return; }
+  libEl.classList.add('show');
+  if (libEl.dataset.loaded) return;
+  libEl.dataset.loaded = '1';
+  libEl.textContent = 'در حال بارگذاری...';
+  try {
+    const doc = await window._fbDb.collection('user_data').doc(uid).get();
+    if (!doc.exists) { libEl.textContent = 'داده‌ای ثبت نشده'; return; }
+    const d = doc.data();
+    const lib = d.library || [];
+    const typeEmoji = { film: '🎬', book: '📚', music: '🎵' };
+    libEl.innerHTML = `<div class="admin-lib-title">کتابخانه (${lib.length} آیتم)</div>` +
+      (lib.length === 0 ? '<div style="font-size:12px;color:var(--t3)">خالیه</div>' :
+        lib.slice(0,30).map(it => `<div class="admin-lib-item">
+          <span>${typeEmoji[it.type]||'•'}</span>
+          <span style="flex:1">${it.title||'بدون عنوان'}</span>
+          <span style="color:var(--warn)">${it.rating ? '★'.repeat(it.rating) : ''}</span>
+          <span style="color:var(--t3);font-size:10px">${it.status||''}</span>
+        </div>`).join('') +
+        (lib.length > 30 ? `<div style="font-size:11px;color:var(--t3);padding-top:6px">... و ${lib.length-30} مورد دیگه</div>` : '')
+      );
+  } catch(e) {
+    libEl.textContent = 'خطا در دریافت داده‌ها';
+  }
+};

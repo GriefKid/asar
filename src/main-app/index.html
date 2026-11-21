@@ -439,6 +439,73 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .btn-save{padding:8px 16px;border-radius:9px;background:var(--accent);border:none;
   color:#fff;cursor:pointer;font-size:13px;font-family:'Space Grotesk',sans-serif;transition:all .13s}
 .btn-save:hover{background:#8B6EFF}
+
+/* ── Auth Overlay ── */
+.auth-overlay{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
+  background:rgba(4,4,12,.96);backdrop-filter:blur(20px)}
+.auth-overlay.show{display:flex}
+.auth-box{width:380px;background:var(--bg2);border:1px solid var(--bd2);border-radius:20px;
+  padding:36px 32px;direction:rtl;box-shadow:0 32px 100px rgba(0,0,0,.9)}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo-icon{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--accent),#5B3FDF);
+  display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 10px}
+.auth-logo-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px}
+.auth-logo-sub{font-size:12px;color:var(--t3);margin-top:4px}
+.auth-tabs{display:flex;gap:3px;background:rgba(255,255,255,.04);border-radius:9px;padding:3px;margin-bottom:20px}
+.auth-tab{flex:1;padding:7px;border-radius:7px;text-align:center;font-family:'Space Grotesk',sans-serif;
+  font-size:13px;cursor:pointer;color:var(--t3);transition:all .13s}
+.auth-tab.on{background:var(--bg3);color:var(--t1)}
+.auth-err{font-size:12px;color:var(--err);text-align:center;margin-top:10px;min-height:18px}
+
+/* ── Community & Admin ── */
+.community-scroll,.admin-scroll{flex:1;overflow-y:auto;padding:20px 32px 32px}
+.community-scroll::-webkit-scrollbar,.admin-scroll::-webkit-scrollbar{width:5px}
+.community-scroll::-webkit-scrollbar-thumb,.admin-scroll::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+.community-tabs{display:flex;gap:5px;margin-bottom:24px}
+.community-tab{padding:7px 16px;border-radius:9px;background:var(--bg2);border:1px solid var(--bd);
+  color:var(--t3);font-family:'Space Grotesk',sans-serif;font-size:12.5px;cursor:pointer;transition:all .13s}
+.community-tab.on{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
+.community-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:12px}
+.community-card{background:var(--bg2);border:1px solid var(--bd);border-radius:12px;overflow:hidden;
+  transition:all .15s;position:relative}
+.community-card:hover{border-color:var(--bd2);transform:translateY(-2px)}
+.community-rank{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:#fff;
+  font-size:10px;font-family:'Space Grotesk',sans-serif;font-weight:700;padding:2px 7px;
+  border-radius:5px;backdrop-filter:blur(4px)}
+.community-cover{height:105px;display:flex;align-items:center;justify-content:center;font-size:36px;
+  background:linear-gradient(135deg,var(--bg3),var(--bg4))}
+.community-cover img{width:100%;height:100%;object-fit:cover}
+.community-body{padding:9px 10px;direction:rtl}
+.community-title{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.community-stars{font-size:12px;color:var(--warn)}
+.community-votes{font-size:10.5px;color:var(--t3);margin-top:2px}
+.community-loading{padding:48px;text-align:center;color:var(--t3);direction:rtl;font-size:13px}
+.admin-stats-row{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.admin-stat{flex:1;min-width:120px;background:var(--bg2);border:1px solid var(--bd);border-radius:12px;
+  padding:14px 16px;direction:rtl}
+.admin-stat-num{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;color:var(--accent)}
+.admin-stat-lbl{font-size:11px;color:var(--t3);margin-top:3px}
+.admin-users{display:flex;flex-direction:column;gap:8px}
+.admin-user-row{display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--bg2);
+  border:1px solid var(--bd);border-radius:10px;cursor:pointer;transition:all .13s;direction:rtl}
+.admin-user-row:hover{background:var(--bg3);border-color:var(--bd2)}
+.admin-user-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-lo);
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;
+  font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--accent)}
+.admin-user-info{flex:1;min-width:0}
+.admin-user-name{font-size:13px;font-weight:500}
+.admin-user-email{font-size:11px;color:var(--t3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-user-meta{font-size:11px;color:var(--t3);text-align:left;white-space:nowrap;flex-shrink:0}
+.admin-user-lib{margin-top:14px;padding:14px;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:10px;display:none;direction:rtl}
+.admin-user-lib.show{display:block}
+.admin-lib-title{font-size:12px;font-weight:600;margin-bottom:10px;color:var(--accent)}
+.admin-lib-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12px}
+.admin-lib-item:last-child{border-bottom:none}
+.firebase-badge{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--ok);
+  color:#0a1a0a;font-family:'Space Grotesk',sans-serif;font-weight:700;margin-right:auto;display:inline-block}
+.user-row-fb{display:flex;align-items:center;gap:8px;padding:12px 18px;background:var(--bg3);
+  border-bottom:1px solid var(--bd);direction:rtl;font-size:12px}
 </style>
 </head>
 <body>
@@ -454,6 +521,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     </div>
   </div>
 
+  <div id="sidebar-user-row" style="display:none" class="user-row-fb">
+    <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-lo);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0;font-family:'Space Grotesk',sans-serif" id="sidebar-user-avatar">?</div>
+    <div style="flex:1;min-width:0"><div id="sidebar-user-name" style="font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">کاربر</div></div>
+    <div class="firebase-badge" id="sidebar-sync-badge" style="display:none">✓ سینک</div>
+  </div>
   <div style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">منو</div>
 
   <div class="nav-item active" onclick="showSection('home',this)">
@@ -490,6 +562,19 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
     <span class="nav-label">بوک ریدر</span>
     <span class="nav-badge">↗</span>
+  </div>
+
+  <div class="nav-divider"></div>
+
+  <div class="nav-item" onclick="showSection('community',this)" id="nav-community">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>
+    <span class="nav-label">برترین‌های اثر</span>
+  </div>
+
+  <div class="nav-item" onclick="showSection('admin',this)" id="nav-admin" style="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+    <span class="nav-label">پنل مدیر</span>
+    <span class="nav-badge">👑</span>
   </div>
 
   <div class="nav-divider"></div>
@@ -713,6 +798,30 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
         </div>
       </div>
       <div class="settings-section">
+        <div class="settings-section-title">Firebase / سینک ابری</div>
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+          <div>
+            <div class="settings-label">تنظیم Firebase</div>
+            <div class="settings-desc">برای سینک داده و لیست برترین‌ها — کانفیگ Firebase خودت رو اینجا بزار</div>
+          </div>
+          <textarea class="settings-input no-drag" id="firebase-config-inp" rows="6"
+            placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'
+            style="width:100%;font-family:monospace;font-size:11px;resize:vertical;min-height:95px;direction:ltr"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <button class="settings-save-btn no-drag" onclick="saveFirebaseConfig()">ذخیره و اتصال</button>
+            <span id="firebase-status" style="font-size:12px;color:var(--t3)">متصل نشده</span>
+          </div>
+        </div>
+        <div class="settings-row" id="firebase-user-row" style="display:none">
+          <div>
+            <div class="settings-label" id="firebase-user-name-lbl">کاربر</div>
+            <div class="settings-desc" id="firebase-user-email-lbl"></div>
+          </div>
+          <button class="settings-save-btn no-drag" onclick="fbLogout()" style="background:var(--err)">خروج از حساب</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-title">درباره</div>
         <div class="settings-row">
           <div>
@@ -721,6 +830,37 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
           </div>
           <span class="settings-tag">v1.2.0</span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMMUNITY -->
+  <div class="section" id="section-community">
+    <div class="community-scroll">
+      <div class="home-section-title" style="margin-bottom:20px">برترین‌های اثر
+        <span style="font-size:12px;color:var(--t3);font-weight:400;margin-right:8px">میانگین امتیاز از همه کاربران</span>
+      </div>
+      <div class="community-tabs">
+        <div class="community-tab on" data-ct="film" onclick="switchCommunityTab(this,'film')">🎬 فیلم‌ها</div>
+        <div class="community-tab" data-ct="book" onclick="switchCommunityTab(this,'book')">📚 کتاب‌ها</div>
+        <div class="community-tab" data-ct="music" onclick="switchCommunityTab(this,'music')">🎵 موسیقی‌ها</div>
+      </div>
+      <div class="community-grid" id="community-grid">
+        <div class="community-loading">ابتدا Firebase رو تنظیم کن...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="section" id="section-admin">
+    <div class="admin-scroll">
+      <div class="home-section-title" style="margin-bottom:20px">پنل مدیریت
+        <button class="settings-save-btn no-drag" onclick="refreshAdmin()" style="margin-right:12px;font-size:11px">🔄 بارگذاری</button>
+      </div>
+      <div class="admin-stats-row" id="admin-stats-row"></div>
+      <div style="font-size:12px;font-weight:600;color:var(--t3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px">کاربران</div>
+      <div class="admin-users" id="admin-users-list">
+        <div class="community-loading">در حال بارگذاری...</div>
       </div>
     </div>
   </div>
@@ -892,6 +1032,41 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <div class="pomo-count" id="pomo-count">امروز: ۰ جلسه تموم شد</div>
 </div>
 
+<!-- AUTH OVERLAY -->
+<div class="auth-overlay no-drag" id="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">✦</div>
+      <div class="auth-logo-title">اثر</div>
+      <div class="auth-logo-sub">وارد شو تا داده‌هات همه‌جا باشه</div>
+    </div>
+    <div class="auth-tabs">
+      <div class="auth-tab on" onclick="switchAuthTab(this,'login')">ورود</div>
+      <div class="auth-tab" onclick="switchAuthTab(this,'register')">ثبت‌نام</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">ایمیل</label>
+      <input class="form-input no-drag" id="auth-email" type="email" placeholder="example@email.com" dir="ltr" onkeydown="if(event.key==='Enter')submitAuth()">
+    </div>
+    <div class="form-group" id="auth-name-group" style="display:none">
+      <label class="form-label">نام نمایشی</label>
+      <input class="form-input no-drag" id="auth-name" placeholder="اسمت رو بنویس" onkeydown="if(event.key==='Enter')submitAuth()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">رمز عبور</label>
+      <input class="form-input no-drag" id="auth-password" type="password" placeholder="حداقل ۶ کاراکتر" dir="ltr" onkeydown="if(event.key==='Enter')submitAuth()">
+    </div>
+    <button class="btn-save no-drag" id="auth-submit-btn" onclick="submitAuth()" style="width:100%;margin-top:4px">ورود</button>
+    <div class="auth-err" id="auth-err"></div>
+    <div style="text-align:center;font-size:11px;color:var(--t3);margin:14px 0">یا</div>
+    <button class="btn-cancel no-drag" onclick="skipAuth()" style="width:100%;font-size:12px">ادامه بدون ورود</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="../shared/firebase-init.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

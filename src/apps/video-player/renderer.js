@@ -947,6 +947,11 @@ function setVideoRating(n) {
   saveState();
   renderColls();
   renderWatchRow(video);
+  // sync to community
+  if (typeof writeCommunityRating === 'function') {
+    writeCommunityRating('film', video.title || video.path.split(/[\\/]/).pop(), video.poster || '', wd.rating || 0, video.year || '');
+  }
+  initFirebase();
 }
 
 function renderWatchRow(video) {
@@ -1113,3 +1118,4 @@ initThumbPreview();
 if (!getTmdbKey() && state.collections.length > 0) {
   setTimeout(() => document.getElementById('setup-banner').classList.add('show'), 1000);
 }
+initFirebase();

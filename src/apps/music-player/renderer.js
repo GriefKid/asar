@@ -1169,6 +1169,11 @@ function setSongRating(n) {
   saveState();
   const row = document.getElementById('rating-row');
   if (row) row.innerHTML = renderRatingStars(song);
+  // sync to community
+  if (typeof writeCommunityRating === 'function') {
+    writeCommunityRating('music', song.title || song.path.split(/[\\/]/).pop(), song.cover || '', state.ratings[song.path] || 0, song.artist || '');
+  }
+  initFirebase();
 }
 
 function renderRatingStars(song) {
@@ -1301,3 +1306,6 @@ function startWaveform() {
   }
   drawWave();
 }
+
+// ── Firebase init ───────────────────────────────────────────────────────
+initFirebase();

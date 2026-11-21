@@ -95,9 +95,16 @@ function renderLibrary() {
 
 function setBookRating(path, n) {
   if (!state.ratings) state.ratings = {};
-  state.ratings[path] = state.ratings[path] === n ? 0 : n;
+  const prev = state.ratings[path];
+  state.ratings[path] = prev === n ? 0 : n;
   saveState();
   renderLibrary();
+  // sync to community
+  const book = (state.books || []).find(b => b.path === path);
+  if (book && typeof writeCommunityRating === 'function') {
+    writeCommunityRating('book', book.title, book.cover || '', state.ratings[path] || 0, book.author || '');
+  }
+  initFirebase();
 }
 
 async function importPdf() {
@@ -1457,3 +1464,4 @@ async function aiSummarizePage() {
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
+initFirebase();
