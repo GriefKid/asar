@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg-main" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#04040C"/>
+      <stop offset="50%" style="stop-color:#0A0A1E"/>
+      <stop offset="100%" style="stop-color:#04040C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9B7FFF"/>
+      <stop offset="100%" style="stop-color:#5B3FDF"/>
+    </linearGradient>
+    <linearGradient id="text-grd" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#EEEEF6"/>
+      <stop offset="100%" style="stop-color:#C4B0FF"/>
+    </linearGradient>
+    <radialGradient id="glow-l" cx="20%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#5B3FDF;stop-opacity:0.25"/>
+      <stop offset="100%" style="stop-color:#5B3FDF;stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="glow-r" cx="80%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#9B7FFF;stop-opacity:0.12"/>
+      <stop offset="100%" style="stop-color:#9B7FFF;stop-opacity:0"/>
+    </radialGradient>
+    <radialGradient id="glow-c" cx="50%" cy="50%" r="40%">
+      <stop offset="0%" style="stop-color:#7B5EFF;stop-opacity:0.2"/>
+      <stop offset="100%" style="stop-color:#7B5EFF;stop-opacity:0"/>
+    </radialGradient>
+    <filter id="blur-sm"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="blur-lg"><feGaussianBlur stdDeviation="18"/></filter>
+    <clipPath id="clip"><rect width="1200" height="630" rx="0"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#clip)">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg-main)"/>
+  <rect width="1200" height="630" fill="url(#glow-l)"/>
+  <rect width="1200" height="630" fill="url(#glow-r)"/>
+  <rect width="1200" height="630" fill="url(#glow-c)"/>
+
+  <!-- Grid lines (subtle) -->
+  <g stroke="#7B5EFF" stroke-width="0.4" opacity="0.08">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="150" y1="0" x2="150" y2="630"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="450" y1="0" x2="450" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="750" y1="0" x2="750" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="1050" y1="0" x2="1050" y2="630"/>
+  </g>
+
+  <!-- Left decorative — Film strip -->
+  <g opacity="0.18" transform="translate(60, 90)">
+    <rect width="80" height="440" rx="8" fill="none" stroke="url(#accent)" stroke-width="1.5"/>
+    <rect x="6" y="12" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="6" y="36" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="6" y="60" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="6" y="84" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.3"/>
+    <rect x="6" y="108" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.3"/>
+    <rect x="6" y="132" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.2"/>
+    <rect x="52" y="12" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="52" y="36" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="52" y="60" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.5"/>
+    <rect x="52" y="84" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.3"/>
+    <rect x="52" y="108" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.3"/>
+    <rect x="52" y="132" width="22" height="16" rx="3" fill="url(#accent)" opacity="0.2"/>
+  </g>
+
+  <!-- Right decorative — open book pages -->
+  <g opacity="0.14" transform="translate(1060, 160)">
+    <path d="M60 0 Q0 20 0 240 Q60 220 60 0Z" fill="url(#accent)"/>
+    <path d="M60 0 Q120 20 120 240 Q60 220 60 0Z" fill="url(#accent)" opacity="0.6"/>
+    <line x1="60" y1="0" x2="60" y2="240" stroke="#9B7FFF" stroke-width="1.5"/>
+    <!-- Page lines -->
+    <line x1="8" y1="60" x2="52" y2="58" stroke="#9B7FFF" stroke-width="0.8" opacity="0.5"/>
+    <line x1="8" y1="78" x2="52" y2="76" stroke="#9B7FFF" stroke-width="0.8" opacity="0.4"/>
+    <line x1="8" y1="96" x2="52" y2="94" stroke="#9B7FFF" stroke-width="0.8" opacity="0.3"/>
+    <line x1="8" y1="114" x2="52" y2="112" stroke="#9B7FFF" stroke-width="0.8" opacity="0.3"/>
+    <line x1="8" y1="132" x2="52" y2="130" stroke="#9B7FFF" stroke-width="0.8" opacity="0.2"/>
+    <line x1="68" y1="60" x2="112" y2="58" stroke="#9B7FFF" stroke-width="0.8" opacity="0.5"/>
+    <line x1="68" y1="78" x2="112" y2="76" stroke="#9B7FFF" stroke-width="0.8" opacity="0.4"/>
+    <line x1="68" y1="96" x2="112" y2="94" stroke="#9B7FFF" stroke-width="0.8" opacity="0.3"/>
+    <line x1="68" y1="114" x2="112" y2="112" stroke="#9B7FFF" stroke-width="0.8" opacity="0.3"/>
+  </g>
+
+  <!-- Top right — music wave -->
+  <g opacity="0.12" transform="translate(950, 40)">
+    <path d="M0,40 Q20,0 40,40 Q60,80 80,40 Q100,0 120,40 Q140,80 160,40 Q180,0 200,40 Q220,80 240,40"
+      fill="none" stroke="url(#accent)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M0,55 Q20,30 40,55 Q60,80 80,55 Q100,30 120,55 Q140,80 160,55 Q180,30 200,55 Q220,80 240,55"
+      fill="none" stroke="#9B7FFF" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  </g>
+
+  <!-- Center logo mark -->
+  <!-- Outer ring glow -->
+  <circle cx="600" cy="285" r="130" fill="#7B5EFF" opacity="0.07" filter="url(#blur-lg)"/>
+  <!-- Outer ring -->
+  <circle cx="600" cy="285" r="108" fill="none" stroke="url(#accent)" stroke-width="1.2" opacity="0.3"/>
+  <!-- Inner circle -->
+  <circle cx="600" cy="285" r="90" fill="url(#accent)" opacity="0.95"/>
+  <!-- Star mark -->
+  <g transform="translate(600,285)" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.9">
+    <line x1="0" y1="-52" x2="0" y2="52"/>
+    <line x1="-52" y1="0" x2="52" y2="0"/>
+    <line x1="-37" y1="-37" x2="37" y2="37"/>
+    <line x1="37" y1="-37" x2="-37" y2="37"/>
+  </g>
+  <circle cx="600" cy="285" r="11" fill="white" opacity="0.95"/>
+  <!-- Orbit dots -->
+  <circle cx="600" cy="177" r="4.5" fill="#9B7FFF" opacity="0.6"/>
+  <circle cx="694" cy="207" r="3.5" fill="#9B7FFF" opacity="0.5"/>
+  <circle cx="707" cy="305" r="4.5" fill="#9B7FFF" opacity="0.6"/>
+  <circle cx="694" cy="363" r="3.5" fill="#9B7FFF" opacity="0.5"/>
+  <circle cx="600" cy="393" r="4.5" fill="#9B7FFF" opacity="0.6"/>
+  <circle cx="506" cy="363" r="3.5" fill="#9B7FFF" opacity="0.5"/>
+  <circle cx="493" cy="305" r="4.5" fill="#9B7FFF" opacity="0.6"/>
+  <circle cx="506" cy="207" r="3.5" fill="#9B7FFF" opacity="0.5"/>
+
+  <!-- App name — large -->
+  <text x="600" y="502" text-anchor="middle" font-family="'Segoe UI', 'Noto Sans Arabic', system-ui, sans-serif" font-size="96" font-weight="700" fill="url(#text-grd)" letter-spacing="-2" opacity="0.97">اثر</text>
+
+  <!-- Tagline -->
+  <text x="600" y="546" text-anchor="middle" font-family="'Segoe UI', system-ui, sans-serif" font-size="18" font-weight="400" fill="#5050A0" letter-spacing="3">تجربه‌های فرهنگی · کتاب · فیلم · موسیقی</text>
+
+  <!-- Credit line -->
+  <text x="600" y="596" text-anchor="middle" font-family="'Segoe UI', system-ui, sans-serif" font-size="13" font-weight="400" fill="#2A2A60" letter-spacing="1.5">ساخته شده با ❤ توسط تیم BuildBestBuildFast</text>
+
+  <!-- Bottom accent line -->
+  <rect x="460" y="612" width="280" height="1.5" rx="1" fill="url(#accent)" opacity="0.3"/>
+
+  <!-- Corner decorations -->
+  <g opacity="0.15" stroke="url(#accent)" stroke-width="1.2" fill="none">
+    <path d="M0,0 L40,0 L40,2 M0,0 L0,40 L2,40"/>
+    <path d="M1200,0 L1160,0 L1160,2 M1200,0 L1200,40 L1198,40"/>
+    <path d="M0,630 L40,630 L40,628 M0,630 L0,590 L2,590"/>
+    <path d="M1200,630 L1160,630 L1160,628 M1200,630 L1200,590 L1198,590"/>
+  </g>
+  </g>
+</svg>
