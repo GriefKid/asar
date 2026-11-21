@@ -770,13 +770,19 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
           <input class="settings-input no-drag" id="tmdb-key-input" placeholder="eyJhbGci..." type="password">
           <button class="settings-save-btn no-drag" onclick="saveSetting('tmdb-key','tmdb-key-input')">ذخیره</button>
         </div>
-        <div class="settings-row">
-          <div>
-            <div class="settings-label">Claude API Key</div>
-            <div class="settings-desc">برای خلاصه هفتگی AI — از console.anthropic.com</div>
+        <div class="settings-row" style="flex-wrap:wrap;gap:8px">
+          <div style="flex:1;min-width:180px">
+            <div class="settings-label">AI API Key</div>
+            <div class="settings-desc">
+              🟢 <b>Groq رایگان</b>: console.groq.com — کلید با <code>gsk_</code> شروع می‌شه<br>
+              🔵 DeepSeek: platform.deepseek.com — کلید با <code>sk-</code><br>
+              ⚪ Claude: console.anthropic.com — پولیه
+            </div>
           </div>
-          <input class="settings-input no-drag" id="claude-key-input" placeholder="sk-ant-api03-..." type="password">
-          <button class="settings-save-btn no-drag" onclick="saveClaudeKey()">ذخیره</button>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <input class="settings-input no-drag" id="claude-key-input" placeholder="gsk_... یا sk-..." type="password" style="min-width:200px">
+            <button class="settings-save-btn no-drag" onclick="saveClaudeKey()">ذخیره</button>
+          </div>
         </div>
       </div>
       <div class="settings-section">

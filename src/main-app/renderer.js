@@ -994,7 +994,7 @@ function updatePomoCount() {
 window.getWeeklySummary = async function(btn) {
   const key = getClaudeKey();
   if (!key) {
-    alert('برای این قابلیت نیاز به Claude API key داری. در تنظیمات وارد کن.');
+    alert('برای این قابلیت نیاز به AI API key داری.\n\n🟢 Groq رایگان: console.groq.com\n🔵 DeepSeek: platform.deepseek.com\n\nکلید رو در تنظیمات وارد کن.');
     return;
   }
 

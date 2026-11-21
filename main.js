@@ -327,29 +327,46 @@ ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
   } catch { return null; }
 });
 
-// ── IPC: Claude AI chat ────────────────────────────────────────────────
-ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey) => {
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-5-5',
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
+// ── IPC: AI chat (Claude / Groq / DeepSeek) ───────────────────────────
+ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider) => {
+  // Auto-detect provider from key prefix if not specified
+  if (!provider) {
+    if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
+    else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 60) provider = 'deepseek';
+    else provider = 'claude';
+  }
+
+  let url, headers, body, extractText;
+
+  if (provider === 'groq') {
+    url = 'https://api.groq.com/openai/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else if (provider === 'deepseek') {
+    url = 'https://api.deepseek.com/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'deepseek-chat', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else {
+    // Claude (Anthropic)
+    url = 'https://api.anthropic.com/v1/messages';
+    headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
+    body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 2048, system: systemPrompt, messages });
+    extractText = d => d.content[0].text;
+  }
+
+  const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(30000) });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
     throw new Error(errText.slice(0, 400) || `HTTP ${resp.status}`);
   }
   const data = await resp.json();
-  return data.content[0].text;
+  return extractText(data);
 });
 
 ipcMain.handle('save:textFile', async (_, content, defaultName) => {
