@@ -331,7 +331,7 @@ ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
 ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider) => {
   // Auto-detect provider from key prefix if not specified
   if (!provider) {
-    if (apiKey && apiKey.startsWith('AIza')) provider = 'gemini';
+    if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
     else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
     else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 50) provider = 'siliconflow';
     else if (apiKey && apiKey.startsWith('sk-')) provider = 'deepseek';
