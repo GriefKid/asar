@@ -332,7 +332,8 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   // Auto-detect provider from key prefix if not specified
   if (!provider) {
     if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
-    else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 60) provider = 'deepseek';
+    else if (apiKey && apiKey.startsWith('sk-') && apiKey.length < 50) provider = 'siliconflow';
+    else if (apiKey && apiKey.startsWith('sk-')) provider = 'deepseek';
     else provider = 'claude';
   }
 
@@ -342,6 +343,13 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     url = 'https://api.groq.com/openai/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
     body = JSON.stringify({ model: 'llama-3.3-70b-versatile', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    extractText = d => d.choices[0].message.content;
+
+  } else if (provider === 'siliconflow') {
+    url = 'https://api.siliconflow.cn/v1/chat/completions';
+    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    body = JSON.stringify({ model: 'deepseek-ai/DeepSeek-V3', max_tokens: 2048,
       messages: [{ role: 'system', content: systemPrompt }, ...messages] });
     extractText = d => d.choices[0].message.content;
 
