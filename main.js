@@ -199,36 +199,31 @@ ipcMain.handle('info:fetch', async (_, artist, title) => {
   }
 });
 
-// ── IPC: Cover fetch (iTunes → Deezer fallback) ───────────────────
+// ── IPC: Cover fetch (Deezer first — mzstatic CDN is geo-blocked) ─
 ipcMain.handle('cover:fetch', async (_, artist, title) => {
   const q = encodeURIComponent(`${artist} ${title}`);
 
-  // 1. iTunes
-  try {
-    const res = await fetch(`https://itunes.apple.com/search?term=${q}&media=music&limit=3`, { signal: AbortSignal.timeout(6000) });
-    const data = await res.json();
-    if (data.results?.length) return data.results[0].artworkUrl100.replace('100x100', '600x600bb');
-  } catch {}
-
-  // 2. Deezer — better coverage for Persian/Iranian music
+  // 1. Deezer track search
   try {
     const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`, { signal: AbortSignal.timeout(6000) });
     const data = await res.json();
     if (data.data?.length) return data.data[0].album?.cover_big || data.data[0].album?.cover_medium || null;
   } catch {}
 
-  // 3. Deezer search by artist only (فارسی اسم هنرمند)
-  try {
-    const qa = encodeURIComponent(artist);
-    const res = await fetch(`https://api.deezer.com/search/artist?q=${qa}&limit=1`, { signal: AbortSignal.timeout(5000) });
-    const data = await res.json();
-    const artistId = data.data?.[0]?.id;
-    if (artistId) {
-      const r2 = await fetch(`https://api.deezer.com/artist/${artistId}/top?limit=1`, { signal: AbortSignal.timeout(5000) });
-      const d2 = await r2.json();
-      return d2.data?.[0]?.album?.cover_big || null;
-    }
-  } catch {}
+  // 2. Deezer artist search (better for Persian/Iranian artists)
+  if (artist) {
+    try {
+      const qa = encodeURIComponent(artist);
+      const res = await fetch(`https://api.deezer.com/search/artist?q=${qa}&limit=1`, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      const artistId = data.data?.[0]?.id;
+      if (artistId) {
+        const r2 = await fetch(`https://api.deezer.com/artist/${artistId}/top?limit=1`, { signal: AbortSignal.timeout(5000) });
+        const d2 = await r2.json();
+        return d2.data?.[0]?.album?.cover_big || null;
+      }
+    } catch {}
+  }
 
   return null;
 });
@@ -442,7 +437,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     extractText = d => d.content[0].text;
   }
 
-  const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(30000) });
+  const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(90000) });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
     throw new Error(errText.slice(0, 400) || `HTTP ${resp.status}`);

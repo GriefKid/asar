@@ -794,7 +794,7 @@ function appendAIMsg(role, text) {
 function getAIContext() {
   const song = queue[queueIdx];
   if (!song) return 'آهنگی پخش نمیشه.';
-  const lyrics = lyrLines?.length ? lyrLines.map(l => typeof l === 'string' ? l : (l.text || '')).join('\n').slice(0, 2000) : '(ترانه‌ای لود نشده)';
+  const lyrics = lyrLines?.length ? lyrLines.map(l => typeof l === 'string' ? l : (l.text || '')).join('\n').slice(0, 800) : '(ترانه‌ای لود نشده)';
   return `Song: "${song.title}" by ${song.artist || 'Unknown'}\n\nLyrics:\n${lyrics}`;
 }
 async function sendAI() {
