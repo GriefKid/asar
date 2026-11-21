@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('api', {
   // Book reader
   openPdfFiles:      ()                    => ipcRenderer.invoke('dialog:openPdfFiles'),
   readFileBuffer:    (path)                => ipcRenderer.invoke('file:readBuffer', path),
+  // Subtitles (OpenSubtitles)
+  subtitleSearch:    (title, year, key) => ipcRenderer.invoke('subtitle:search', title, year, key),
+  subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
   // Main app — open sub-apps
   openMusicPlayer:   ()                    => ipcRenderer.invoke('app:open-music'),
   openVideoPlayer:   ()                    => ipcRenderer.invoke('app:open-video'),

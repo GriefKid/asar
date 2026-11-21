@@ -305,6 +305,44 @@ ipcMain.handle('file:readBuffer', async (_, filePath) => {
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 
+// ── IPC: OpenSubtitles search ──────────────────────────────────────────
+ipcMain.handle('subtitle:search', async (_, title, year, apiKey) => {
+  try {
+    let url = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=en&order_by=download_count`;
+    if (year) url += `&year=${year}`;
+    const res = await fetch(url, {
+      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'LifestyleApp/1.0' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.data || []).slice(0, 5).map(item => ({
+      id: item.id,
+      fileId: item.attributes?.files?.[0]?.file_id || null,
+      name: item.attributes?.release || '',
+      downloads: item.attributes?.download_count || 0,
+    })).filter(r => r.fileId);
+  } catch { return null; }
+});
+
+// ── IPC: OpenSubtitles download ────────────────────────────────────────
+ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
+  try {
+    const res = await fetch('https://api.opensubtitles.com/api/v1/download', {
+      method: 'POST',
+      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'LifestyleApp/1.0' },
+      body: JSON.stringify({ file_id: fileId }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.link) return null;
+    const srtRes = await fetch(data.link, { signal: AbortSignal.timeout(15000) });
+    if (!srtRes.ok) return null;
+    return await srtRes.text();
+  } catch { return null; }
+});
+
 ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {
   try {
     const url = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}&append_to_response=credits&language=en-US`;

@@ -41,6 +41,72 @@ function saveTmdbKey() {
   document.getElementById('setup-banner').classList.remove('show');
 }
 
+// ── OpenSubtitles key ──────────────────────────────────────────────────
+function getOsubKey() {
+  try { return localStorage.getItem('osub-key') || ''; } catch { return ''; }
+}
+
+function saveOsubKey() {
+  const key = document.getElementById('osub-key-input').value.trim();
+  if (!key) return;
+  try { localStorage.setItem('osub-key', key); } catch {}
+  document.getElementById('osub-banner').classList.remove('show');
+  // retry subtitle fetch for current video
+  if (queue[queueIdx]) autoFetchSubtitle(queue[queueIdx]);
+}
+
+// ── Auto-subtitle status ───────────────────────────────────────────────
+let subStatusTimer = null;
+
+function setSubAutoStatus(msg, type) {
+  const el = document.getElementById('sub-auto-status');
+  if (!el) return;
+  clearTimeout(subStatusTimer);
+  if (!msg) { el.classList.add('hidden'); return; }
+  el.textContent = msg;
+  el.className = 'sub-auto-status' + (type ? ' ' + type : '');
+  if (type === 'done' || type === 'error') {
+    subStatusTimer = setTimeout(() => el.classList.add('hidden'), 4000);
+  }
+}
+
+// ── Auto-fetch subtitle ────────────────────────────────────────────────
+async function autoFetchSubtitle(video) {
+  const key = getOsubKey();
+  if (!key) {
+    document.getElementById('osub-banner')?.classList.add('show');
+    return;
+  }
+
+  const title = video.title || video.fileName;
+  const year  = video.year || null;
+
+  setSubAutoStatus('🔍 جستجوی زیرنویس...', '');
+
+  const results = await window.api.subtitleSearch(title, year, key).catch(() => null);
+  if (!results?.length) {
+    setSubAutoStatus('زیرنویس پیدا نشد', 'error');
+    return;
+  }
+
+  setSubAutoStatus('📥 دانلود زیرنویس...', '');
+  const srtText = await window.api.subtitleDownload(results[0].fileId, key).catch(() => null);
+  if (!srtText) {
+    setSubAutoStatus('دانلود ناموفق بود', 'error');
+    return;
+  }
+
+  subtitles = parseSrt(srtText);
+  if (!subtitles.length) {
+    setSubAutoStatus('زیرنویس خوانده نشد', 'error');
+    return;
+  }
+
+  setSubAutoStatus(`🌐 ترجمه ${subtitles.length} خط...`, '');
+  await translateSubtitles();
+  setSubAutoStatus('✓ زیرنویس آماده‌ست', 'done');
+}
+
 // ── Collections ────────────────────────────────────────────────────────
 function renderColls() {
   const el = document.getElementById('colls-list');
@@ -212,10 +278,12 @@ function loadVideo(video) {
   // reset subtitles
   subtitles = [];
   hideSubtitle();
+  setSubAutoStatus('', '');
 
   // load duration later
   currentMovieInfo = video;
   fetchMovieDetails(video);
+  autoFetchSubtitle(video);
 }
 
 function renderMetaTags(video) {
