@@ -223,18 +223,43 @@ async function renderPdfCanvas(container) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     const page = await pdfDoc.getPage(currentPage);
-    const viewport = page.getViewport({ scale: 1.5 });
+    const scale = Math.min(1.8, (container.clientWidth - 40) / page.getViewport({ scale: 1 }).width);
+    const viewport = page.getViewport({ scale });
+
     const wrap = document.createElement('div');
     wrap.className = 'pdf-page-wrap';
+    wrap.style.width = viewport.width + 'px';
+
+    // canvas
     const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
+    canvas.width  = viewport.width;
     canvas.height = viewport.height;
     wrap.appendChild(canvas);
+
+    // text layer (enables selection & highlight)
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    textLayerDiv.style.width  = viewport.width  + 'px';
+    textLayerDiv.style.height = viewport.height + 'px';
+    wrap.appendChild(textLayerDiv);
+
     container.innerHTML = '';
     container.appendChild(wrap);
     container.appendChild(makePageNum());
 
+    // render canvas
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    // render text layer
+    const textContent = await page.getTextContent();
+    await pdfjsLib.renderTextLayer({
+      textContent,
+      container: textLayerDiv,
+      viewport,
+      textDivs: []
+    }).promise;
+
+    wrap.addEventListener('mouseup', onTextSelect);
   } catch (e) {
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
@@ -358,7 +383,7 @@ function hideHlTooltip() {
 }
 
 document.addEventListener('mousedown', e => {
-  if (!e.target.closest('#hl-tooltip') && !e.target.closest('.text-page')) {
+  if (!e.target.closest('#hl-tooltip') && !e.target.closest('.text-page') && !e.target.closest('.textLayer')) {
     hideHlTooltip();
   }
 });
@@ -726,6 +751,50 @@ async function openBookInfo() {
 function closeBookInfo() {
   document.getElementById('book-info-modal').classList.remove('show');
 }
+
+// ── Drag & Drop ────────────────────────────────────────────────────────
+const dropOverlay = document.getElementById('drop-overlay');
+let dragCounter = 0;
+
+document.addEventListener('dragenter', e => {
+  e.preventDefault();
+  const hasPdf = [...(e.dataTransfer?.items || [])].some(i => i.type === 'application/pdf' || i.kind === 'file');
+  if (!hasPdf) return;
+  dragCounter++;
+  dropOverlay.classList.add('show');
+});
+
+document.addEventListener('dragleave', e => {
+  dragCounter--;
+  if (dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove('show'); }
+});
+
+document.addEventListener('dragover', e => { e.preventDefault(); });
+
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  dragCounter = 0;
+  dropOverlay.classList.remove('show');
+  const files = [...(e.dataTransfer?.files || [])].filter(f =>
+    f.name.toLowerCase().endsWith('.pdf')
+  );
+  if (!files.length) return;
+
+  const newPaths = [];
+  for (const f of files) {
+    const p = f.path;
+    if (!p) continue;
+    if (state.books.find(b => b.path === p)) continue;
+    const fileName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
+    state.books.push({ path: p, title: fileName, author: '', totalPages: 0, lastPage: 1, cover: null });
+    newPaths.push(p);
+  }
+  if (!newPaths.length) return;
+  saveState();
+  renderLibrary();
+  if (newPaths.length === 1) openBook(newPaths[0]);
+  for (const p of newPaths) fetchAndSaveBookMeta(p);
+});
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
