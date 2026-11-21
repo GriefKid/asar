@@ -123,15 +123,30 @@ ipcMain.handle('audio:getMeta', async (_, filePath) => {
 
 // ── IPC: Lyrics fetch ──────────────────────────────────────────────
 ipcMain.handle('lyrics:fetch', async (_, artist, title) => {
-  try {
-    const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.lyrics || null;
-  } catch {
-    return null;
-  }
+  const tryFetch = async (url, extract) => {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return extract(data) || null;
+    } catch { return null; }
+  };
+
+  // 1. lrclib.net — better coverage including non-English
+  const lrclib = await tryFetch(
+    `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`,
+    d => d.plainLyrics
+  );
+  if (lrclib) return lrclib;
+
+  // 2. lyrics.ovh fallback
+  const ovh = await tryFetch(
+    `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
+    d => d.lyrics
+  );
+  if (ovh) return ovh;
+
+  return null;
 });
 
 // ── IPC: Translate ─────────────────────────────────────────────────

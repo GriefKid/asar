@@ -520,7 +520,10 @@ async function fetchLyrics(song) {
   try {
     const raw = await window.api.fetchLyrics(song.artist, song.title);
     if (!raw) {
-      body.innerHTML = `<div class="lyr-no-data">متن آهنگ پیدا نشد.</div>`;
+      body.innerHTML = `<div class="lyr-no-data">
+        متن آهنگ پیدا نشد.
+        <button class="ai-lyr-btn" onclick="fetchLyricsWithAI()">🤖 جستجو با هوش مصنوعی</button>
+      </div>`;
       lyrFetching = false;
       return;
     }
@@ -533,6 +536,35 @@ async function fetchLyrics(song) {
     body.innerHTML = `<div class="lyr-no-data">خطا در بارگذاری متن آهنگ.</div>`;
   }
   lyrFetching = false;
+}
+
+async function fetchLyricsWithAI() {
+  const body = document.getElementById('lyr-body');
+  if (!body || !currentSong) return;
+  body.innerHTML = `<div class="lyr-loading"><span>هوش مصنوعی داره دنبال متن می‌گرده...</span></div>`;
+  try {
+    const cfg = JSON.parse(localStorage.getItem('asar-ai-config') || '{}');
+    if (!cfg.apiKey) {
+      body.innerHTML = `<div class="lyr-no-data">برای جستجو با AI، ابتدا کلید API رو در تنظیمات وارد کن.</div>`;
+      return;
+    }
+    const prompt = `متن کامل آهنگ "${currentSong.title}" از "${currentSong.artist}" رو بنویس. فقط متن آهنگ بنویس، بدون توضیح اضافه. هر خط یک سطر جداگانه باشه.`;
+    const result = await window.api.claudeChat(
+      'You are a lyrics expert. Provide the complete, accurate lyrics when asked. Only output the lyrics text, line by line, with no extra explanation.',
+      [{ role: 'user', content: prompt }],
+      cfg.apiKey, cfg.provider || null
+    );
+    if (result && result.length > 50) {
+      lyrLines = result.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      lyrFaLines = [];
+      renderLyrics();
+      translateLyricsChunked(lyrLines);
+    } else {
+      body.innerHTML = `<div class="lyr-no-data">هوش مصنوعی متن این آهنگ رو پیدا نکرد.</div>`;
+    }
+  } catch {
+    body.innerHTML = `<div class="lyr-no-data">خطا در جستجو با هوش مصنوعی.</div>`;
+  }
 }
 
 async function translateLyricsChunked(lines) {

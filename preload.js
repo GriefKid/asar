@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   subtitleSearch:    (title, year, key) => ipcRenderer.invoke('subtitle:search', title, year, key),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
   // Claude AI
-  claudeChat: (sys, msgs, key) => ipcRenderer.invoke('claude:chat', sys, msgs, key),
+  claudeChat: (sys, msgs, key, provider) => ipcRenderer.invoke('claude:chat', sys, msgs, key, provider),
   saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
   // Window controls
   closeWindow:     () => ipcRenderer.invoke('window:close'),
