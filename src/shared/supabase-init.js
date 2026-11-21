@@ -11,6 +11,7 @@
     anonKey: 'sb_publishable_3xwD6HdcXm8PrLgmcHtGyw_s8pciLHw'
   };
 
+
   window.getSupabaseConfig = function() {
     try {
       const s = localStorage.getItem('asar-supabase-config');
