@@ -132,19 +132,33 @@ ipcMain.handle('lyrics:fetch', async (_, artist, title) => {
     } catch { return null; }
   };
 
-  // 1. lrclib.net — better coverage including non-English
-  const lrclib = await tryFetch(
-    `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`,
-    d => d.plainLyrics
-  );
-  if (lrclib) return lrclib;
+  // 1. lrclib.net — with artist+title
+  if (artist && title) {
+    const lrclib = await tryFetch(
+      `https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`,
+      d => d.plainLyrics
+    );
+    if (lrclib) return lrclib;
+  }
 
-  // 2. lyrics.ovh fallback
-  const ovh = await tryFetch(
-    `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
-    d => d.lyrics
-  );
-  if (ovh) return ovh;
+  // 2. lrclib search — works with title only too
+  if (title) {
+    const q = artist ? `${artist} ${title}` : title;
+    const search = await tryFetch(
+      `https://lrclib.net/api/search?q=${encodeURIComponent(q)}`,
+      d => Array.isArray(d) && d[0]?.plainLyrics ? d[0].plainLyrics : null
+    );
+    if (search) return search;
+  }
+
+  // 3. lyrics.ovh fallback (needs artist)
+  if (artist && title) {
+    const ovh = await tryFetch(
+      `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
+      d => d.lyrics
+    );
+    if (ovh) return ovh;
+  }
 
   return null;
 });

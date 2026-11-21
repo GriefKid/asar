@@ -507,18 +507,18 @@ function updateBgGlow(coverUrl) {
 async function fetchLyrics(song) {
   const body = document.getElementById('lyr-body');
   if (!body) return;
-  if (!song.artist || song.title === song.fileName) {
-    body.innerHTML = `<div class="lyr-no-data">متن آهنگ پیدا نشد.<br>نام فایل باید به شکل «خواننده - عنوان» باشه.</div>`;
-    return;
-  }
 
   body.innerHTML = `<div class="lyr-loading"><span>در حال جستجوی متن...</span></div>`;
   lyrLines = [];
   lyrFaLines = [];
   lyrFetching = true;
 
+  // Use whatever info we have — title-only search if no artist
+  const artist = song.artist || '';
+  const title = song.title || song.fileName || '';
+
   try {
-    const raw = await window.api.fetchLyrics(song.artist, song.title);
+    const raw = await window.api.fetchLyrics(artist, title);
     if (!raw) {
       body.innerHTML = `<div class="lyr-no-data">
         متن آهنگ پیدا نشد.
@@ -549,7 +549,8 @@ async function fetchLyricsWithAI() {
   }
   body.innerHTML = `<div class="lyr-loading"><span>هوش مصنوعی داره دنبال متن می‌گرده...</span></div>`;
   try {
-    const prompt = `Write the complete lyrics of the song "${song.title}" by "${song.artist}". Output ONLY the lyrics, line by line, no explanations or headers.`;
+    const artistPart = song.artist ? ` by "${song.artist}"` : '';
+    const prompt = `Write the complete lyrics of the song "${song.title || song.fileName}"${artistPart}. Output ONLY the lyrics, line by line, no explanations or headers.`;
     const result = await window.api.claudeChat(
       'You are a lyrics database. When asked for lyrics, output only the song lyrics text, line by line. No explanations, no headers, just the lyrics.',
       [{ role: 'user', content: prompt }],
