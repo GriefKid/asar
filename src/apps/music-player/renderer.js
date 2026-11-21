@@ -643,11 +643,80 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
+// ── Claude AI Panel ───────────────────────────────────────────────────
+let aiOpen = false, aiHistory = [], aiCtxOn = false;
+const AI_CTX_LABEL_MUSIC = 'اضافه کردن اطلاعات آهنگ';
+
+function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
+function saveAIKey() {
+  const k = document.getElementById('ai-key-inp').value.trim();
+  if (!k) return;
+  try { localStorage.setItem('claude-api-key', k); } catch {}
+  document.getElementById('ai-key-box').style.display = 'none';
+}
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiOpen);
+  if (aiOpen) {
+    if (!getAIKey()) document.getElementById('ai-key-box').style.display = '';
+    setTimeout(() => document.getElementById('ai-textarea')?.focus(), 300);
+  }
+}
+function toggleAICtx() {
+  aiCtxOn = !aiCtxOn;
+  document.getElementById('ai-ctx-btn').classList.toggle('on', aiCtxOn);
+  document.getElementById('ai-ctx-lbl').textContent = aiCtxOn ? 'context اضافه شد ✓' : AI_CTX_LABEL_MUSIC;
+}
+function onAIKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); } }
+function appendAIMsg(role, text) {
+  const msgs = document.getElementById('ai-msgs');
+  msgs.querySelector('.ai-empty')?.remove();
+  const d = document.createElement('div');
+  d.className = `ai-bubble ${role}`;
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+function getAIContext() {
+  const song = queue[queueIdx];
+  if (!song) return 'آهنگی پخش نمیشه.';
+  const lyrics = lyrLines?.length ? lyrLines.map(l => typeof l === 'string' ? l : (l.text || '')).join('\n').slice(0, 2000) : '(ترانه‌ای لود نشده)';
+  return `Song: "${song.title}" by ${song.artist || 'Unknown'}\n\nLyrics:\n${lyrics}`;
+}
+async function sendAI() {
+  const ta = document.getElementById('ai-textarea');
+  const text = ta.value.trim();
+  if (!text) return;
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  ta.value = '';
+  appendAIMsg('user', text);
+  const content = aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
+  aiHistory.push({ role: 'user', content });
+  if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  document.getElementById('ai-send-btn').disabled = true;
+  try {
+    const sys = `You are a helpful AI assistant in a music player app. Help the user understand lyrics, learn about the song, or discuss music. Be concise. Match user's language (Persian or English).`;
+    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    typingDiv.classList.remove('typing'); typingDiv.textContent = reply;
+    aiHistory.push({ role: 'assistant', content: reply });
+    if (aiCtxOn) { aiCtxOn = false; document.getElementById('ai-ctx-btn').classList.remove('on'); document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_MUSIC; }
+  } catch (err) {
+    typingDiv.classList.remove('typing'); typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${String(err.message).slice(0, 200)}`; aiHistory.pop();
+  }
+  document.getElementById('ai-send-btn').disabled = false;
+  document.getElementById('ai-msgs').scrollTop = document.getElementById('ai-msgs').scrollHeight;
+}
+
 // ── Esc → back to main app ─────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show');
     if (openModal) { openModal.classList.remove('show'); return; }
+    if (aiOpen) { toggleAI(); return; }
     window.api.closeWindow();
   }
 });

@@ -450,6 +450,78 @@ vid.addEventListener('pause', () => {
   clearTimeout(hideCtrlTimer);
 });
 
+// ── Claude AI Panel ───────────────────────────────────────────────────
+let aiOpen = false, aiHistory = [], aiCtxOn = false;
+const AI_CTX_LABEL_VID = 'اضافه کردن اطلاعات صحنه';
+
+function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
+function saveAIKey() {
+  const k = document.getElementById('ai-key-inp').value.trim();
+  if (!k) return;
+  try { localStorage.setItem('claude-api-key', k); } catch {}
+  document.getElementById('ai-key-box').style.display = 'none';
+}
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiOpen);
+  if (aiOpen) {
+    if (!getAIKey()) document.getElementById('ai-key-box').style.display = '';
+    setTimeout(() => document.getElementById('ai-textarea')?.focus(), 300);
+  }
+}
+function toggleAICtx() {
+  aiCtxOn = !aiCtxOn;
+  document.getElementById('ai-ctx-btn').classList.toggle('on', aiCtxOn);
+  document.getElementById('ai-ctx-lbl').textContent = aiCtxOn ? 'context اضافه شد ✓' : AI_CTX_LABEL_VID;
+}
+function onAIKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); } }
+function appendAIMsg(role, text) {
+  const msgs = document.getElementById('ai-msgs');
+  msgs.querySelector('.ai-empty')?.remove();
+  const d = document.createElement('div');
+  d.className = `ai-bubble ${role}`;
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+function getAIContext() {
+  const v = queue[queueIdx];
+  if (!v) return 'ویدئویی پخش نمیشه.';
+  const name = v.path ? v.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') : 'Unknown';
+  const secs = Math.floor(vid.currentTime);
+  const timeStr = `${Math.floor(secs/3600).toString().padStart(2,'0')}:${(Math.floor(secs/60)%60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
+  const curSub = subtitles.find(s => vid.currentTime >= s.start && vid.currentTime <= s.end);
+  const info = currentMovieInfo ? `\nMovie: ${currentMovieInfo.title} (${currentMovieInfo.release_date?.slice(0,4)||''})\nOverview: ${(currentMovieInfo.overview||'').slice(0,300)}` : '';
+  return `Video: "${name}"\nTimestamp: ${timeStr}${info}\nCurrent subtitle: "${curSub?.en || ''}"`;
+}
+async function sendAI() {
+  const ta = document.getElementById('ai-textarea');
+  const text = ta.value.trim();
+  if (!text) return;
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  ta.value = '';
+  appendAIMsg('user', text);
+  const content = aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
+  aiHistory.push({ role: 'user', content });
+  if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  document.getElementById('ai-send-btn').disabled = true;
+  try {
+    const sys = `You are a helpful AI assistant in a video player app. Help the user understand the movie/show they are watching. Be concise. Match user's language (Persian or English).`;
+    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    typingDiv.classList.remove('typing'); typingDiv.textContent = reply;
+    aiHistory.push({ role: 'assistant', content: reply });
+    if (aiCtxOn) { aiCtxOn = false; document.getElementById('ai-ctx-btn').classList.remove('on'); document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_VID; }
+  } catch (err) {
+    typingDiv.classList.remove('typing'); typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${String(err.message).slice(0, 200)}`; aiHistory.pop();
+  }
+  document.getElementById('ai-send-btn').disabled = false;
+  document.getElementById('ai-msgs').scrollTop = document.getElementById('ai-msgs').scrollHeight;
+}
+
 // click on video area to toggle play (but not on controls)
 vid.addEventListener('click', togglePlay);
 document.addEventListener('keydown', e => {
@@ -457,6 +529,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show,.sub-modal.show');
     if (openModal) { openModal.classList.remove('show'); return; }
+    if (aiOpen) { toggleAI(); return; }
     window.api.closeWindow();
     return;
   }

@@ -305,6 +305,31 @@ ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
   } catch { return null; }
 });
 
+// ── IPC: Claude AI chat ────────────────────────────────────────────────
+ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey) => {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-5-5',
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(errText.slice(0, 400) || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.content[0].text;
+});
+
 ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {
   try {
     const url = `https://api.themoviedb.org/3/movie/${movieId}?api_key=${apiKey}&append_to_response=credits&language=en-US`;

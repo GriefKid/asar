@@ -18,6 +18,9 @@ let pendingHighlight = null;  // {text, page, color}
 let pendingRectAnnot = null;
 let currentRectColor = 'y';
 let activeRectPreview = null;
+let zoomLevel = 1.0;
+let srchMatches = [];
+let srchIdx = 0;
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
@@ -226,7 +229,7 @@ async function renderPdfCanvas(container) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     const page = await pdfDoc.getPage(currentPage);
-    const scale = Math.min(1.8, (container.clientWidth - 40) / page.getViewport({ scale: 1 }).width);
+    const scale = ((container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
     const viewport = page.getViewport({ scale });
 
     const wrap = document.createElement('div');
@@ -456,6 +459,70 @@ function applyHighlightsToElement(el, text) {
     }
   });
   el.innerHTML = html;
+}
+
+// ── Zoom ───────────────────────────────────────────────────────────────
+function adjustZoom(delta) {
+  zoomLevel = Math.max(0.5, Math.min(3.0, zoomLevel + delta));
+  document.getElementById('zoom-val').textContent = Math.round(zoomLevel * 100) + '%';
+  if (pdfDoc && readMode === 'original') renderCurrentPage();
+}
+
+// ── PDF Search ─────────────────────────────────────────────────────────
+function openPdfSearch() {
+  document.getElementById('pdf-search-bar').classList.add('show');
+  document.getElementById('pdf-search-inp').focus();
+}
+
+function closePdfSearch() {
+  document.getElementById('pdf-search-bar').classList.remove('show');
+  document.getElementById('pdf-search-inp').value = '';
+  clearSrch();
+}
+
+function clearSrch() {
+  document.querySelectorAll('.textLayer .srch-match,.textLayer .srch-cur')
+    .forEach(el => el.classList.remove('srch-match','srch-cur'));
+  srchMatches = []; srchIdx = 0;
+  document.getElementById('pdf-search-info').textContent = '';
+}
+
+function onPdfSearch(q) {
+  clearSrch();
+  if (!q.trim()) return;
+  const ql = q.toLowerCase();
+  document.querySelectorAll('.textLayer span').forEach(sp => {
+    if (sp.textContent.toLowerCase().includes(ql)) {
+      sp.classList.add('srch-match');
+      srchMatches.push(sp);
+    }
+  });
+  if (srchMatches.length) {
+    srchIdx = 0;
+    srchMatches[0].classList.add('srch-cur');
+    srchMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  updateSrchInfo();
+}
+
+function pdfSearchNav(dir) {
+  if (!srchMatches.length) return;
+  srchMatches[srchIdx].classList.remove('srch-cur');
+  srchIdx = (srchIdx + dir + srchMatches.length) % srchMatches.length;
+  srchMatches[srchIdx].classList.add('srch-cur');
+  srchMatches[srchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  updateSrchInfo();
+}
+
+function updateSrchInfo() {
+  const inp = document.getElementById('pdf-search-inp').value;
+  document.getElementById('pdf-search-info').textContent =
+    srchMatches.length ? `${srchIdx + 1} / ${srchMatches.length}` : (inp ? 'نتیجه‌ای نیافت' : '');
+}
+
+function onPdfSearchKey(e) {
+  if (e.key === 'Enter') { e.shiftKey ? pdfSearchNav(-1) : pdfSearchNav(1); }
+  if (e.key === 'Escape') closePdfSearch();
 }
 
 // ── Rect Annotations ───────────────────────────────────────────────────
@@ -769,11 +836,14 @@ function updateProgress() {
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === 'Escape') {
+    if (document.getElementById('pdf-search-bar').classList.contains('show')) { closePdfSearch(); return; }
     const openModal = document.querySelector('.modal-bg.show');
     if (openModal) { openModal.classList.remove('show'); return; }
+    if (aiOpen) { toggleAI(); return; }
     window.api.closeWindow();
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') { e.preventDefault(); openPdfSearch(); return; }
   if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
     e.preventDefault();
     if (e.code === 'ArrowRight') prevPage();
@@ -938,6 +1008,93 @@ async function openBookInfo() {
 
 function closeBookInfo() {
   document.getElementById('book-info-modal').classList.remove('show');
+}
+
+// ── Claude AI Panel ───────────────────────────────────────────────────
+let aiOpen = false;
+let aiHistory = [];
+let aiCtxOn = false;
+const AI_CTX_LABEL_BOOK = 'اضافه کردن محتوای صفحه';
+
+function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
+
+function saveAIKey() {
+  const k = document.getElementById('ai-key-inp').value.trim();
+  if (!k) return;
+  try { localStorage.setItem('claude-api-key', k); } catch {}
+  document.getElementById('ai-key-box').style.display = 'none';
+}
+
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiOpen);
+  if (aiOpen) {
+    if (!getAIKey()) document.getElementById('ai-key-box').style.display = '';
+    setTimeout(() => document.getElementById('ai-textarea')?.focus(), 300);
+  }
+}
+
+function toggleAICtx() {
+  aiCtxOn = !aiCtxOn;
+  document.getElementById('ai-ctx-btn').classList.toggle('on', aiCtxOn);
+  document.getElementById('ai-ctx-lbl').textContent = aiCtxOn ? 'context اضافه شد ✓' : AI_CTX_LABEL_BOOK;
+}
+
+function onAIKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); }
+}
+
+function appendAIMsg(role, text) {
+  const msgs = document.getElementById('ai-msgs');
+  msgs.querySelector('.ai-empty')?.remove();
+  const d = document.createElement('div');
+  d.className = `ai-bubble ${role}`;
+  d.textContent = text;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+
+function getAIContext() {
+  if (!pdfDoc || !currentBookPath) return 'هیچ کتابی باز نیست.';
+  const book = state.books.find(b => b.path === currentBookPath);
+  const spans = document.querySelectorAll('.textLayer span');
+  const text = [...spans].map(s => s.textContent).join(' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
+  return `Book: "${book?.title || 'Unknown'}"\nPage ${currentPage} of ${totalPages}:\n${text || '(متنی استخراج نشد)'}`;
+}
+
+async function sendAI() {
+  const ta = document.getElementById('ai-textarea');
+  const text = ta.value.trim();
+  if (!text) return;
+  const key = getAIKey();
+  if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
+  ta.value = '';
+  appendAIMsg('user', text);
+  const content = aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
+  aiHistory.push({ role: 'user', content });
+  if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
+  const typingDiv = appendAIMsg('bot typing', '...');
+  document.getElementById('ai-send-btn').disabled = true;
+  try {
+    const sys = `You are a helpful AI assistant in a book reader app. Help the user understand or analyze the content they are reading. Be concise. Match user's language (Persian or English).`;
+    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    typingDiv.classList.remove('typing');
+    typingDiv.textContent = reply;
+    aiHistory.push({ role: 'assistant', content: reply });
+    if (aiCtxOn) {
+      aiCtxOn = false;
+      document.getElementById('ai-ctx-btn').classList.remove('on');
+      document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_BOOK;
+    }
+  } catch (err) {
+    typingDiv.classList.remove('typing');
+    typingDiv.style.color = 'var(--err)';
+    typingDiv.textContent = `خطا: ${String(err.message).slice(0, 200)}`;
+    aiHistory.pop();
+  }
+  document.getElementById('ai-send-btn').disabled = false;
+  document.getElementById('ai-msgs').scrollTop = document.getElementById('ai-msgs').scrollHeight;
 }
 
 // ── Drag & Drop ────────────────────────────────────────────────────────

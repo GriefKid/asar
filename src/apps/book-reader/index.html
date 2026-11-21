@@ -282,6 +282,87 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .rect-popup-note:focus{border-color:var(--accent-mid)}
 .rect-popup-actions{display:flex;gap:6px;justify-content:flex-end}
 
+/* ── PDF search bar ── */
+.pdf-search-bar{display:none;padding:7px 14px;background:var(--bg2);border-bottom:1px solid var(--bd);
+  align-items:center;gap:8px;flex-shrink:0;direction:ltr}
+.pdf-search-bar.show{display:flex}
+.pdf-search-inp{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:5px 10px;color:var(--t1);font-size:13px;outline:none;font-family:'Inter',sans-serif;
+  transition:border-color .15s}
+.pdf-search-inp:focus{border-color:var(--accent-mid)}
+.pdf-search-info{font-size:11.5px;color:var(--t3);min-width:56px;text-align:center;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.pdf-search-nav{width:27px;height:27px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:all .13s;font-size:13px}
+.pdf-search-nav:hover{background:var(--bg4);color:var(--t1)}
+.textLayer .srch-match{background:rgba(255,214,0,.35)!important;border-radius:1px}
+.textLayer .srch-cur{background:rgba(255,140,0,.65)!important;outline:1px solid rgba(255,140,0,.85)}
+
+/* ── Zoom controls ── */
+.zoom-ctrl{display:flex;align-items:center;gap:5px}
+.zoom-val{font-size:12px;color:var(--t3);min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* ── Claude AI Panel ── */
+.ai-fab{position:fixed;bottom:80px;right:16px;width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#a082ff);border:none;cursor:pointer;z-index:85;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(123,94,255,.5);transition:all .2s}
+.ai-fab:hover{transform:scale(1.1)}
+.ai-fab-icon{font-size:19px;line-height:1;color:#fff}
+.ai-panel{position:fixed;top:0;right:0;width:340px;height:100%;
+  background:rgba(5,5,18,.97);border-left:1px solid var(--bd2);z-index:84;
+  display:flex;flex-direction:column;
+  transform:translateX(102%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow:-6px 0 40px rgba(0,0,0,.8)}
+.ai-panel.open{transform:translateX(0)}
+.ai-ph{padding:14px 14px 10px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ai-ph-title{display:flex;align-items:center;gap:8px;
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a082ff)}
+.ai-ph-close{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .13s}
+.ai-ph-close:hover{color:var(--t1)}
+.ai-key-box{padding:12px 14px;border-bottom:1px solid var(--bd);direction:rtl;flex-shrink:0}
+.ai-key-label{font-size:11.5px;color:var(--t3);margin-bottom:7px;line-height:1.6}
+.ai-key-row{display:flex;gap:6px}
+.ai-key-inp{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:6px 9px;color:var(--t1);font-size:12px;outline:none;direction:ltr;
+  font-family:monospace;transition:border-color .15s}
+.ai-key-inp:focus{border-color:var(--accent-mid)}
+.ai-key-save{padding:6px 11px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;font-size:12px;font-family:'Space Grotesk',sans-serif;white-space:nowrap}
+.ai-key-save:hover{background:#8B6EFF}
+.ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+.ai-msgs::-webkit-scrollbar{width:3px}
+.ai-msgs::-webkit-scrollbar-thumb{background:var(--bg4)}
+.ai-bubble{max-width:90%;padding:8px 12px;border-radius:11px;font-size:12.5px;
+  line-height:1.65;word-break:break-word;white-space:pre-wrap}
+.ai-bubble.user{align-self:flex-end;background:var(--accent);color:#fff;
+  border-radius:11px 11px 3px 11px}
+.ai-bubble.bot{align-self:flex-start;background:var(--bg3);color:var(--t1);
+  border-radius:3px 11px 11px 11px;border:1px solid var(--bd)}
+.ai-bubble.typing{color:var(--t3);font-style:italic}
+.ai-empty{text-align:center;color:var(--t3);font-size:12px;direction:rtl;padding:24px 12px;line-height:1.9}
+.ai-ctx-bar{padding:7px 12px;border-top:1px solid var(--bd);border-bottom:1px solid var(--bd);flex-shrink:0}
+.ai-ctx-btn{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:8px;
+  background:var(--bg3);border:1px solid var(--bd);color:var(--t2);cursor:pointer;
+  font-size:12px;font-family:'Space Grotesk',sans-serif;transition:all .13s;width:100%}
+.ai-ctx-btn:hover{background:var(--bg4);color:var(--t1)}
+.ai-ctx-btn.on{border-color:var(--accent-mid);color:var(--accent);background:var(--accent-lo)}
+.ai-input-row{padding:9px;display:flex;gap:6px;align-items:flex-end;flex-shrink:0}
+.ai-textarea{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:9px;
+  padding:7px 11px;color:var(--t1);font-size:12.5px;direction:rtl;outline:none;
+  font-family:'Inter',sans-serif;resize:none;min-height:36px;max-height:110px;
+  transition:border-color .15s;line-height:1.5}
+.ai-textarea:focus{border-color:var(--accent-mid)}
+.ai-send-btn{width:34px;height:34px;border-radius:9px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:all .15s;flex-shrink:0}
+.ai-send-btn:hover{background:#8B6EFF}
+.ai-send-btn:disabled{opacity:.35;cursor:not-allowed}
+
 /* highlight tooltip */
 .hl-tooltip{position:fixed;background:var(--bg2);border:1px solid var(--bd2);border-radius:10px;
   padding:6px;display:none;gap:4px;box-shadow:0 8px 24px rgba(0,0,0,.7);z-index:50}
@@ -340,6 +421,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <button class="rmode-btn" data-mode="both" onclick="setReadMode(this,'both')">هر دو</button>
       <button class="rmode-btn" data-mode="persian" onclick="setReadMode(this,'persian')">فارسی</button>
     </div>
+    <!-- search -->
+    <button class="tb-btn no-drag" onclick="openPdfSearch()" title="جستجو Ctrl+F">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+    </button>
+    <!-- zoom -->
+    <div class="zoom-ctrl no-drag">
+      <button class="font-btn" onclick="adjustZoom(-0.25)">−</button>
+      <span class="zoom-val" id="zoom-val">100%</span>
+      <button class="font-btn" onclick="adjustZoom(0.25)">+</button>
+    </div>
     <!-- translate all -->
     <button class="trans-btn no-drag" id="trans-all-btn" onclick="translateAllPages()">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802"/></svg>
@@ -351,6 +442,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <button class="theme-btn" data-theme="sepia" onclick="setTheme(this,'sepia','#2C2416','#D4C9A8','rgba(0,0,0,.5)')">سپیا</button>
       <button class="theme-btn" data-theme="light" onclick="setTheme(this,'light','#F9F7F3','#1A1A1A','rgba(0,0,0,.2)')">روشن</button>
     </div>
+  </div>
+
+  <!-- PDF Search bar -->
+  <div class="pdf-search-bar" id="pdf-search-bar">
+    <input class="pdf-search-inp" id="pdf-search-inp" placeholder="جستجو در صفحه..." oninput="onPdfSearch(this.value)" onkeydown="onPdfSearchKey(event)">
+    <span class="pdf-search-info" id="pdf-search-info"></span>
+    <button class="pdf-search-nav" onclick="pdfSearchNav(-1)">↑</button>
+    <button class="pdf-search-nav" onclick="pdfSearchNav(1)">↓</button>
+    <button class="pdf-search-nav" onclick="closePdfSearch()">✕</button>
   </div>
 
   <!-- Translation progress bar -->
@@ -450,6 +550,37 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <div id="binfo-desc-en" style="font-size:13px;color:var(--t2);line-height:1.7;direction:ltr;text-align:left;margin-bottom:10px;max-height:140px;overflow-y:auto"></div>
     <div id="binfo-desc-fa" style="font-size:13px;color:var(--t1);line-height:1.8;border-top:1px solid var(--bd);padding-top:10px;max-height:140px;overflow-y:auto"></div>
     <div id="binfo-loading" style="font-size:12.5px;color:var(--t3);text-align:center;padding:8px 0"></div>
+  </div>
+</div>
+
+<!-- AI TOGGLE & PANEL -->
+<button class="ai-fab no-drag" id="ai-fab" onclick="toggleAI()">
+  <span class="ai-fab-icon">✦</span>
+</button>
+<div class="ai-panel" id="ai-panel">
+  <div class="ai-ph">
+    <div class="ai-ph-title"><div class="ai-dot"></div>Claude</div>
+    <button class="ai-ph-close" onclick="toggleAI()">✕</button>
+  </div>
+  <div class="ai-key-box" id="ai-key-box" style="display:none">
+    <div class="ai-key-label">برای چت با Claude نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">از console.anthropic.com بگیر</span></div>
+    <div class="ai-key-row">
+      <input class="ai-key-inp" id="ai-key-inp" type="password" placeholder="sk-ant-api03-...">
+      <button class="ai-key-save" onclick="saveAIKey()">ذخیره</button>
+    </div>
+  </div>
+  <div class="ai-msgs" id="ai-msgs">
+    <div class="ai-empty">سلام ✦<br>درباره این کتاب هر سوالی داری بپرس.</div>
+  </div>
+  <div class="ai-ctx-bar">
+    <button class="ai-ctx-btn" id="ai-ctx-btn" onclick="toggleAICtx()">
+      <span>📄</span>
+      <span id="ai-ctx-lbl">اضافه کردن محتوای صفحه</span>
+    </button>
+  </div>
+  <div class="ai-input-row">
+    <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
+    <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
   </div>
 </div>
 

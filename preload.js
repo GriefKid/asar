@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('api', {
   // Subtitles (OpenSubtitles)
   subtitleSearch:    (title, year, key) => ipcRenderer.invoke('subtitle:search', title, year, key),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
+  // Claude AI
+  claudeChat: (sys, msgs, key) => ipcRenderer.invoke('claude:chat', sys, msgs, key),
   // Window controls
   closeWindow:     () => ipcRenderer.invoke('window:close'),
   quitApp:         () => ipcRenderer.invoke('app:quit'),

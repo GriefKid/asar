@@ -267,6 +267,63 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   padding:10px 13px;color:var(--t1);font-size:14px;direction:rtl;
   font-family:'Space Grotesk',sans-serif;outline:none;transition:border-color .15s;margin-bottom:14px}
 .newcoll-input:focus{border-color:var(--accent-mid)}
+/* ── Claude AI Panel ── */
+.ai-fab{position:fixed;bottom:80px;right:16px;width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#a082ff);border:none;cursor:pointer;z-index:85;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(123,94,255,.5);transition:all .2s}
+.ai-fab:hover{transform:scale(1.1)}
+.ai-fab-icon{font-size:19px;line-height:1;color:#fff}
+.ai-panel{position:fixed;top:0;right:0;width:340px;height:100%;
+  background:rgba(5,5,18,.97);border-left:1px solid var(--bd2);z-index:84;
+  display:flex;flex-direction:column;
+  transform:translateX(102%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  box-shadow:-6px 0 40px rgba(0,0,0,.8)}
+.ai-panel.open{transform:translateX(0)}
+.ai-ph{padding:14px 14px 10px;border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ai-ph-title{display:flex;align-items:center;gap:8px;
+  font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px}
+.ai-dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a082ff)}
+.ai-ph-close{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .13s}
+.ai-ph-close:hover{color:var(--t1)}
+.ai-key-box{padding:12px 14px;border-bottom:1px solid var(--bd);direction:rtl;flex-shrink:0}
+.ai-key-label{font-size:11.5px;color:var(--t3);margin-bottom:7px;line-height:1.6}
+.ai-key-row{display:flex;gap:6px}
+.ai-key-inp{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:8px;
+  padding:6px 9px;color:var(--t1);font-size:12px;outline:none;direction:ltr;
+  font-family:monospace;transition:border-color .15s}
+.ai-key-inp:focus{border-color:var(--accent-mid)}
+.ai-key-save{padding:6px 11px;border-radius:8px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;font-size:12px;font-family:'Space Grotesk',sans-serif;white-space:nowrap}
+.ai-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+.ai-msgs::-webkit-scrollbar{width:3px}
+.ai-msgs::-webkit-scrollbar-thumb{background:var(--bg4)}
+.ai-bubble{max-width:90%;padding:8px 12px;border-radius:11px;font-size:12.5px;
+  line-height:1.65;word-break:break-word;white-space:pre-wrap}
+.ai-bubble.user{align-self:flex-end;background:var(--accent);color:#fff;border-radius:11px 11px 3px 11px}
+.ai-bubble.bot{align-self:flex-start;background:var(--bg3);color:var(--t1);
+  border-radius:3px 11px 11px 11px;border:1px solid var(--bd)}
+.ai-bubble.typing{color:var(--t3);font-style:italic}
+.ai-empty{text-align:center;color:var(--t3);font-size:12px;direction:rtl;padding:24px 12px;line-height:1.9}
+.ai-ctx-bar{padding:7px 12px;border-top:1px solid var(--bd);border-bottom:1px solid var(--bd);flex-shrink:0}
+.ai-ctx-btn{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:8px;
+  background:var(--bg3);border:1px solid var(--bd);color:var(--t2);cursor:pointer;
+  font-size:12px;font-family:'Space Grotesk',sans-serif;transition:all .13s;width:100%}
+.ai-ctx-btn:hover{background:var(--bg4);color:var(--t1)}
+.ai-ctx-btn.on{border-color:var(--accent-mid);color:var(--accent);background:var(--accent-lo)}
+.ai-input-row{padding:9px;display:flex;gap:6px;align-items:flex-end;flex-shrink:0}
+.ai-textarea{flex:1;background:var(--bg3);border:1px solid var(--bd2);border-radius:9px;
+  padding:7px 11px;color:var(--t1);font-size:12.5px;direction:rtl;outline:none;
+  font-family:'Inter',sans-serif;resize:none;min-height:36px;max-height:110px;
+  transition:border-color .15s;line-height:1.5}
+.ai-textarea:focus{border-color:var(--accent-mid)}
+.ai-send-btn{width:34px;height:34px;border-radius:9px;background:var(--accent);border:none;
+  color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:all .15s;flex-shrink:0}
+.ai-send-btn:hover{background:#8B6EFF}
+.ai-send-btn:disabled{opacity:.35;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -365,6 +422,37 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 </div>
 
 <audio id="audio-el"></audio>
+<!-- AI TOGGLE & PANEL -->
+<button class="ai-fab no-drag" id="ai-fab" onclick="toggleAI()">
+  <span class="ai-fab-icon">✦</span>
+</button>
+<div class="ai-panel" id="ai-panel">
+  <div class="ai-ph">
+    <div class="ai-ph-title"><div class="ai-dot"></div>Claude</div>
+    <button class="ai-ph-close" onclick="toggleAI()">✕</button>
+  </div>
+  <div class="ai-key-box" id="ai-key-box" style="display:none">
+    <div class="ai-key-label">برای چت با Claude نیاز به API key داری.<br><span style="font-size:11px;color:var(--t3)">از console.anthropic.com بگیر</span></div>
+    <div class="ai-key-row">
+      <input class="ai-key-inp" id="ai-key-inp" type="password" placeholder="sk-ant-api03-...">
+      <button class="ai-key-save" onclick="saveAIKey()">ذخیره</button>
+    </div>
+  </div>
+  <div class="ai-msgs" id="ai-msgs">
+    <div class="ai-empty">سلام ✦<br>درباره این آهنگ هر سوالی داری بپرس.</div>
+  </div>
+  <div class="ai-ctx-bar">
+    <button class="ai-ctx-btn" id="ai-ctx-btn" onclick="toggleAICtx()">
+      <span>🎵</span>
+      <span id="ai-ctx-lbl">اضافه کردن اطلاعات آهنگ</span>
+    </button>
+  </div>
+  <div class="ai-input-row">
+    <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
+    <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
+  </div>
+</div>
+
 <script src="renderer.js"></script>
 </body>
 </html>
