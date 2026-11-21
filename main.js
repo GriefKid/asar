@@ -341,11 +341,31 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   let url, headers, body, extractText;
 
   if (provider === 'gemini') {
-    url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    headers = { 'Content-Type': 'application/json' };
-    const geminiMsgs = messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
-    body = JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents: geminiMsgs });
-    extractText = d => d.candidates[0].content.parts[0].text;
+    const model = 'gemini-1.5-flash';
+    // AQ. keys are OAuth2 bearer tokens; AIza keys go in URL as ?key=
+    if (apiKey.startsWith('AQ.')) {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+    } else {
+      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      headers = { 'Content-Type': 'application/json' };
+    }
+    // Gemini needs at least one user message
+    const geminiMsgs = messages
+      .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content || ' ' }] }))
+      .filter(m => m.parts[0].text.trim());
+    if (!geminiMsgs.length || geminiMsgs[geminiMsgs.length - 1].role !== 'user') {
+      geminiMsgs.push({ role: 'user', parts: [{ text: 'سلام' }] });
+    }
+    body = JSON.stringify({
+      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
+      contents: geminiMsgs,
+      generationConfig: { maxOutputTokens: 2048 }
+    });
+    extractText = d => {
+      if (d.error) throw new Error(d.error.message);
+      return d.candidates[0].content.parts[0].text;
+    };
 
   } else if (provider === 'groq') {
     url = 'https://api.groq.com/openai/v1/chat/completions';
