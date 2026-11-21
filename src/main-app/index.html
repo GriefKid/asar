@@ -809,17 +809,18 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
         </div>
       </div>
       <div class="settings-section">
-        <div class="settings-section-title">Firebase / سینک ابری</div>
+        <div class="settings-section-title">Supabase / سینک ابری</div>
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px">
           <div>
-            <div class="settings-label">تنظیم Firebase</div>
-            <div class="settings-desc">برای سینک داده و لیست برترین‌ها — کانفیگ Firebase خودت رو اینجا بزار</div>
+            <div class="settings-label">تنظیم Supabase</div>
+            <div class="settings-desc">برای سینک داده و لیست برترین‌ها — URL و Anon Key پروژه Supabase</div>
           </div>
-          <textarea class="settings-input no-drag" id="firebase-config-inp" rows="6"
-            placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'
-            style="width:100%;font-family:monospace;font-size:11px;resize:vertical;min-height:95px;direction:ltr"></textarea>
+          <div style="width:100%;display:flex;flex-direction:column;gap:8px">
+            <input class="settings-input no-drag" id="sb-url-inp" placeholder="https://xxxx.supabase.co" dir="ltr" style="font-family:monospace;font-size:12px">
+            <input class="settings-input no-drag" id="sb-key-inp" placeholder="eyJhbGci... (anon/public key)" dir="ltr" style="font-family:monospace;font-size:11px" type="password">
+          </div>
           <div style="display:flex;align-items:center;gap:10px;width:100%">
-            <button class="settings-save-btn no-drag" onclick="saveFirebaseConfig()">ذخیره و اتصال</button>
+            <button class="settings-save-btn no-drag" onclick="saveSupabaseConfig()">ذخیره و اتصال</button>
             <span id="firebase-status" style="font-size:12px;color:var(--t3)">متصل نشده</span>
           </div>
         </div>
@@ -1090,10 +1091,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="../shared/firebase-init.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+<script src="../shared/supabase-init.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

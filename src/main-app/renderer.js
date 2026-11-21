@@ -567,11 +567,13 @@ function renderSettings() {
   if (inp) inp.value = settings['tmdb-key'] || '';
   const cinp = document.getElementById('claude-key-input');
   try { if (cinp) cinp.value = localStorage.getItem('claude-api-key') || ''; } catch {}
-  // Firebase config
-  const fbInp = document.getElementById('firebase-config-inp');
-  const fbCfg = getFirebaseConfig();
-  if (fbInp && fbCfg) { try { fbInp.value = JSON.stringify(fbCfg, null, 2); } catch {} }
-  updateFirebaseStatus(!!(window._fbApp && window._currentUser), window._currentUser || null);
+  // Supabase config
+  const sbCfg = getSupabaseConfig();
+  const sbUrl = document.getElementById('sb-url-inp');
+  const sbKey = document.getElementById('sb-key-inp');
+  if (sbCfg && sbUrl) sbUrl.value = sbCfg.url || '';
+  if (sbCfg && sbKey) sbKey.value = sbCfg.anonKey || '';
+  updateFirebaseStatus(!!(window._sb && window._currentUser), window._currentUser || null);
 }
 
 window.saveClaudeKey = function() {
@@ -1084,35 +1086,26 @@ loadPomoSessions();
 renderHome();
 initFirebaseApp();
 
-// ── Firebase Integration ──────────────────────────────────────────────────
+// ── Supabase Integration ──────────────────────────────────────────────────
 
 let currentCommunityTab = 'film';
 let _syncTimer = null;
-let _authMode = 'login'; // 'login' | 'register'
+let _authMode = 'login';
 
 function initFirebaseApp() {
-  const ok = initFirebase();
-  if (!ok) {
-    // No config yet — show config hint in settings, skip auth overlay
-    updateFirebaseStatus(false, null);
-    return;
-  }
-  // Firebase initialized — auth state callback will fire automatically
+  const ok = initSupabase();
+  if (!ok) { updateFirebaseStatus(false, null); return; }
 }
 
 window.onFirebaseAuthChange = function(user) {
   if (user) {
-    // Logged in
     document.getElementById('auth-overlay').classList.remove('show');
     updateFirebaseStatus(true, user);
-    loadFromFirestore(user.uid);
+    loadFromSupabase(user.id);
   } else {
-    // Not logged in — show auth overlay
     updateFirebaseStatus(false, null);
-    const cfg = getFirebaseConfig();
-    if (cfg && cfg.apiKey) {
-      document.getElementById('auth-overlay').classList.add('show');
-    }
+    const cfg = getSupabaseConfig();
+    if (cfg && cfg.url) document.getElementById('auth-overlay').classList.add('show');
   }
 };
 
@@ -1122,28 +1115,23 @@ function updateFirebaseStatus(loggedIn, user) {
   const sidebarRow = document.getElementById('sidebar-user-row');
   const adminNav = document.getElementById('nav-admin');
   const syncBadge = document.getElementById('sidebar-sync-badge');
-
   if (loggedIn && user) {
-    if (statusEl) statusEl.textContent = '✅ متصل — ' + (user.email || '');
-    if (statusEl) statusEl.style.color = 'var(--ok)';
+    const displayName = user.user_metadata?.display_name || user.email || 'کاربر';
+    if (statusEl) { statusEl.textContent = '✅ متصل — ' + (user.email || ''); statusEl.style.color = 'var(--ok)'; }
     if (userRow) userRow.style.display = 'flex';
     const nameEl = document.getElementById('firebase-user-name-lbl');
     const emailEl = document.getElementById('firebase-user-email-lbl');
-    if (nameEl) nameEl.textContent = user.displayName || 'کاربر';
+    if (nameEl) nameEl.textContent = displayName;
     if (emailEl) emailEl.textContent = user.email || '';
     if (sidebarRow) sidebarRow.style.display = 'flex';
     const avatarEl = document.getElementById('sidebar-user-avatar');
     const nameLabel = document.getElementById('sidebar-user-name');
-    if (avatarEl) avatarEl.textContent = (user.displayName || user.email || '?')[0].toUpperCase();
-    if (nameLabel) nameLabel.textContent = user.displayName || user.email || 'کاربر';
+    if (avatarEl) avatarEl.textContent = displayName[0].toUpperCase();
+    if (nameLabel) nameLabel.textContent = displayName;
     if (syncBadge) syncBadge.style.display = 'inline-block';
-    // Check admin
-    checkAdmin(user.uid).then(isAdmin => {
-      if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none';
-    });
+    checkAdmin(user.id).then(isAdmin => { if (adminNav) adminNav.style.display = isAdmin ? 'flex' : 'none'; });
   } else {
-    if (statusEl) statusEl.textContent = 'متصل نشده';
-    if (statusEl) statusEl.style.color = 'var(--t3)';
+    if (statusEl) { statusEl.textContent = 'متصل نشده'; statusEl.style.color = 'var(--t3)'; }
     if (userRow) userRow.style.display = 'none';
     if (sidebarRow) sidebarRow.style.display = 'none';
     if (syncBadge) syncBadge.style.display = 'none';
@@ -1152,27 +1140,22 @@ function updateFirebaseStatus(loggedIn, user) {
 }
 
 async function checkAdmin(uid) {
-  if (!window._fbDb || !uid) return false;
+  if (!window._sb || !uid) return false;
   try {
-    const doc = await window._fbDb.collection('users').doc(uid).get();
-    return doc.exists && doc.data().isAdmin === true;
+    const { data } = await window._sb.from('profiles').select('is_admin').eq('id', uid).maybeSingle();
+    return !!(data && data.is_admin);
   } catch { return false; }
 }
 
-window.saveFirebaseConfig = function() {
-  const val = document.getElementById('firebase-config-inp').value.trim();
-  if (!val) return;
-  try {
-    const cfg = JSON.parse(val);
-    if (!cfg.apiKey || !cfg.projectId) { alert('کانفیگ ناقصه. apiKey و projectId لازمه.'); return; }
-    localStorage.setItem('asar-firebase-config', JSON.stringify(cfg));
-    // Reinit
-    window._fbApp = null; window._fbAuth = null; window._fbDb = null; window._currentUser = null;
-    const ok = initFirebase();
-    if (ok) {
-      document.getElementById('firebase-status').textContent = '🔄 در حال اتصال...';
-    }
-  } catch(e) { alert('JSON نامعتبر: ' + e.message); }
+window.saveSupabaseConfig = window.saveFirebaseConfig = function() {
+  const url = (document.getElementById('sb-url-inp') || {}).value?.trim();
+  const key = (document.getElementById('sb-key-inp') || {}).value?.trim();
+  if (!url || !key) { alert('URL و Anon Key رو وارد کن'); return; }
+  if (!url.startsWith('https://')) { alert('URL باید با https:// شروع بشه'); return; }
+  localStorage.setItem('asar-supabase-config', JSON.stringify({ url, anonKey: key }));
+  window._sb = null; window._currentUser = null;
+  const ok = initSupabase();
+  if (ok) document.getElementById('firebase-status').textContent = '🔄 در حال اتصال...';
 };
 
 window.switchAuthTab = function(el, mode) {
@@ -1191,110 +1174,94 @@ window.submitAuth = async function() {
   const errEl = document.getElementById('auth-err');
   const btn   = document.getElementById('auth-submit-btn');
   if (!email || !pass) { errEl.textContent = 'ایمیل و رمز عبور رو وارد کن'; return; }
-  if (!window._fbAuth) { errEl.textContent = 'ابتدا Firebase رو تنظیم کن'; return; }
-  btn.textContent = '...';
-  btn.disabled = true;
-  errEl.textContent = '';
+  if (!window._sb) { errEl.textContent = 'ابتدا Supabase رو در تنظیمات وصل کن'; return; }
+  btn.textContent = '...'; btn.disabled = true; errEl.textContent = '';
   try {
     if (_authMode === 'login') {
-      await window._fbAuth.signInWithEmailAndPassword(email, pass);
+      const { error } = await window._sb.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
     } else {
       const name = (document.getElementById('auth-name') || {}).value || '';
-      const cred = await window._fbAuth.createUserWithEmailAndPassword(email, pass);
-      if (name && cred.user) await cred.user.updateProfile({ displayName: name });
-      // Create user doc
-      await window._fbDb.collection('users').doc(cred.user.uid).set({
-        email: cred.user.email, displayName: name, createdAt: new Date().toISOString(), isAdmin: false
-      });
+      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
+      if (error) throw error;
+      // Create profile row
+      if (data.user) {
+        await window._sb.from('profiles').upsert({ id: data.user.id, email, display_name: name, is_admin: false }, { onConflict: 'id' });
+      }
     }
   } catch(e) {
     const msgs = {
-      'auth/user-not-found': 'کاربر پیدا نشد',
-      'auth/wrong-password': 'رمز اشتباهه',
-      'auth/email-already-in-use': 'این ایمیل قبلاً ثبت شده',
-      'auth/weak-password': 'رمز باید حداقل ۶ کاراکتر باشه',
-      'auth/invalid-email': 'ایمیل نامعتبره',
-      'auth/invalid-credential': 'ایمیل یا رمز اشتباهه'
+      'Invalid login credentials': 'ایمیل یا رمز اشتباهه',
+      'Email not confirmed': 'ایمیلت رو تأیید کن',
+      'User already registered': 'این ایمیل قبلاً ثبت شده',
+      'Password should be at least 6 characters': 'رمز باید حداقل ۶ کاراکتر باشه'
     };
-    errEl.textContent = msgs[e.code] || e.message;
+    errEl.textContent = msgs[e.message] || e.message;
   } finally {
     btn.textContent = _authMode === 'login' ? 'ورود' : 'ثبت‌نام';
     btn.disabled = false;
   }
 };
 
-window.skipAuth = function() {
-  document.getElementById('auth-overlay').classList.remove('show');
-};
+window.skipAuth = function() { document.getElementById('auth-overlay').classList.remove('show'); };
 
 window.fbLogout = async function() {
-  if (!window._fbAuth) return;
+  if (!window._sb) return;
   if (!confirm('از حساب خارج بشم؟')) return;
-  await window._fbAuth.signOut();
+  await window._sb.auth.signOut();
   window._currentUser = null;
   updateFirebaseStatus(false, null);
 };
 
-// ── Firestore Sync ───────────────────────────────────────────────────────
+// ── Supabase Sync ────────────────────────────────────────────────────────
 
 function debouncedSync() {
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(syncToFirestore, 3000);
+  _syncTimer = setTimeout(syncToSupabase, 3000);
 }
 
-async function syncToFirestore() {
-  const db = window._fbDb;
+async function syncToSupabase() {
+  const sb = window._sb;
   const uid = getUID();
-  if (!db || !uid) return;
+  if (!sb || !uid) return;
   try {
-    await db.collection('user_data').doc(uid).set({
-      library,
-      events,
-      habits,
-      goals,
-      updatedAt: new Date().toISOString()
-    });
-    // Update user doc
+    await sb.from('user_data').upsert({ id: uid, library, events, habits, goals, updated_at: new Date().toISOString() }, { onConflict: 'id' });
     const user = window._currentUser;
-    await db.collection('users').doc(uid).set({
-      email: user.email || '', displayName: user.displayName || '',
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await sb.from('profiles').upsert({ id: uid, email: user?.email || '', display_name: user?.user_metadata?.display_name || '' }, { onConflict: 'id', ignoreDuplicates: false });
     const badge = document.getElementById('sidebar-sync-badge');
     if (badge) { badge.textContent = '✓ سینک'; badge.style.background = 'var(--ok)'; }
   } catch(e) {
-    console.error('Firestore sync error:', e);
+    console.error('Supabase sync error:', e);
     const badge = document.getElementById('sidebar-sync-badge');
     if (badge) { badge.textContent = '⚠ خطا'; badge.style.background = 'var(--err)'; }
   }
 }
 
-async function loadFromFirestore(uid) {
-  const db = window._fbDb;
-  if (!db || !uid) return;
+async function loadFromSupabase(uid) {
+  const sb = window._sb;
+  if (!sb || !uid) return;
   try {
-    const doc = await db.collection('user_data').doc(uid).get();
-    if (!doc.exists) { syncToFirestore(); return; }
-    const d = doc.data();
-    if (d.library)  { library  = d.library;  localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
-    if (d.events)   { events   = d.events;   localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
-    if (d.habits)   { habits   = d.habits;   localStorage.setItem(KEY_HABITS,  JSON.stringify(habits)); }
-    if (d.goals)    { goals    = d.goals;    localStorage.setItem(KEY_GOALS,   JSON.stringify(goals)); }
+    const { data } = await sb.from('user_data').select('*').eq('id', uid).maybeSingle();
+    if (!data) { syncToSupabase(); return; }
+    if (data.library) { library = data.library; localStorage.setItem(KEY_LIB, JSON.stringify(library)); }
+    if (data.events)  { events  = data.events;  localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
+    if (data.habits)  { habits  = data.habits;  localStorage.setItem(KEY_HABITS, JSON.stringify(habits)); }
+    if (data.goals)   { goals   = data.goals;   localStorage.setItem(KEY_GOALS, JSON.stringify(goals)); }
     renderHome();
     if (activeSection === 'library') renderLibrary();
     if (activeSection === 'planner') renderPlanner();
-  } catch(e) { console.error('loadFromFirestore error:', e); }
+  } catch(e) { console.error('loadFromSupabase error:', e); }
 }
 
 // Patch save functions to trigger sync
-const _origSaveLib      = saveLib;
-const _origSaveEvents   = saveEvents;
-const _origSaveHabits   = saveHabits;
-const _origSaveGoals    = saveGoals;
-saveLib      = function() { _origSaveLib();      debouncedSync(); };
-saveEvents   = function() { _origSaveEvents();   debouncedSync(); };
-saveHabits   = function() { _origSaveHabits();   debouncedSync(); };
-saveGoals    = function() { _origSaveGoals();    debouncedSync(); };
+const _origSaveLib    = saveLib;
+const _origSaveEvents = saveEvents;
+const _origSaveHabits = saveHabits;
+const _origSaveGoals  = saveGoals;
+saveLib    = function() { _origSaveLib();    debouncedSync(); };
+saveEvents = function() { _origSaveEvents(); debouncedSync(); };
+saveHabits = function() { _origSaveHabits(); debouncedSync(); };
+saveGoals  = function() { _origSaveGoals();  debouncedSync(); };
 
 // ── Community Leaderboard ────────────────────────────────────────────────
 
@@ -1306,26 +1273,25 @@ window.switchCommunityTab = function(el, type) {
 };
 
 async function loadCommunity(type) {
-  const db = window._fbDb;
+  const sb = window._sb;
   const grid = document.getElementById('community-grid');
   if (!grid) return;
-  if (!db) {
-    grid.innerHTML = '<div class="community-loading">ابتدا Firebase رو در تنظیمات وصل کن</div>';
+  if (!sb) {
+    grid.innerHTML = '<div class="community-loading">ابتدا Supabase رو در تنظیمات وصل کن</div>';
     return;
   }
   grid.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
   try {
-    const snap = await db.collection('community').where('type','==',type).orderBy('avg','desc').limit(100).get();
-    if (snap.empty) {
+    const { data, error } = await sb.from('community').select('*').eq('type', type).gt('count', 0).order('avg', { ascending: false }).limit(100);
+    if (error) throw error;
+    if (!data || !data.length) {
       grid.innerHTML = '<div class="community-loading">هنوز کسی امتیاز نداده...</div>';
       return;
     }
-    const items = [];
-    snap.forEach(doc => items.push(doc.data()));
-    renderCommunityGrid(items);
+    renderCommunityGrid(data);
   } catch(e) {
     console.error('loadCommunity error:', e);
-    grid.innerHTML = '<div class="community-loading">خطا در بارگذاری — ایندکس Firestore رو بساز</div>';
+    grid.innerHTML = '<div class="community-loading">خطا در بارگذاری: ' + e.message + '</div>';
   }
 }
 
@@ -1355,43 +1321,40 @@ function renderCommunityGrid(items) {
 // ── Admin Panel ──────────────────────────────────────────────────────────
 
 async function loadAdminData() {
-  const db = window._fbDb;
+  const sb = window._sb;
   const listEl = document.getElementById('admin-users-list');
   const statsEl = document.getElementById('admin-stats-row');
-  if (!db) {
-    if (listEl) listEl.innerHTML = '<div class="community-loading">Firebase متصل نیست</div>';
+  if (!sb) {
+    if (listEl) listEl.innerHTML = '<div class="community-loading">Supabase متصل نیست</div>';
     return;
   }
   if (listEl) listEl.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
   try {
-    const usersSnap = await db.collection('users').get();
-    const users = [];
-    usersSnap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
-
-    // Stats
-    const communitySnap = await db.collection('community').get();
-    let totalVotes = 0;
-    communitySnap.forEach(doc => { const d = doc.data(); totalVotes += d.count || 0; });
+    const { data: users, error: ue } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
+    if (ue) throw ue;
+    const { data: community } = await sb.from('community').select('count');
+    const { data: votes } = await sb.from('community').select('count').gt('count', 0);
+    const totalVotes = (votes || []).reduce((s, r) => s + (r.count || 0), 0);
 
     if (statsEl) statsEl.innerHTML = `
-      <div class="admin-stat"><div class="admin-stat-num">${users.length}</div><div class="admin-stat-lbl">کاربران</div></div>
-      <div class="admin-stat"><div class="admin-stat-num">${communitySnap.size}</div><div class="admin-stat-lbl">آثار امتیازدار</div></div>
+      <div class="admin-stat"><div class="admin-stat-num">${(users||[]).length}</div><div class="admin-stat-lbl">کاربران</div></div>
+      <div class="admin-stat"><div class="admin-stat-num">${(community||[]).length}</div><div class="admin-stat-lbl">آثار امتیازدار</div></div>
       <div class="admin-stat"><div class="admin-stat-num">${totalVotes}</div><div class="admin-stat-lbl">کل رأی‌ها</div></div>
     `;
 
-    if (!users.length) {
+    if (!users || !users.length) {
       listEl.innerHTML = '<div class="community-loading">کاربری ثبت نشده</div>';
       return;
     }
-
     listEl.innerHTML = users.map((u, i) => {
-      const initials = (u.displayName || u.email || '?')[0].toUpperCase();
-      const date = u.createdAt ? u.createdAt.slice(0,10) : '';
+      const name = u.display_name || u.email || 'بدون نام';
+      const initials = name[0].toUpperCase();
+      const date = u.created_at ? u.created_at.slice(0,10) : '';
       return `<div>
         <div class="admin-user-row" onclick="toggleAdminUser('au-${i}','${u.id}')">
           <div class="admin-user-avatar">${initials}</div>
           <div class="admin-user-info">
-            <div class="admin-user-name">${u.displayName || 'بدون نام'}</div>
+            <div class="admin-user-name">${name}${u.is_admin ? ' 👑' : ''}</div>
             <div class="admin-user-email">${u.email || ''}</div>
           </div>
           <div class="admin-user-meta">${date}</div>
@@ -1401,7 +1364,7 @@ async function loadAdminData() {
     }).join('');
   } catch(e) {
     console.error('loadAdminData error:', e);
-    if (listEl) listEl.innerHTML = '<div class="community-loading">خطا — باید Admin باشی</div>';
+    if (listEl) listEl.innerHTML = '<div class="community-loading">خطا: ' + e.message + '</div>';
   }
 }
 
@@ -1416,10 +1379,9 @@ window.toggleAdminUser = async function(libId, uid) {
   libEl.dataset.loaded = '1';
   libEl.textContent = 'در حال بارگذاری...';
   try {
-    const doc = await window._fbDb.collection('user_data').doc(uid).get();
-    if (!doc.exists) { libEl.textContent = 'داده‌ای ثبت نشده'; return; }
-    const d = doc.data();
-    const lib = d.library || [];
+    const { data } = await window._sb.from('user_data').select('library').eq('id', uid).maybeSingle();
+    if (!data) { libEl.textContent = 'داده‌ای ثبت نشده'; return; }
+    const lib = data.library || [];
     const typeEmoji = { film: '🎬', book: '📚', music: '🎵' };
     libEl.innerHTML = `<div class="admin-lib-title">کتابخانه (${lib.length} آیتم)</div>` +
       (lib.length === 0 ? '<div style="font-size:12px;color:var(--t3)">خالیه</div>' :
@@ -1431,7 +1393,5 @@ window.toggleAdminUser = async function(libId, uid) {
         </div>`).join('') +
         (lib.length > 30 ? `<div style="font-size:11px;color:var(--t3);padding-top:6px">... و ${lib.length-30} مورد دیگه</div>` : '')
       );
-  } catch(e) {
-    libEl.textContent = 'خطا در دریافت داده‌ها';
-  }
+  } catch(e) { libEl.textContent = 'خطا در دریافت داده‌ها'; }
 };
