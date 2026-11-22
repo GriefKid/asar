@@ -471,63 +471,81 @@ ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
 
 // ── IPC: Book metadata (Google Books + Open Library fallback) ─────────
 ipcMain.handle('book:fetchMeta', async (_, title) => {
-  // Strip leading order numbers like "0001 - ", "12. ", "003-" from filename-based titles
   const cleanTitle = title
-    .replace(/^\d{1,4}\s*[-–—.]\s*/, '')   // "0001 - " or "001." at start
+    .replace(/^\d{1,4}\s*[-–—.]\s*/, '')
     .replace(/[_]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // ── Try Google Books first ──
-  try {
-    const q = encodeURIComponent(cleanTitle);
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(cleanTitle)}&maxResults=3`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (res.ok) {
-      const data = await res.json();
-      // Pick first result that has a cover
-      const item = (data.items || []).find(i => i.volumeInfo?.imageLinks) || data.items?.[0];
-      if (item) {
-        const vol = item.volumeInfo;
-        const thumb = vol.imageLinks?.thumbnail || vol.imageLinks?.smallThumbnail || null;
-        const cover = thumb ? thumb.replace('http:', 'https:').replace('zoom=1', 'zoom=5') : null;
-        if (cover) {
+  // Build search variants — more specific first, then broader
+  const noSubtitle = cleanTitle.split(/[:،\-–—]/)[0].trim();
+  const shortTitle = cleanTitle.split(/\s+/).slice(0, 4).join(' ');
+  const variants = [...new Set([cleanTitle, noSubtitle, shortTitle].filter(v => v.length > 2))];
+
+  for (const searchTerm of variants) {
+    // ── Try Google Books ──
+    try {
+      const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(searchTerm)}&maxResults=5`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const data = await res.json();
+        const item = (data.items || []).find(i => i.volumeInfo?.imageLinks) || data.items?.[0];
+        if (item) {
+          const vol = item.volumeInfo;
+          const thumb = vol.imageLinks?.thumbnail || vol.imageLinks?.smallThumbnail;
+          if (thumb) {
+            return {
+              title: vol.title || cleanTitle,
+              authors: vol.authors || [],
+              description: vol.description || null,
+              cover: thumb.replace('http:', 'https:').replace('zoom=1', 'zoom=5'),
+              publishedDate: vol.publishedDate || null,
+              categories: vol.categories || [],
+            };
+          }
+          // No thumbnail — try Open Library cover via ISBN
+          const isbns = (vol.industryIdentifiers || [])
+            .filter(x => x.type.includes('ISBN')).map(x => x.identifier);
+          for (const isbn of isbns) {
+            try {
+              const checkUrl = `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`;
+              const r = await fetch(checkUrl, { signal: AbortSignal.timeout(5000) });
+              if (r.ok) {
+                return {
+                  title: vol.title || cleanTitle,
+                  authors: vol.authors || [],
+                  description: vol.description || null,
+                  cover: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`,
+                  publishedDate: vol.publishedDate || null,
+                  categories: vol.categories || [],
+                };
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    // ── Try Open Library ──
+    try {
+      const olUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(searchTerm)}&fields=key,title,author_name,cover_i,first_publish_year&limit=5`;
+      const olRes = await fetch(olUrl, { signal: AbortSignal.timeout(8000) });
+      if (olRes.ok) {
+        const olData = await olRes.json();
+        const olItem = (olData.docs || []).find(d => d.cover_i);
+        if (olItem) {
           return {
-            title: vol.title || cleanTitle,
-            authors: vol.authors || [],
-            description: vol.description || null,
-            cover,
-            publishedDate: vol.publishedDate || null,
-            categories: vol.categories || [],
+            title: olItem.title || cleanTitle,
+            authors: olItem.author_name || [],
+            description: null,
+            cover: `https://covers.openlibrary.org/b/id/${olItem.cover_i}-L.jpg`,
+            publishedDate: olItem.first_publish_year ? String(olItem.first_publish_year) : null,
+            categories: [],
           };
         }
-        // Google found it but no cover — still return metadata, try OL for cover below
       }
-    }
-  } catch {}
-
-  // ── Fallback: Open Library ──
-  try {
-    const olUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(cleanTitle)}&fields=key,title,author_name,cover_i,first_publish_year&limit=5`;
-    const olRes = await fetch(olUrl, { signal: AbortSignal.timeout(8000) });
-    if (olRes.ok) {
-      const olData = await olRes.json();
-      const olItem = (olData.docs || []).find(d => d.cover_i) || olData.docs?.[0];
-      if (olItem) {
-        const cover = olItem.cover_i
-          ? `https://covers.openlibrary.org/b/id/${olItem.cover_i}-L.jpg`
-          : null;
-        return {
-          title: olItem.title || cleanTitle,
-          authors: olItem.author_name || [],
-          description: null,
-          cover,
-          publishedDate: olItem.first_publish_year ? String(olItem.first_publish_year) : null,
-          categories: [],
-        };
-      }
-    }
-  } catch {}
+    } catch {}
+  }
 
   return null;
 });

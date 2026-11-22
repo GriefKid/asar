@@ -124,6 +124,27 @@ function syncSubAppsToLibrary() {
     }
   } catch {}
 
+  // Sync music player songs
+  try {
+    const mp = JSON.parse(localStorage.getItem('music-player') || 'null');
+    if (mp?.collections) {
+      mp.collections.forEach(coll => {
+        (coll.songs || []).forEach(s => {
+          if (!s.path) return;
+          if (library.some(i => i.filePath === s.path)) return;
+          library.push({
+            id: 'music_' + s.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
+            type: 'music', title: s.title || s.path.split(/[\\/]/).pop() || 'بدون عنوان',
+            creator: s.artist || '', year: '', notes: '',
+            stage: 'queue', rating: 0, cover: s.cover || null,
+            filePath: s.path, downloadStatus: 'done', createdAt: Date.now()
+          });
+          changed = true;
+        });
+      });
+    }
+  } catch {}
+
   // Sync book reader books
   try {
     const br = JSON.parse(localStorage.getItem('book-reader') || 'null');

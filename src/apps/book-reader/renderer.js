@@ -18,6 +18,7 @@ let pendingHighlight = null;  // {text, page, color}
 let pendingRectAnnot = null;
 let currentRectColor = 'y';
 let activeRectPreview = null;
+let rectDrawMode = false;
 let zoomLevel = 1.0;
 let srchMatches = [];
 let srchIdx = 0;
@@ -365,17 +366,10 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   renderRectAnnotations(annotLayer, viewport);
   wrap.addEventListener('mouseup', onTextSelect);
   wrap.addEventListener('contextmenu', e => e.preventDefault());
-  wrap.addEventListener('mousedown', e => { if (e.button === 2) startRectDraw(e, wrap, annotLayer, viewport); });
+  wrap.addEventListener('mousedown', e => { if (e.button === 2 || (e.button === 0 && rectDrawMode)) startRectDraw(e, wrap, annotLayer, viewport); });
   // start reading speed timer
   const wc = textContent.items.map(i => i.str).join(' ').split(/\s+/).length;
   startReadTimer(wc);
-
-  // Show OCR overlay for scanned pages in dual mode
-  const pageText2 = textContent.items.map(i => i.str).join('').trim();
-  if (pageText2.length < 30) {
-    const hasOCR2 = !!getTransCache(currentBookPath, pageNum);
-    showOcrOverlay(wrap, canvas, hasOCR2);
-  }
 
   return { wrap, viewport };
 }
@@ -450,15 +444,8 @@ async function renderPdfCanvas(container) {
     wrap.addEventListener('mouseup', onTextSelect);
     wrap.addEventListener('contextmenu', e => e.preventDefault());
     wrap.addEventListener('mousedown', e => {
-      if (e.button === 2) startRectDraw(e, wrap, annotLayer, viewport);
+      if (e.button === 2 || (e.button === 0 && rectDrawMode)) startRectDraw(e, wrap, annotLayer, viewport);
     });
-
-    // Detect scanned page — if text layer is empty, show OCR overlay
-    const pageText = textContent.items.map(i => i.str).join('').trim();
-    if (pageText.length < 30) {
-      const hasOCR = !!getTransCache(currentBookPath, currentPage);
-      showOcrOverlay(wrap, canvas, hasOCR);
-    }
 
   } catch (e) {
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
@@ -472,28 +459,12 @@ async function renderTextMode(container) {
     const textContent = await page.getTextContent();
     let rawText = textContent.items.map(i => i.str).join(' ').trim();
 
-    // For scanned pages: use OCR cache as the text source
     if (rawText.length < 30) {
-      const ocrText = getTransCache(currentBookPath, currentPage);
-      if (ocrText) {
-        rawText = ocrText;
-      } else {
-        // No OCR yet — show prompt
-        container.innerHTML = `<div class="text-page" style="text-align:center;padding:60px 24px;direction:rtl">
-          <div style="font-size:36px;margin-bottom:14px">📷</div>
-          <div style="font-size:14px;color:var(--t1);margin-bottom:8px">این صفحه اسکن‌شده است</div>
-          <div style="font-size:12.5px;color:var(--t3);margin-bottom:20px;line-height:1.7">
-            برای استخراج متن، به حالت اصلی برگرد<br>و روی دکمه «OCR با AI» کلیک کن
-          </div>
-          <button onclick="setReadMode(document.querySelector('[data-mode=\\'original\\']'),'original')"
-            style="padding:8px 18px;border-radius:9px;background:var(--accent);color:#fff;border:none;
-            font-family:'Space Grotesk',sans-serif;font-size:13px;cursor:pointer">
-            برگشت به حالت اصلی
-          </button>
-        </div>`;
-        container.appendChild(makePageNum());
-        return;
-      }
+      container.innerHTML = `<div class="text-page" style="text-align:center;padding:60px 24px;direction:rtl">
+        <div style="font-size:14px;color:var(--t3)">این صفحه متن قابل انتخاب ندارد</div>
+      </div>`;
+      container.appendChild(makePageNum());
+      return;
     }
 
     // group into paragraphs (split on double space / sentence boundaries)
@@ -843,6 +814,14 @@ function cancelRectAnnot() {
   document.getElementById('rect-popup').classList.remove('show');
 }
 
+function toggleRectDrawMode() {
+  rectDrawMode = !rectDrawMode;
+  const btn = document.getElementById('btn-rect-draw');
+  if (btn) btn.classList.toggle('active', rectDrawMode);
+  const container = document.getElementById('pdf-container');
+  if (container) container.style.cursor = rectDrawMode ? 'crosshair' : '';
+}
+
 function editRectAnnot(id, e) {
   document.getElementById('rect-edit-popup')?.remove();
   const annot = (state.rectAnnotations || []).find(a => a.id === id);
@@ -917,30 +896,6 @@ async function translateAllPages() {
       const rawText = textContent.items.map(item => item.str).join(' ').trim();
 
       if (!rawText || rawText.length < 30) {
-        // Scanned page — try OCR first if API key available
-        const key = getAIKey();
-        if (key) {
-          try {
-            const viewport = page.getViewport({ scale: 1.5 });
-            const tmpCanvas = document.createElement('canvas');
-            tmpCanvas.width = viewport.width; tmpCanvas.height = viewport.height;
-            await page.render({ canvasContext: tmpCanvas.getContext('2d'), viewport }).promise;
-            let imgBase64;
-            if (tmpCanvas.width > 1200) {
-              const sc = document.createElement('canvas');
-              const r = 1200 / tmpCanvas.width;
-              sc.width = Math.round(tmpCanvas.width * r); sc.height = Math.round(tmpCanvas.height * r);
-              sc.getContext('2d').drawImage(tmpCanvas, 0, 0, sc.width, sc.height);
-              imgBase64 = sc.toDataURL('image/png').split(',')[1];
-            } else {
-              imgBase64 = tmpCanvas.toDataURL('image/png').split(',')[1];
-            }
-            const ocrText = await window.api.ocrPage(imgBase64, key, getAIProvider());
-            if (ocrText && ocrText.trim().length > 10) {
-              setTransCache(currentBookPath, i, ocrText.trim());
-            }
-          } catch {}
-        }
         done++; updateTransProgress(done, totalPages); continue;
       }
 
@@ -1077,6 +1032,7 @@ document.addEventListener('keydown', e => {
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') { e.preventDefault(); openPdfSearch(); return; }
+  if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) { toggleRectDrawMode(); return; }
   if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
     e.preventDefault();
     if (e.code === 'ArrowRight') prevPage();
@@ -1614,141 +1570,8 @@ async function aiSummarizePage() {
 }
 
 // ── OCR for scanned PDFs ───────────────────────────────────────────────
-function showOcrOverlay(wrap, canvas, alreadyDone) {
-  // Don't add duplicate overlay
-  if (wrap.querySelector('.ocr-overlay')) return;
 
-  if (alreadyDone) {
-    // Just show a small badge — text is already cached
-    const badge = document.createElement('div');
-    badge.className = 'ocr-done-badge';
-    badge.textContent = '✓ OCR شده';
-    badge.style.pointerEvents = 'auto';
-    badge.style.cursor = 'pointer';
-    badge.title = 'متن استخراج شده — برو به حالت متنی';
-    badge.onclick = () => setReadMode(document.querySelector('[data-mode="both"]'), 'both');
-    wrap.appendChild(badge);
-    return;
-  }
 
-  const overlay = document.createElement('div');
-  overlay.className = 'ocr-overlay';
-  overlay.innerHTML = `
-    <div class="ocr-title">📷 صفحه اسکن‌شده</div>
-    <div class="ocr-sub">این صفحه متن قابل انتخاب نداره.<br>با AI متنش رو استخراج کن.</div>
-    <button class="ocr-btn" id="ocr-start-btn" onclick="ocrPage()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
-      OCR با AI
-    </button>
-    <div class="ocr-status" id="ocr-status"></div>`;
-  wrap.appendChild(overlay);
-}
-
-async function ocrPage() {
-  const key = getAIKey();
-  if (!key) {
-    const statusEl = document.getElementById('ocr-status');
-    if (statusEl) statusEl.textContent = '❌ ابتدا API key وارد کن (پنل AI)';
-    return;
-  }
-
-  const btn = document.getElementById('ocr-start-btn');
-  const statusEl = document.getElementById('ocr-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'در حال OCR...'; }
-  if (statusEl) statusEl.textContent = 'صبر کن، دارم متن رو استخراج میکنم...';
-
-  try {
-    // Get the rendered canvas for this page
-    const canvas = document.querySelector('#pdf-container canvas');
-    if (!canvas) throw new Error('canvas پیدا نشد');
-
-    // Downscale slightly for API efficiency (max 1200px wide)
-    let imgBase64;
-    if (canvas.width > 1200) {
-      const tmpCanvas = document.createElement('canvas');
-      const scale = 1200 / canvas.width;
-      tmpCanvas.width = Math.round(canvas.width * scale);
-      tmpCanvas.height = Math.round(canvas.height * scale);
-      tmpCanvas.getContext('2d').drawImage(canvas, 0, 0, tmpCanvas.width, tmpCanvas.height);
-      imgBase64 = tmpCanvas.toDataURL('image/png').split(',')[1];
-    } else {
-      imgBase64 = canvas.toDataURL('image/png').split(',')[1];
-    }
-
-    const extractedText = await window.api.ocrPage(imgBase64, key, getAIProvider());
-    if (!extractedText || extractedText.trim().length < 10) throw new Error('متنی یافت نشد');
-
-    // Cache as "translation" for this page (reuses existing trans cache system)
-    setTransCache(currentBookPath, currentPage, extractedText.trim());
-
-    if (statusEl) statusEl.textContent = '✅ OCR موفق! در حال رفتن به حالت متنی...';
-    setTimeout(() => {
-      const bothBtn = document.querySelector('[data-mode="both"]');
-      if (bothBtn) setReadMode(bothBtn, 'both');
-    }, 800);
-  } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = '🔁 تلاش مجدد'; }
-    if (statusEl) statusEl.textContent = `❌ ${String(e.message).slice(0, 80)}`;
-  }
-}
-
-async function ocrAllPages() {
-  const key = getAIKey();
-  if (!key) { alert('ابتدا API key وارد کن'); return; }
-  if (!pdfDoc || !currentBookPath) return;
-  const btn = document.getElementById('trans-all-btn');
-  if (btn) { btn.classList.add('busy'); btn.textContent = 'OCR...'; }
-
-  const prog = document.getElementById('trans-progress');
-  const progText = document.getElementById('trans-progress-text');
-  const progFill = document.getElementById('trans-bar-fill');
-  const progPct = document.getElementById('trans-progress-pct');
-  if (prog) prog.classList.add('show');
-
-  for (let pg = 1; pg <= totalPages; pg++) {
-    if (getTransCache(currentBookPath, pg)) continue; // skip already done
-
-    if (progText) progText.textContent = `OCR صفحه ${pg} از ${totalPages}...`;
-    const pct = Math.round((pg / totalPages) * 100);
-    if (progFill) progFill.style.width = pct + '%';
-    if (progPct) progPct.textContent = pct + '%';
-
-    try {
-      const page = await pdfDoc.getPage(pg);
-      const textContent = await page.getTextContent();
-      const existing = textContent.items.map(i => i.str).join('').trim();
-      if (existing.length >= 30) { setTransCache(currentBookPath, pg, existing); continue; } // has text
-
-      // Render to offscreen canvas
-      const viewport = page.getViewport({ scale: 1.5 });
-      const tmpCanvas = document.createElement('canvas');
-      tmpCanvas.width = viewport.width;
-      tmpCanvas.height = viewport.height;
-      await page.render({ canvasContext: tmpCanvas.getContext('2d'), viewport }).promise;
-
-      let imgBase64;
-      if (tmpCanvas.width > 1200) {
-        const sc = document.createElement('canvas');
-        const r = 1200 / tmpCanvas.width;
-        sc.width = Math.round(tmpCanvas.width * r);
-        sc.height = Math.round(tmpCanvas.height * r);
-        sc.getContext('2d').drawImage(tmpCanvas, 0, 0, sc.width, sc.height);
-        imgBase64 = sc.toDataURL('image/png').split(',')[1];
-      } else {
-        imgBase64 = tmpCanvas.toDataURL('image/png').split(',')[1];
-      }
-
-      const extracted = await window.api.ocrPage(imgBase64, key, getAIProvider());
-      if (extracted && extracted.trim().length > 10) setTransCache(currentBookPath, pg, extracted.trim());
-    } catch {}
-
-    await new Promise(r => setTimeout(r, 300)); // small pause between API calls
-  }
-
-  if (prog) prog.classList.remove('show');
-  if (btn) { btn.classList.remove('busy'); btn.textContent = 'ترجمه کل کتاب'; }
-  if (currentPage === currentPage) await renderCurrentPage();
-}
 
 // ── Critique in Writer ─────────────────────────────────────────────────
 function openCritique() {
