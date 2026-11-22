@@ -1536,6 +1536,91 @@ async function aiSummarizePage() {
   document.getElementById('ai-send-btn').disabled = false;
 }
 
+// ── Critique in Writer ─────────────────────────────────────────────────
+function openCritique() {
+  const book = state.books.find(b => b.path === currentBookPath);
+  if (!book) return;
+  // store intent so Writer can pick it up
+  try {
+    localStorage.setItem('writer-open-with', JSON.stringify({
+      action: 'new-critique',
+      linkId: 'book_' + (book.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0, 14)),
+      linkTitle: book.title,
+      linkType: 'book'
+    }));
+  } catch {}
+  if (window.api?.openWriter) window.api.openWriter();
+}
+
+// ── Mini music player ──────────────────────────────────────────────────
+let mmbPollId = null;
+
+function toggleMusicBar() {
+  const bar = document.getElementById('music-mini-bar');
+  bar.classList.toggle('show');
+  if (bar.classList.contains('show')) {
+    syncMusicBar();
+    mmbPollId = setInterval(syncMusicBar, 2000);
+  } else {
+    clearInterval(mmbPollId);
+  }
+}
+
+function syncMusicBar() {
+  try {
+    const raw = localStorage.getItem('music-player');
+    if (!raw) { updateMmbIdle(); return; }
+    const ms = JSON.parse(raw);
+    // find playing song: look for currently-active collection
+    const activeColl = ms.collections?.find(c => c.open);
+    if (!activeColl || !activeColl.songs?.length) { updateMmbIdle(); return; }
+    const song = activeColl.songs[0];
+    document.getElementById('mmb-title').textContent = song.title || song.fileName || 'آهنگ نامشخص';
+    document.getElementById('mmb-artist').textContent = song.artist || '';
+    document.getElementById('mmb-play-btn').textContent = '⏸';
+  } catch { updateMmbIdle(); }
+}
+
+function updateMmbIdle() {
+  document.getElementById('mmb-title').textContent = 'موسیقی برای کتاب‌خوانی';
+  document.getElementById('mmb-artist').textContent = '';
+  document.getElementById('mmb-play-btn').textContent = '▶';
+}
+
+function mmbTogglePlay() {
+  // Open the music player sub-app
+  if (window.api?.openMusicPlayer) {
+    window.api.openMusicPlayer();
+  }
+}
+
+async function suggestReadingMusic() {
+  const btn = document.getElementById('mmb-suggest-btn');
+  const titleEl = document.getElementById('mmb-title');
+  const key = getAIKey();
+  if (!key) { titleEl.textContent = 'ابتدا API key در AI panel وارد کن'; return; }
+  btn.classList.add('busy');
+  btn.textContent = '...';
+  const book = state.books.find(b => b.path === currentBookPath);
+  const bookName = book?.title || 'کتاب';
+  try {
+    const prompt = `Suggest 3 ambient/instrumental music pieces or playlists perfect for reading the book "${bookName}". Give only artist - title format, one per line, no explanations.`;
+    const reply = await window.api.claudeChat(
+      'You are a music curator. Suggest calm, instrumental music for reading.  Format: Artist — Title (one per line, no extra text).',
+      [{ role: 'user', content: prompt }],
+      key
+    );
+    if (reply) {
+      titleEl.textContent = '🎵 پیشنهادها:';
+      document.getElementById('mmb-artist').textContent = reply.split('\n').slice(0, 3).join(' · ');
+    }
+  } catch {
+    titleEl.textContent = 'خطا در دریافت پیشنهاد';
+  }
+  btn.classList.remove('busy');
+  btn.textContent = '✦ پیشنهاد';
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
 initFirebase();

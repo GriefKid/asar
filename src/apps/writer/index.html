@@ -562,6 +562,35 @@ function pickLibItem(itemId) {
 // ── Init ──────────────────────────────────────────────────────────────────
 loadAll();
 renderDocList();
+
+// Handle open-with request from book reader
+try {
+  const openWith = JSON.parse(localStorage.getItem('writer-open-with') || 'null');
+  if (openWith && openWith.action === 'new-critique') {
+    localStorage.removeItem('writer-open-with');
+    // Check if a critique for this book already exists
+    const existing = docs.find(d => d.type === 'critique' && d.linkedItemId === openWith.linkId);
+    if (existing) {
+      openDoc(existing.id);
+    } else {
+      // Create new critique pre-linked to this book
+      const libItem = library.find(i => i.id === openWith.linkId || i.title === openWith.linkTitle);
+      const doc = {
+        id: uid(),
+        title: `نقد: ${openWith.linkTitle}`,
+        type: 'critique',
+        content: '',
+        linkedItemId: libItem?.id || openWith.linkId,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      docs.push(doc);
+      saveDocs();
+      openDoc(doc.id);
+      renderDocList();
+    }
+  }
+} catch {}
 </script>
 </body>
 </html>
