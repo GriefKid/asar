@@ -935,6 +935,29 @@ function renderSettings() {
   updateFirebaseStatus(!!(window._sb && window._currentUser), window._currentUser || null);
 }
 
+window.toggleKeyVisibility = function(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+};
+
+window.copyApiKey = function(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp || !inp.value) return;
+  navigator.clipboard.writeText(inp.value).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ کپی شد';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }).catch(() => {
+    inp.type = 'text';
+    inp.select();
+    document.execCommand('copy');
+    btn.textContent = '✓ کپی شد';
+    setTimeout(() => btn.textContent = 'کپی', 1500);
+  });
+};
+
 window.saveClaudeKey = function() {
   const val = document.getElementById('claude-key-input').value.trim();
   try { localStorage.setItem('claude-api-key', val); } catch {}

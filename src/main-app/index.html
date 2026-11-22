@@ -1073,6 +1073,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <input class="settings-input no-drag" id="claude-key-input" placeholder="gsk_... یا sk-..." type="password" style="min-width:200px">
+            <button class="settings-save-btn no-drag" onclick="toggleKeyVisibility('claude-key-input',this)" title="نمایش/پنهان">👁</button>
+            <button class="settings-save-btn no-drag" onclick="copyApiKey('claude-key-input',this)" title="کپی">کپی</button>
             <button class="settings-save-btn no-drag" onclick="saveClaudeKey()">ذخیره</button>
           </div>
         </div>
