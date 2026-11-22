@@ -328,6 +328,7 @@ function renderHome() {
       </div>`).join('');
   }
 
+  renderDailyScore();
   renderXP();
   renderHeatmap();
   renderTopRated();
@@ -1190,6 +1191,91 @@ window.importData = function(input) {
   reader.readAsText(file);
   input.value = '';
 };
+
+// ── Daily Performance Score ───────────────────────────────────────────────
+function calcDailyScore(jy, jm, jd) {
+  const key = `${jy}-${jm}-${jd}`;
+  const dayEvs   = events[key] || [];
+  const totalEvs = dayEvs.length;
+  const doneEvs  = dayEvs.filter(e => e.done).length;
+  const totalHab = habits.length;
+  const doneHab  = habits.filter(h => h.doneByDay?.[key]).length;
+
+  const evScore  = totalEvs  > 0 ? (doneEvs  / totalEvs)  * 50 : 0;
+  const habScore = totalHab > 0 ? (doneHab / totalHab) * 30 : 0;
+  const bonus    = (evScore + habScore) >= 65 ? 20
+                 : (evScore + habScore) >= 40 ? 10 : 0;
+  return {
+    score: Math.round(evScore + habScore + bonus),
+    doneEvs, totalEvs, doneHab, totalHab
+  };
+}
+
+function renderDailyScore() {
+  const card = document.getElementById('daily-score-card');
+  if (!card) return;
+
+  const today = todayJalali();
+
+  // Last 7 days
+  const dnames = ['ی','د','س','چ','پ','ج','ش']; // Sun→Sat
+  const days7 = [];
+  for (let i = 6; i >= 0; i--) {
+    const g = new Date(); g.setDate(g.getDate() - i);
+    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
+    days7.push({ j, data: calcDailyScore(j.y, j.m, j.d), isToday: i === 0, lbl: dnames[g.getDay()] });
+  }
+
+  const td  = days7[6].data;
+  const yd  = days7[5].data;
+  const delta = td.score - yd.score;
+
+  const lbl = td.score >= 90 ? '✦ فوق‌العاده'
+            : td.score >= 75 ? 'خوب'
+            : td.score >= 50 ? 'متوسط'
+            : td.score >= 25 ? 'ضعیف'
+            : td.score >  0  ? 'خیلی کم'
+            : 'بدون فعالیت';
+
+  const dCls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
+  const dTxt = delta > 0 ? `↑ ${toFarsiNum(delta)}` : delta < 0 ? `↓ ${toFarsiNum(-delta)}` : '= مساوی';
+
+  const evPct  = td.totalEvs  > 0 ? Math.round(td.doneEvs  / td.totalEvs  * 100) : 0;
+  const habPct = td.totalHab > 0 ? Math.round(td.doneHab / td.totalHab * 100) : 0;
+
+  const barsHTML = days7.map(d => {
+    const h = Math.max(Math.round(d.data.score / 100 * 48), 2);
+    return `<div class="dsc-bw">
+      <div class="dsc-bnum${d.isToday?' today':''}">${d.data.score > 0 ? toFarsiNum(d.data.score) : ''}</div>
+      <div class="dsc-b ${d.isToday?'today':'past'}" style="height:${h}px"></div>
+    </div>`;
+  }).join('');
+
+  const lblsHTML = days7.map(d =>
+    `<div class="dsc-dlbl${d.isToday?' today':''}">${d.lbl}</div>`).join('');
+
+  card.innerHTML = `
+    <div class="dsc-top">
+      <div class="dsc-score">${toFarsiNum(td.score)}</div>
+      <div class="dsc-meta">
+        <div class="dsc-label">${lbl}</div>
+        <div class="dsc-delta ${dCls}">${dTxt} نسبت به دیروز</div>
+      </div>
+    </div>
+    <div class="dsc-breakdown">
+      <div class="dsc-mini">
+        <div class="dsc-mini-lbl">برنامه‌ریزی ${td.totalEvs>0 ? toFarsiNum(td.doneEvs)+' از '+toFarsiNum(td.totalEvs) : '—'}</div>
+        <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${evPct}%;background:var(--accent)"></div></div>
+      </div>
+      <div class="dsc-mini">
+        <div class="dsc-mini-lbl">عادت‌ها ${td.totalHab>0 ? toFarsiNum(td.doneHab)+' از '+toFarsiNum(td.totalHab) : '—'}</div>
+        <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${habPct}%;background:var(--ok)"></div></div>
+      </div>
+    </div>
+    <div class="dsc-chart-title">۷ روز گذشته</div>
+    <div class="dsc-bars">${barsHTML}</div>
+    <div class="dsc-dlbls">${lblsHTML}</div>`;
+}
 
 // ── XP / Level ───────────────────────────────────────────────────────────
 const XP_TITLES = ['تازه‌کار','علاقه‌مند','فرهنگی','هنردوست','اهل فرهنگ','حرفه‌ای','استاد','افسانه'];
