@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   openVideoPlayer:   ()                    => ipcRenderer.invoke('app:open-video'),
   openBookReader:    ()                    => ipcRenderer.invoke('app:open-book'),
   openWriter:        ()                    => ipcRenderer.invoke('app:open-writer'),
+  downloadItem:      (item)               => ipcRenderer.invoke('lib:download', item),
   // Library sync (sub-apps → main library)
   addToLibrary:    (item)  => ipcRenderer.invoke('lib:addItem', item),
   onLibraryItem:   (cb)    => ipcRenderer.on('lib:item-added', (_, item) => cb(item)),

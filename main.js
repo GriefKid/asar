@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const http = require('http');
 
 let mainWindow = null;
 let musicWindow = null;
@@ -74,6 +76,107 @@ ipcMain.handle('app:open-writer', () => {
 ipcMain.handle('lib:addItem', (_, item) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('lib:item-added', item);
+  }
+});
+
+// ── Download helpers ───────────────────────────────────────────────────
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' }, timeout: 15000 }, res => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return fetchJson(res.headers.location).then(resolve).catch(reject);
+      }
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => { try { resolve(JSON.parse(data)); } catch { reject(new Error('JSON parse fail')); } });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+function downloadFile(url, destPath) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? https : http;
+    const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 120000 }, res => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        return downloadFile(res.headers.location, destPath).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) return reject(new Error('HTTP ' + res.statusCode));
+      const file = fs.createWriteStream(destPath);
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve(destPath)));
+      file.on('error', e => { fs.unlink(destPath, () => {}); reject(e); });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('download timeout')); });
+  });
+}
+
+function getDownloadsDir() {
+  const dir = path.join(app.getPath('downloads'), 'اثر');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function sanitizeFilename(name) {
+  return name.replace(/[<>:"/\\|?*]/g, '_').slice(0, 120);
+}
+
+async function tryDownloadBook(item) {
+  const q = encodeURIComponent(item.title + (item.creator ? ' ' + item.creator : ''));
+  const searchUrl = `https://archive.org/advancedsearch.php?q=${q}&fl=identifier,title&rows=5&output=json&mediatype=texts`;
+  const data = await fetchJson(searchUrl);
+  const docs = data?.response?.docs || [];
+  if (!docs.length) return null;
+
+  for (const doc of docs) {
+    try {
+      const meta = await fetchJson(`https://archive.org/metadata/${doc.identifier}/files`);
+      const files = meta?.result || [];
+      const pdf = files.find(f => f.name && f.name.toLowerCase().endsWith('.pdf') && !f.name.includes('_thumb'));
+      if (!pdf) continue;
+      const url = `https://archive.org/download/${doc.identifier}/${encodeURIComponent(pdf.name)}`;
+      const dest = path.join(getDownloadsDir(), sanitizeFilename(pdf.name));
+      await downloadFile(url, dest);
+      return dest;
+    } catch { continue; }
+  }
+  return null;
+}
+
+async function tryDownloadMusic(item) {
+  const q = encodeURIComponent(item.title + (item.creator ? ' ' + item.creator : ''));
+  const searchUrl = `https://archive.org/advancedsearch.php?q=${q}&fl=identifier,title&rows=5&output=json&mediatype=audio`;
+  const data = await fetchJson(searchUrl);
+  const docs = data?.response?.docs || [];
+  if (!docs.length) return null;
+
+  for (const doc of docs) {
+    try {
+      const meta = await fetchJson(`https://archive.org/metadata/${doc.identifier}/files`);
+      const files = meta?.result || [];
+      const audio = files.find(f => f.name && (f.name.toLowerCase().endsWith('.mp3') || f.name.toLowerCase().endsWith('.ogg') || f.name.toLowerCase().endsWith('.flac')));
+      if (!audio) continue;
+      const url = `https://archive.org/download/${doc.identifier}/${encodeURIComponent(audio.name)}`;
+      const dest = path.join(getDownloadsDir(), sanitizeFilename(audio.name));
+      await downloadFile(url, dest);
+      return dest;
+    } catch { continue; }
+  }
+  return null;
+}
+
+ipcMain.handle('lib:download', async (_, item) => {
+  try {
+    let filePath = null;
+    if (item.type === 'book')  filePath = await tryDownloadBook(item);
+    if (item.type === 'music') filePath = await tryDownloadMusic(item);
+    // films: too large / not freely available, skip auto-download
+    return { filePath };
+  } catch (e) {
+    return { filePath: null };
   }
 });
 

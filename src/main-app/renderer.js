@@ -283,6 +283,14 @@ window.toggleEventDone = function(key, id) {
 function typeEmoji(t) { return t === 'book' ? '📚' : t === 'film' ? '🎬' : '🎵'; }
 function typeLabel(t) { return t === 'book' ? 'کتاب' : t === 'film' ? 'فیلم' : 'موزیک'; }
 
+function dlStatusBadge(item) {
+  if (item.filePath)                             return `<span class="dl-badge dl-ok" title="فایل موجود">✓ دانلود شده</span>`;
+  if (item.downloadStatus === 'downloading')     return `<span class="dl-badge dl-loading" title="در حال دانلود">⏳ در حال دانلود</span>`;
+  if (item.downloadStatus === 'failed')          return `<span class="dl-badge dl-fail" title="دانلود نشده">✗ دانلود نشده</span>`;
+  if (item.type === 'film' && !item.filePath)    return `<span class="dl-badge dl-fail" title="فایل موجود نیست">✗ فایل ندارد</span>`;
+  return '';
+}
+
 window.filterLib = function(el, type) {
   document.querySelectorAll('.lib-tab').forEach(t => t.classList.remove('on'));
   el.classList.add('on');
@@ -351,6 +359,7 @@ function renderShelf() {
         ${item.filePath?`<div class="mov-btn" onclick="event.stopPropagation();openInSubApp('${item.id}')">↗</div>`:''}
         <div class="mov-btn del" onclick="event.stopPropagation();deleteItem('${item.id}')">🗑</div>`;
 
+      const dlBadge = dlStatusBadge(item);
       return `<div class="mcard ${t}" id="mcard-${item.id}"
           draggable="true"
           ondragstart="shelfDragStart(event,'${item.id}')"
@@ -362,6 +371,7 @@ function renderShelf() {
         ${statusDot}
         <div class="mcard-ov">
           <div class="mcard-ov-title">${esc(item.title)}</div>
+          ${dlBadge ? `<div style="text-align:center;margin-top:2px">${dlBadge}</div>` : ''}
           <div class="mcard-ov-actions">${ovActions}</div>
         </div>
       </div>`;
@@ -411,6 +421,7 @@ function renderKanban() {
           </div>
         </div>
         <div class="kcard-rating">${[1,2,3,4,5].map(n => `<span class="star ${(item.rating||0)>=n?'on':''}" onclick="rateItem('${item.id}',${n})">★</span>`).join('')}</div>
+        ${dlStatusBadge(item)}
         ${item.review?.text ? `<div class="kcard-review-snip">${esc(item.review.text.slice(0,100))}${item.review.text.length>100?'…':''}</div>` : ''}
         <div class="kcard-actions">
           ${stage !== 'queue'  ? `<div class="kcard-action" onclick="moveItem('${item.id}','queue')">↩ می‌خوام</div>` : ''}
@@ -614,7 +625,7 @@ window.saveItem = function() {
       item.type    = selectedItemType;
     }
   } else {
-    library.push({
+    const newItem = {
       id:      uid(),
       type:    selectedItemType,
       title,
@@ -625,8 +636,35 @@ window.saveItem = function() {
       rating:  0,
       cover:   null,
       progress: 0,
+      filePath: null,
+      downloadStatus: (selectedItemType === 'film') ? null : 'downloading',
       createdAt: Date.now()
-    });
+    };
+    library.push(newItem);
+    saveLib();
+    closeAddItem();
+    renderLibrary();
+    if (activeSection === 'home') renderHome();
+
+    // Try background auto-download (book / music only)
+    if (newItem.downloadStatus === 'downloading' && window.api.downloadItem) {
+      window.api.downloadItem({ id: newItem.id, type: newItem.type, title: newItem.title, creator: newItem.creator }).then(result => {
+        const item = library.find(i => i.id === newItem.id);
+        if (!item) return;
+        if (result && result.filePath) {
+          item.filePath = result.filePath;
+          item.downloadStatus = 'done';
+        } else {
+          item.downloadStatus = 'failed';
+        }
+        saveLib();
+        renderLibrary();
+      }).catch(() => {
+        const item = library.find(i => i.id === newItem.id);
+        if (item) { item.downloadStatus = 'failed'; saveLib(); renderLibrary(); }
+      });
+    }
+    return;
   }
   saveLib();
   closeAddItem();
