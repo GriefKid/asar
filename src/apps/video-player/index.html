@@ -58,9 +58,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);
 .coll.open .coll-items{display:block}
 
 .movie-row{display:flex;align-items:center;gap:9px;padding:5px 10px 5px 12px;
-  direction:rtl;cursor:pointer;border-radius:8px;transition:all .13s;margin:1px 2px}
+  direction:rtl;cursor:pointer;border-radius:8px;transition:all .13s;margin:1px 2px;user-select:none}
 .movie-row:hover{background:var(--bg2)}
 .movie-row.playing{background:var(--accent-lo)}
+.movie-row-actions{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.movie-del-btn{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;
+  justify-content:center;font-size:11px;opacity:0;transition:opacity .12s,background .12s;cursor:pointer}
+.movie-row:hover .movie-del-btn{opacity:1}
+.movie-del-btn:hover{background:rgba(255,95,126,.2)}
 .movie-thumb-sm{width:28px;height:40px;border-radius:4px;flex-shrink:0;overflow:hidden;
   background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:12px}
 .movie-thumb-sm img{width:100%;height:100%;object-fit:cover}

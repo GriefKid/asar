@@ -305,14 +305,21 @@ function renderColls() {
         </div>
         <span class="coll-chev">›</span>
       </div>
-      <div class="coll-items">
+      <div class="coll-items" id="coll-items-${c.id}"
+           ondragover="collDragOver(event,'${c.id}')"
+           ondrop="collDrop(event,'${c.id}')"
+           ondragleave="collDragLeave(event,'${c.id}')">
         ${videos.map((v, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === v.path && activeColl === c.id;
           const wd = state.watchData?.[v.path];
           const isWatched = wd?.watched;
           const rating = wd?.rating || 0;
           const ratingStr = rating ? ' · ' + '★'.repeat(rating) : '';
-          return `<div class="movie-row ${playing ? 'playing' : ''}" onclick="playVideo('${c.id}',${i})">
+          return `<div class="movie-row ${playing ? 'playing' : ''}"
+              draggable="true"
+              ondragstart="movieDragStart(event,'${c.id}',${i})"
+              ondragend="movieDragEnd(event)"
+              onclick="playVideo('${c.id}',${i})">
             <div class="movie-thumb-sm">
               ${v.poster ? `<img src="${esc(v.poster)}" alt="">` : '🎥'}
             </div>
@@ -320,8 +327,11 @@ function renderColls() {
               <div class="movie-name">${esc(v.title || v.fileName)}</div>
               <div class="movie-year">${v.year ? v.year + ' · ' : ''}${v.duration ? fmtTime(v.duration) : ''}${isWatched ? '<span class="wd">✓</span>' : ''}${ratingStr}</div>
             </div>
-            <div class="play-ind">
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="#fff"><path d="M2 1.5l4 2.5-4 2.5V1.5z"/></svg>
+            <div class="movie-row-actions">
+              <div class="movie-del-btn" onclick="event.stopPropagation();removeVideoFromColl('${c.id}',${i})" title="حذف">🗑</div>
+              <div class="play-ind">
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="#fff"><path d="M2 1.5l4 2.5-4 2.5V1.5z"/></svg>
+              </div>
             </div>
           </div>`;
         }).join('')}
@@ -335,6 +345,59 @@ function toggleColl(id) {
   if (!c) return;
   c.open = !c.open;
   activeColl = id;
+  saveState();
+  renderColls();
+}
+
+function removeVideoFromColl(collId, idx) {
+  const c = state.collections.find(c => c.id === collId);
+  if (!c) return;
+  c.videos.splice(idx, 1);
+  saveState();
+  renderColls();
+}
+
+// ── Drag & drop videos between collections ────────────────────────────
+let dragMovie = null; // { collId, idx }
+
+function movieDragStart(e, collId, idx) {
+  dragMovie = { collId, idx };
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+}
+
+function movieDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  dragMovie = null;
+}
+
+function collDragOver(e, collId) {
+  if (!dragMovie || dragMovie.collId === collId) return;
+  e.preventDefault();
+  const el = document.getElementById('coll-items-' + collId);
+  if (el) el.style.background = 'rgba(123,94,255,.08)';
+}
+
+function collDragLeave(e, collId) {
+  const el = document.getElementById('coll-items-' + collId);
+  if (el) el.style.background = '';
+}
+
+function collDrop(e, targetCollId) {
+  e.preventDefault();
+  const el = document.getElementById('coll-items-' + targetCollId);
+  if (el) el.style.background = '';
+  if (!dragMovie || dragMovie.collId === targetCollId) return;
+
+  const srcColl = state.collections.find(c => c.id === dragMovie.collId);
+  const dstColl = state.collections.find(c => c.id === targetCollId);
+  if (!srcColl || !dstColl) return;
+
+  const [video] = srcColl.videos.splice(dragMovie.idx, 1);
+  if (!dstColl.videos.find(v => v.path === video.path)) {
+    dstColl.videos.push(video);
+  }
+  dragMovie = null;
   saveState();
   renderColls();
 }

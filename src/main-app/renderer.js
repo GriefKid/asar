@@ -97,6 +97,53 @@ function load() {
   try { settings = JSON.parse(localStorage.getItem(KEY_SETTINGS)) || {}; } catch { settings = {}; }
   try { habits   = JSON.parse(localStorage.getItem(KEY_HABITS)) || []; } catch { habits   = []; }
   try { goals    = JSON.parse(localStorage.getItem(KEY_GOALS))  || []; } catch { goals    = []; }
+  syncSubAppsToLibrary();
+}
+
+function syncSubAppsToLibrary() {
+  let changed = false;
+
+  // Sync video player films
+  try {
+    const vp = JSON.parse(localStorage.getItem('video-player') || 'null');
+    if (vp?.collections) {
+      vp.collections.forEach(coll => {
+        (coll.videos || []).forEach(v => {
+          if (!v.path) return;
+          if (library.some(i => i.filePath === v.path)) return;
+          library.push({
+            id: 'film_' + v.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
+            type: 'film', title: v.title || v.fileName || 'بدون عنوان',
+            creator: '', year: v.year ? String(v.year) : '', notes: '',
+            stage: 'queue', rating: 0, cover: v.poster || null,
+            filePath: v.path, downloadStatus: 'done', createdAt: Date.now()
+          });
+          changed = true;
+        });
+      });
+    }
+  } catch {}
+
+  // Sync book reader books
+  try {
+    const br = JSON.parse(localStorage.getItem('book-reader') || 'null');
+    if (br?.books) {
+      br.books.forEach(b => {
+        if (!b.path) return;
+        if (library.some(i => i.filePath === b.path)) return;
+        library.push({
+          id: 'book_' + b.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
+          type: 'book', title: b.title || 'بدون عنوان',
+          creator: b.author || '', year: '', notes: '',
+          stage: 'queue', rating: 0, cover: b.cover || null,
+          filePath: b.path, downloadStatus: 'done', createdAt: Date.now()
+        });
+        changed = true;
+      });
+    }
+  } catch {}
+
+  if (changed) saveLib();
 }
 
 function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
@@ -335,50 +382,56 @@ function renderLibrary() {
 function renderShelf() {
   const all = filteredItems();
   const types = libFilter === 'all' ? ['book','film','music'] : [libFilter];
+  const stages = ['queue','active','done'];
 
   types.forEach(t => {
-    const items = all.filter(i => i.type === t);
+    const typeItems = all.filter(i => i.type === t);
     const cnt = document.getElementById('shelf-cnt-'+t);
-    if (cnt) cnt.textContent = toFarsiNum(items.length);
-
-    const row = document.getElementById('shelf-row-'+t);
-    if (!row) return;
+    if (cnt) cnt.textContent = toFarsiNum(typeItems.length);
 
     const isMusic = t === 'music';
-    row.innerHTML = items.map(item => {
-      const statusDot = `<div class="mcard-status ${item.stage||'queue'}"></div>`;
-      const imgEl = item.cover
-        ? `<img src="${esc(item.cover)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy">
-           <div class="mcard-fallback" style="display:none">${typeEmoji(item.type)}</div>`
-        : `<div class="mcard-fallback">${typeEmoji(item.type)}</div>`;
 
-      const ovActions = `
-        <div class="mov-btn" onclick="event.stopPropagation();openReview('${item.id}')" title="نقد">📝</div>
-        ${item.stage!=='active'?`<div class="mov-btn" onclick="event.stopPropagation();moveItem('${item.id}','active')">▶</div>`:''}
-        ${item.stage!=='done'?`<div class="mov-btn ok" onclick="event.stopPropagation();moveItem('${item.id}','done')">✓</div>`:''}
-        ${item.filePath?`<div class="mov-btn" onclick="event.stopPropagation();openInSubApp('${item.id}')">↗</div>`:''}
-        <div class="mov-btn del" onclick="event.stopPropagation();deleteItem('${item.id}')">🗑</div>`;
+    stages.forEach(stage => {
+      const row = document.getElementById(`shelf-row-${t}-${stage}`);
+      if (!row) return;
 
-      const dlBadge = dlStatusBadge(item);
-      return `<div class="mcard ${t}" id="mcard-${item.id}"
-          draggable="true"
-          ondragstart="shelfDragStart(event,'${item.id}')"
-          ondragend="shelfDragEnd(event)"
-          ondragover="shelfDragOver(event)"
-          ondrop="shelfDrop(event,'${item.id}')"
-          onclick="openReview('${item.id}')">
-        ${imgEl}
-        ${statusDot}
-        <div class="mcard-ov">
-          <div class="mcard-ov-title">${esc(item.title)}</div>
-          ${dlBadge ? `<div style="text-align:center;margin-top:2px">${dlBadge}</div>` : ''}
-          <div class="mcard-ov-actions">${ovActions}</div>
-        </div>
-      </div>`;
-    }).join('');
+      const items = typeItems.filter(i => (i.stage||'queue') === stage);
 
-    // Add "+" button at end
-    row.innerHTML += `<div class="mcard-add ${isMusic?'music':''}" onclick="openAddItemOfType('${t}')" title="افزودن">+</div>`;
+      row.innerHTML = items.map(item => {
+        const imgEl = item.cover
+          ? `<img src="${esc(item.cover)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy">
+             <div class="mcard-fallback" style="display:none">${typeEmoji(item.type)}</div>`
+          : `<div class="mcard-fallback">${typeEmoji(item.type)}</div>`;
+
+        const ovActions = `
+          <div class="mov-btn" onclick="event.stopPropagation();openReview('${item.id}')" title="نقد">📝</div>
+          ${item.filePath?`<div class="mov-btn ok" onclick="event.stopPropagation();openInSubApp('${item.id}')">↗ باز</div>`:''}
+          <div class="mov-btn del" onclick="event.stopPropagation();deleteItem('${item.id}')">🗑</div>`;
+
+        const dlBadge = dlStatusBadge(item);
+        const clickFn = item.filePath ? `openInSubApp('${item.id}')` : `openReview('${item.id}')`;
+
+        return `<div class="mcard ${t}" id="mcard-${item.id}"
+            draggable="true"
+            ondragstart="shelfDragStart(event,'${item.id}')"
+            ondragend="shelfDragEnd(event)"
+            ondragover="shelfItemDragOver(event)"
+            ondrop="shelfItemDrop(event,'${item.id}')"
+            onclick="${clickFn}">
+          ${imgEl}
+          <div class="mcard-ov">
+            <div class="mcard-ov-title">${esc(item.title)}</div>
+            ${dlBadge ? `<div style="text-align:center;margin-top:2px">${dlBadge}</div>` : ''}
+            <div class="mcard-ov-actions">${ovActions}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // "+" add button only in queue column
+      if (stage === 'queue') {
+        row.innerHTML += `<div class="mcard-add ${isMusic?'music':''}" onclick="openAddItemOfType('${t}')" title="افزودن">+</div>`;
+      }
+    });
   });
 
   // Show/hide sections based on filter
@@ -389,6 +442,31 @@ function renderShelf() {
     section.style.display = libFilter === 'all' || libFilter === t ? '' : 'none';
   });
 }
+
+// Drag onto a shelf column → change item stage
+window.shelfColDragOver = function(e, el) { e.preventDefault(); el.classList.add('drag-over'); };
+window.shelfColDrop = function(e, type, stage) {
+  e.preventDefault();
+  document.querySelectorAll('.shelf-row').forEach(r => r.classList.remove('drag-over'));
+  if (!dragItemId) return;
+  const item = library.find(i => i.id === dragItemId);
+  if (item) { item.stage = stage; saveLib(); renderLibrary(); if (typeof renderHome==='function') renderHome(); }
+  dragItemId = null;
+};
+
+// Drag between items in same shelf (reorder)
+window.shelfItemDragOver = function(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; };
+window.shelfItemDrop = function(e, targetId) {
+  e.preventDefault(); e.stopPropagation();
+  if (!dragItemId || dragItemId === targetId) return;
+  const fromIdx = library.findIndex(i => i.id === dragItemId);
+  const toIdx   = library.findIndex(i => i.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = library.splice(fromIdx, 1);
+  library.splice(toIdx, 0, moved);
+  dragItemId = null;
+  saveLib(); renderLibrary();
+};
 
 function renderKanban() {
   const cols = { queue:[], active:[], done:[] };
@@ -443,19 +521,6 @@ window.shelfDragStart = function(e, id) {
 };
 window.shelfDragEnd = function(e) {
   if (dragItemId) { const el = document.getElementById('mcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
-};
-window.shelfDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
-window.shelfDrop = function(e, targetId) {
-  e.preventDefault();
-  if (!dragItemId || dragItemId === targetId) return;
-  const fromIdx = library.findIndex(i => i.id === dragItemId);
-  const toIdx   = library.findIndex(i => i.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) return;
-  const [moved] = library.splice(fromIdx, 1);
-  library.splice(toIdx, 0, moved);
-  dragItemId = null;
-  saveLib();
-  renderLibrary();
 };
 
 // ── Kanban drag & drop (move between columns) ─────────────────────────────

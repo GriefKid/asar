@@ -139,30 +139,36 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .shelf-section{margin-bottom:8px}
 .shelf-section-label{
   display:flex;align-items:center;gap:10px;
-  padding:14px 24px 8px;
+  padding:16px 24px 6px;
   font-size:11px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;
   font-family:'Space Grotesk',sans-serif;font-weight:600;direction:rtl}
 .shelf-section-label .shelf-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .shelf-section-label .shelf-cnt{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.06);color:var(--t3);margin-right:4px}
-.shelf-section-label::after{content:'';flex:1;height:1px;background:var(--bd)}
-.shelf-section-label .shelf-add-sm{margin-right:auto;font-size:11px;padding:3px 9px;border-radius:5px;
-  background:var(--bg3);border:1px solid var(--bd);color:var(--t3);cursor:pointer;transition:all .13s;white-space:nowrap}
-.shelf-section-label .shelf-add-sm:hover{color:var(--t1);border-color:var(--bd2)}
 
 /* The physical shelf rows */
+/* 3-column shelf layout */
+.shelf-3col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:0 16px 4px}
+.shelf-stage-col{display:flex;flex-direction:column;border-right:1px solid var(--bd);padding:0 8px}
+.shelf-stage-col:first-child{border-right:none}
+.shelf-stage-hd{
+  font-size:10px;letter-spacing:.7px;text-transform:uppercase;
+  font-family:'Space Grotesk',sans-serif;font-weight:600;
+  padding:6px 2px 4px;opacity:.8;
+}
+
 .shelf-row{
-  display:flex;flex-wrap:wrap;gap:8px;
-  padding:10px 24px 20px;
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:6px 2px 20px;
   position:relative;
-  min-height:120px;
+  min-height:110px;
   align-items:flex-end;
 }
 .shelf-row::after{/* wooden shelf plank */
-  content:'';position:absolute;bottom:0;left:0;right:0;height:14px;
+  content:'';position:absolute;bottom:0;left:0;right:0;height:12px;
   background:linear-gradient(180deg,#3a2b1a 0%,#2a1e10 50%,#1e150a 100%);
-  border-radius:2px;box-shadow:0 4px 12px rgba(0,0,0,.7);
+  border-radius:2px;box-shadow:0 4px 10px rgba(0,0,0,.7);
 }
-.shelf-row.drag-over{background:rgba(123,94,255,.06);border-radius:8px}
+.shelf-row.drag-over{background:rgba(123,94,255,.08);border-radius:6px}
 
 /* Media items on shelf */
 .mcard{
@@ -865,33 +871,82 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
     <!-- SHELF VIEW (default) -->
     <div class="library-scroll" id="lib-shelf-view">
+
       <div class="shelf-section" id="shelf-books">
         <div class="shelf-section-label">
           <span class="shelf-dot" style="background:var(--ok)"></span>
           کتاب‌ها
           <span class="shelf-cnt" id="shelf-cnt-book">۰</span>
-          <span style="flex:1"></span>
         </div>
-        <div class="shelf-row" id="shelf-row-book" data-type="book"></div>
+        <div class="shelf-3col">
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--t3)">نخوندم</div>
+            <div class="shelf-row" id="shelf-row-book-queue" data-type="book" data-stage="queue"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'book','queue')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--accent)">در حال خوندن</div>
+            <div class="shelf-row" id="shelf-row-book-active" data-type="book" data-stage="active"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'book','active')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--ok)">خوندم + نقد</div>
+            <div class="shelf-row" id="shelf-row-book-done" data-type="book" data-stage="done"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'book','done')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+        </div>
       </div>
+
       <div class="shelf-section" id="shelf-films">
         <div class="shelf-section-label">
           <span class="shelf-dot" style="background:var(--accent)"></span>
           فیلم‌ها
           <span class="shelf-cnt" id="shelf-cnt-film">۰</span>
-          <span style="flex:1"></span>
         </div>
-        <div class="shelf-row" id="shelf-row-film" data-type="film"></div>
+        <div class="shelf-3col">
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--t3)">ندیدم</div>
+            <div class="shelf-row" id="shelf-row-film-queue" data-type="film" data-stage="queue"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'film','queue')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--accent)">در حال دیدن</div>
+            <div class="shelf-row" id="shelf-row-film-active" data-type="film" data-stage="active"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'film','active')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--ok)">دیدم + نقد</div>
+            <div class="shelf-row" id="shelf-row-film-done" data-type="film" data-stage="done"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'film','done')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+        </div>
       </div>
+
       <div class="shelf-section" id="shelf-music">
         <div class="shelf-section-label">
           <span class="shelf-dot" style="background:var(--warn)"></span>
           موزیک
           <span class="shelf-cnt" id="shelf-cnt-music">۰</span>
-          <span style="flex:1"></span>
         </div>
-        <div class="shelf-row" id="shelf-row-music" data-type="music"></div>
+        <div class="shelf-3col">
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--t3)">نشنیدم</div>
+            <div class="shelf-row" id="shelf-row-music-queue" data-type="music" data-stage="queue"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'music','queue')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--accent)">در حال گوش دادن</div>
+            <div class="shelf-row" id="shelf-row-music-active" data-type="music" data-stage="active"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'music','active')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+          <div class="shelf-stage-col">
+            <div class="shelf-stage-hd" style="color:var(--ok)">گوش دادم + نقد</div>
+            <div class="shelf-row" id="shelf-row-music-done" data-type="music" data-stage="done"
+              ondragover="shelfColDragOver(event,this)" ondrop="shelfColDrop(event,'music','done')" ondragleave="this.classList.remove('drag-over')"></div>
+          </div>
+        </div>
       </div>
+
     </div>
 
     <!-- KANBAN VIEW (hidden by default) -->
