@@ -153,6 +153,7 @@ async function addSongsToColl(paths) {
   for (const p of paths) {
     if (coll.songs.find(s => s.path === p)) continue;
     const meta = await window.api.getMeta(p);
+    if (!meta.cover) meta.cover = generateCover(meta.title || p.split(/[\\/]/).pop());
     coll.songs.push({ ...meta, duration: null });
   }
 
@@ -938,8 +939,60 @@ function songColDrop(e, targetCollId) {
   renderColls();
 }
 
+// ── Generated cover fallback ───────────────────────────────────────────
+function generateCover(title, w = 240, h = 240) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  const hue1 = Math.abs(hash) % 360;
+  const hue2 = (hue1 + 50) % 360;
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, `hsl(${hue1},55%,22%)`);
+  grad.addColorStop(1, `hsl(${hue2},55%,13%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.42, h * 0.24, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue1},70%,55%,0.15)`;
+  ctx.fill();
+  const initials = title.trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || title[0]?.toUpperCase() || '?';
+  ctx.fillStyle = `hsla(${hue1},80%,78%,0.9)`;
+  ctx.font = `bold ${Math.round(h * 0.24)}px Arial`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(initials, w / 2, h * 0.42);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  const fSize = Math.max(10, Math.round(h * 0.065));
+  ctx.font = `${fSize}px Arial`; ctx.textBaseline = 'bottom';
+  const maxLineW = w - 16;
+  const words = title.split(/\s+/); const lines = []; let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxLineW && line) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  const shown = lines.slice(-2);
+  shown.forEach((l, i) => ctx.fillText(l, w / 2, h - 10 - (shown.length - 1 - i) * fSize * 1.4));
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 // ── Init ───────────────────────────────────────────────────────────────
 renderColls();
+
+// Generate covers for songs that have none
+(function() {
+  let changed = false;
+  for (const coll of state.collections) {
+    for (const s of (coll.songs || [])) {
+      if (!s.cover) {
+        s.cover = generateCover(s.title || s.path?.split(/[\\/]/).pop() || coll.name);
+        changed = true;
+      }
+    }
+  }
+  if (changed) { saveState(); renderColls(); }
+})();
 initEQUI();
 
 // ── Web Audio + Visualizer ─────────────────────────────────────────────

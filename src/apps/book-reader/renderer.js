@@ -150,6 +150,50 @@ function setBookRating(path, n) {
   initFirebase();
 }
 
+function generateCover(title, w = 200, h = 280) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  const hue1 = Math.abs(hash) % 360;
+  const hue2 = (hue1 + 50) % 360;
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, `hsl(${hue1},55%,22%)`);
+  grad.addColorStop(1, `hsl(${hue2},55%,13%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  // decorative circle
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.38, h * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue1},70%,55%,0.15)`;
+  ctx.fill();
+  // initials
+  const initials = title.trim().replace(/^[؀-ۿ]/, m => m)
+    .split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || title[0]?.toUpperCase() || '?';
+  ctx.fillStyle = `hsla(${hue1},80%,78%,0.9)`;
+  ctx.font = `bold ${Math.round(h * 0.22)}px Arial`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(initials, w / 2, h * 0.38);
+  // title lines at bottom
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  const fSize = Math.max(10, Math.round(h * 0.062));
+  ctx.font = `${fSize}px Arial`;
+  ctx.textBaseline = 'bottom';
+  const maxW = w - 16;
+  const words = title.split(/\s+/);
+  const lines = []; let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  const shown = lines.slice(-3);
+  const lh = fSize * 1.4;
+  shown.forEach((l, i) => ctx.fillText(l, w / 2, h - 10 - (shown.length - 1 - i) * lh));
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 function cleanBookTitle(raw) {
   return raw
     .replace(/^\d{1,4}\s*[-–—.]\s*/, '')  // strip "0001 - " prefix
@@ -194,15 +238,16 @@ async function fetchAndSaveBookMeta(path) {
   try {
     const searchTitle = cleanBookTitle(book.title);
     const meta = await window.api.fetchBookMeta(searchTitle);
-    if (!meta) return;
-    if (meta.cover)   book.cover  = meta.cover;
-    if (meta.authors?.length) book.author = meta.authors[0];
-    if (meta.title)   book.title  = meta.title;
-    if (meta.description) book.description = meta.description;
-    if (meta.publishedDate) book.year = meta.publishedDate.slice(0, 4);
+    if (meta) {
+      if (meta.cover)   book.cover  = meta.cover;
+      if (meta.authors?.length) book.author = meta.authors[0];
+      if (meta.title)   book.title  = meta.title;
+      if (meta.description) book.description = meta.description;
+      if (meta.publishedDate) book.year = meta.publishedDate.slice(0, 4);
+    }
+    if (!book.cover) book.cover = generateCover(book.title);
     saveState();
     renderLibrary();
-    // update title bar if this is the open book
     if (path === currentBookPath) {
       document.getElementById('book-name-tb').textContent = book.title;
     }

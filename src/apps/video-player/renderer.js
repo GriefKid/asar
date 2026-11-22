@@ -1,3 +1,41 @@
+// ── Generated cover fallback ───────────────────────────────────────────
+function generateCover(title, w = 200, h = 280) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) hash = title.charCodeAt(i) + ((hash << 5) - hash);
+  const hue1 = Math.abs(hash) % 360;
+  const hue2 = (hue1 + 50) % 360;
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, `hsl(${hue1},55%,22%)`);
+  grad.addColorStop(1, `hsl(${hue2},55%,13%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  ctx.beginPath();
+  ctx.arc(w * 0.5, h * 0.38, h * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = `hsla(${hue1},70%,55%,0.15)`;
+  ctx.fill();
+  const initials = title.trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || title[0]?.toUpperCase() || '?';
+  ctx.fillStyle = `hsla(${hue1},80%,78%,0.9)`;
+  ctx.font = `bold ${Math.round(h * 0.22)}px Arial`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(initials, w / 2, h * 0.38);
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  const fSize = Math.max(10, Math.round(h * 0.062));
+  ctx.font = `${fSize}px Arial`; ctx.textBaseline = 'bottom';
+  const maxLineW = w - 16;
+  const words = title.split(/\s+/); const lines = []; let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxLineW && line) { lines.push(line); line = word; } else line = test;
+  }
+  if (line) lines.push(line);
+  const shown = lines.slice(-3);
+  shown.forEach((l, i) => ctx.fillText(l, w / 2, h - 10 - (shown.length - 1 - i) * fSize * 1.4));
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
 // ── State ──────────────────────────────────────────────────────────────
 const DATA_KEY = 'video-player';
 let state = loadState();
@@ -549,9 +587,11 @@ async function fetchMetadataForColl(coll) {
 
     if (poster) {
       v.poster = poster;
-      saveState();
-      renderColls();
+    } else {
+      v.poster = generateCover(v.title || v.fileName || 'Film');
     }
+    saveState();
+    renderColls();
   }
 }
 
@@ -1509,7 +1549,18 @@ if (!getTmdbKey() && state.collections.length > 0) {
   setTimeout(() => document.getElementById('setup-banner').classList.add('show'), 1000);
 }
 
-// Startup: fetch covers for all videos that don't have a good poster yet
+// Startup: immediately generate placeholders for videos with no poster at all
+(function() {
+  let changed = false;
+  for (const coll of state.collections) {
+    for (const v of (coll.videos || [])) {
+      if (!v.poster) { v.poster = generateCover(v.title || v.fileName || 'Film'); changed = true; }
+    }
+  }
+  if (changed) { saveState(); renderColls(); }
+})();
+
+// Then fetch real covers in background (overwrites placeholders if found)
 setTimeout(() => {
   for (const coll of state.collections) {
     const needsCover = coll.videos?.some(v => !v.poster || (!v.poster.startsWith('data:') && !v.poster.includes('dzcdn.net')));
