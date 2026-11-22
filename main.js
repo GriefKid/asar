@@ -866,6 +866,55 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   return extractText(data);
 });
 
+// ── IPC: OCR page image via AI Vision ────────────────────────────────
+ipcMain.handle('book:ocr-page', async (_, imageBase64, apiKey, provider) => {
+  if (!provider) {
+    if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
+    else provider = 'claude';
+  }
+
+  if (provider === 'gemini') {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+    const body = JSON.stringify({
+      contents: [{ parts: [
+        { inlineData: { mimeType: 'image/png', data: imageBase64 } },
+        { text: 'Extract ALL text from this book page image exactly as it appears. Output only the raw text, keeping paragraph breaks. No explanations, no headers, just the text content.' }
+      ]}],
+      generationConfig: { maxOutputTokens: 4096 }
+    });
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body, signal: AbortSignal.timeout(60000)
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    return data.candidates[0].content.parts[0].text;
+  } else {
+    // Claude (Anthropic) — haiku has vision
+    const url = 'https://api.anthropic.com/v1/messages';
+    const body = JSON.stringify({
+      model: 'claude-haiku-5-5',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: imageBase64 } },
+        { type: 'text', text: 'Extract ALL text from this book page image exactly as it appears. Output only the raw text, keeping paragraph structure. No explanations, no preamble.' }
+      ]}]
+    });
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body, signal: AbortSignal.timeout(60000)
+    });
+    if (!resp.ok) {
+      const err = await resp.text().catch(() => '');
+      throw new Error(err.slice(0, 400) || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    return data.content[0].text;
+  }
+});
+
 ipcMain.handle('save:textFile', async (_, content, defaultName) => {
   const win = BrowserWindow.getFocusedWindow();
   const { filePath } = await dialog.showSaveDialog(win, {

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   openPdfFiles:      ()                    => ipcRenderer.invoke('dialog:openPdfFiles'),
   readFileBuffer:    (path)                => ipcRenderer.invoke('file:readBuffer', path),
   fetchBookMeta:     (title)               => ipcRenderer.invoke('book:fetchMeta', title),
+  ocrPage:           (img64, key, prov)    => ipcRenderer.invoke('book:ocr-page', img64, key, prov),
   // Subtitles (subdl)
   subtitleSearch:    (title, year, key, fileName, videoPath, imdbId) => ipcRenderer.invoke('subtitle:search', title, year, key, fileName, videoPath, imdbId),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
