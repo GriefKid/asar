@@ -110,7 +110,11 @@ function syncSubAppsToLibrary() {
       vp.collections.forEach(coll => {
         (coll.videos || []).forEach(v => {
           if (!v.path) return;
-          if (library.some(i => i.filePath === v.path)) return;
+          const existing = library.find(i => i.filePath === v.path);
+          if (existing) {
+            if (v.poster && !existing.cover) { existing.cover = v.poster; changed = true; }
+            return;
+          }
           library.push({
             id: 'film_' + v.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
             type: 'film', title: v.title || v.fileName || 'بدون عنوان',
@@ -131,7 +135,11 @@ function syncSubAppsToLibrary() {
       mp.collections.forEach(coll => {
         (coll.songs || []).forEach(s => {
           if (!s.path) return;
-          if (library.some(i => i.filePath === s.path)) return;
+          const existing = library.find(i => i.filePath === s.path);
+          if (existing) {
+            if (s.cover && !existing.cover) { existing.cover = s.cover; changed = true; }
+            return;
+          }
           library.push({
             id: 'music_' + s.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
             type: 'music', title: s.title || s.path.split(/[\\/]/).pop() || 'بدون عنوان',
@@ -151,7 +159,11 @@ function syncSubAppsToLibrary() {
     if (br?.books) {
       br.books.forEach(b => {
         if (!b.path) return;
-        if (library.some(i => i.filePath === b.path)) return;
+        const existing = library.find(i => i.filePath === b.path);
+        if (existing) {
+          if (b.cover && !existing.cover) { existing.cover = b.cover; changed = true; }
+          return;
+        }
         library.push({
           id: 'book_' + b.path.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
           type: 'book', title: b.title || 'بدون عنوان',
