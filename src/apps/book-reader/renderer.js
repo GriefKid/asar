@@ -79,9 +79,9 @@ function renderLibrary() {
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
     const rating = (state.ratings || {})[b.path] || 0;
     const stars = [1,2,3,4,5].map(n =>
-      `<span onclick="event.stopPropagation();setBookRating('${esc(b.path)}',${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
+      `<span onclick="event.stopPropagation();setBookRating(${JSON.stringify(b.path)},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
     ).join('');
-    return `<div class="book-item ${isActive ? 'active' : ''}" onclick="openBook('${esc(b.path)}')">
+    return `<div class="book-item ${isActive ? 'active' : ''}" onclick="openBook(${JSON.stringify(b.path)})">
       <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
       <div class="book-meta">
         <div class="book-title">${esc(b.title)}</div>
@@ -120,6 +120,18 @@ async function importPdf() {
   saveState();
   renderLibrary();
   if (paths.length === 1) openBook(paths[0]);
+  // sync to main library
+  for (const p of newPaths) {
+    const book = state.books.find(b => b.path === p);
+    if (book && window.api?.addToLibrary) {
+      window.api.addToLibrary({
+        id: 'book_' + p.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
+        type: 'book', title: book.title, creator: book.author || '',
+        year: book.year || '', stage: 'queue', rating: 0, cover: book.cover || null,
+        filePath: p, createdAt: Date.now()
+      });
+    }
+  }
   // fetch covers in background
   for (const p of newPaths) fetchAndSaveBookMeta(p);
 }
@@ -179,9 +191,29 @@ async function openBook(path) {
     updateNav();
     checkTranslateBtn();
   } catch (e) {
+    const msg = String(e.message || e);
+    const notFound = msg.includes('ENOENT') || msg.includes('no such file') || msg.includes('cannot find');
     document.getElementById('pdf-container').innerHTML =
-      `<div style="color:var(--err);text-align:center;padding:40px;direction:rtl">خطا در بارگذاری PDF: ${esc(String(e.message))}</div>`;
+      `<div style="color:var(--err);text-align:center;padding:40px;direction:rtl;line-height:2">
+        ${notFound ? '📂 فایل پیدا نشد' : '❌ خطا در بارگذاری'}
+        <br><span style="font-size:11px;color:var(--t3);direction:ltr;display:block;word-break:break-all">${esc(path)}</span>
+        ${notFound ? `<button onclick="relocateBook(${JSON.stringify(path)})" style="margin-top:12px;padding:7px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px">انتخاب مجدد فایل</button>` : ''}
+      </div>`;
   }
+}
+
+async function relocateBook(oldPath) {
+  const paths = await window.api.openPdfFiles().catch(() => []);
+  if (!paths.length) return;
+  const newPath = paths[0];
+  const book = state.books.find(b => b.path === oldPath);
+  if (!book) return;
+  book.path = newPath;
+  const fileName = newPath.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
+  if (!book.title || book.title === oldPath.split(/[\\/]/).pop().replace(/\.pdf$/i, '')) book.title = fileName;
+  saveState();
+  renderLibrary();
+  openBook(newPath);
 }
 
 // ── TOC ────────────────────────────────────────────────────────────────
@@ -1465,3 +1497,8 @@ async function aiSummarizePage() {
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
 initFirebase();
+
+// receive open-file request from main library
+if (window.api?.onOpenFile) {
+  window.api.onOpenFile(function(path) { openBook(path); });
+}

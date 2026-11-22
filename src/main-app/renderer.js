@@ -79,6 +79,8 @@ let habits = [];   // [{id, name, doneByDay:{key:bool}}]
 let goals  = [];   // [{id, title, type, target, current}]
 let libFilter = 'all';
 let libSort   = 'default'; // 'default' | 'rating' | 'recent'
+let libView   = 'shelf';   // 'shelf' | 'kanban'
+let dragItemId = null;
 let editingItemId = null;
 let editingEventId = null;
 let selectedItemType = 'book';
@@ -303,20 +305,100 @@ function filteredItems() {
   return items;
 }
 
+window.setLibView = function(mode, btn) {
+  libView = mode;
+  document.querySelectorAll('.lib-view-btn').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const shelf  = document.getElementById('lib-shelf-view');
+  const kanban = document.getElementById('kanban');
+  if (shelf)  shelf.style.display  = mode === 'shelf'  ? '' : 'none';
+  if (kanban) kanban.style.display = mode === 'kanban' ? '' : 'none';
+  renderLibrary();
+};
+
 function renderLibrary() {
+  if (libView === 'shelf') {
+    renderShelf();
+  } else {
+    renderKanban();
+  }
+}
+
+function renderShelf() {
+  const all = filteredItems();
+  const types = libFilter === 'all' ? ['book','film','music'] : [libFilter];
+
+  types.forEach(t => {
+    const items = all.filter(i => i.type === t);
+    const cnt = document.getElementById('shelf-cnt-'+t);
+    if (cnt) cnt.textContent = toFarsiNum(items.length);
+
+    const row = document.getElementById('shelf-row-'+t);
+    if (!row) return;
+
+    const isMusic = t === 'music';
+    row.innerHTML = items.map(item => {
+      const statusDot = `<div class="mcard-status ${item.stage||'queue'}"></div>`;
+      const imgEl = item.cover
+        ? `<img src="${esc(item.cover)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy">
+           <div class="mcard-fallback" style="display:none">${typeEmoji(item.type)}</div>`
+        : `<div class="mcard-fallback">${typeEmoji(item.type)}</div>`;
+
+      const ovActions = `
+        <div class="mov-btn" onclick="event.stopPropagation();openReview('${item.id}')" title="نقد">📝</div>
+        ${item.stage!=='active'?`<div class="mov-btn" onclick="event.stopPropagation();moveItem('${item.id}','active')">▶</div>`:''}
+        ${item.stage!=='done'?`<div class="mov-btn ok" onclick="event.stopPropagation();moveItem('${item.id}','done')">✓</div>`:''}
+        ${item.filePath?`<div class="mov-btn" onclick="event.stopPropagation();openInSubApp('${item.id}')">↗</div>`:''}
+        <div class="mov-btn del" onclick="event.stopPropagation();deleteItem('${item.id}')">🗑</div>`;
+
+      return `<div class="mcard ${t}" id="mcard-${item.id}"
+          draggable="true"
+          ondragstart="shelfDragStart(event,'${item.id}')"
+          ondragend="shelfDragEnd(event)"
+          ondragover="shelfDragOver(event)"
+          ondrop="shelfDrop(event,'${item.id}')"
+          onclick="openReview('${item.id}')">
+        ${imgEl}
+        ${statusDot}
+        <div class="mcard-ov">
+          <div class="mcard-ov-title">${esc(item.title)}</div>
+          <div class="mcard-ov-actions">${ovActions}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Add "+" button at end
+    row.innerHTML += `<div class="mcard-add ${isMusic?'music':''}" onclick="openAddItemOfType('${t}')" title="افزودن">+</div>`;
+  });
+
+  // Show/hide sections based on filter
+  ['book','film','music'].forEach(t => {
+    const sectionId = 'shelf-' + (t==='book'?'books':t==='film'?'films':'music');
+    const section = document.getElementById(sectionId);
+    if (!section) return;
+    section.style.display = libFilter === 'all' || libFilter === t ? '' : 'none';
+  });
+}
+
+function renderKanban() {
   const cols = { queue:[], active:[], done:[] };
   filteredItems().forEach(item => { if (cols[item.stage]) cols[item.stage].push(item); });
 
   ['queue','active','done'].forEach(stage => {
     const el = document.getElementById('col-'+stage);
     const cnt = document.getElementById('cnt-'+stage);
+    if (!el || !cnt) return;
     cnt.textContent = toFarsiNum(cols[stage].length);
     if (!cols[stage].length) {
       el.innerHTML = '<div class="kcard-empty">اینجا خالیه</div>';
       return;
     }
     el.innerHTML = cols[stage].map(item => `
-      <div class="kcard" id="kcard-${item.id}">
+      <div class="kcard" id="kcard-${item.id}" draggable="true"
+           ondragstart="kcardDragStart(event,'${item.id}')"
+           ondragend="kcardDragEnd(event)"
+           ondragover="kcardDragOver(event)"
+           ondrop="kcardDrop(event,'${item.id}')">
         <div class="kcard-top">
           <div class="kcard-cover">${item.cover ? `<img src="${item.cover}" onerror="this.parentElement.textContent='${typeEmoji(item.type)}'">` : typeEmoji(item.type)}</div>
           <div class="kcard-info">
@@ -329,15 +411,83 @@ function renderLibrary() {
           </div>
         </div>
         <div class="kcard-rating">${[1,2,3,4,5].map(n => `<span class="star ${(item.rating||0)>=n?'on':''}" onclick="rateItem('${item.id}',${n})">★</span>`).join('')}</div>
+        ${item.review?.text ? `<div class="kcard-review-snip">${esc(item.review.text.slice(0,100))}${item.review.text.length>100?'…':''}</div>` : ''}
         <div class="kcard-actions">
           ${stage !== 'queue'  ? `<div class="kcard-action" onclick="moveItem('${item.id}','queue')">↩ می‌خوام</div>` : ''}
           ${stage !== 'active' ? `<div class="kcard-action primary" onclick="moveItem('${item.id}','active')">▶ شروع</div>` : ''}
           ${stage !== 'done'   ? `<div class="kcard-action" onclick="moveItem('${item.id}','done')">✓ تموم شد</div>` : ''}
-          <div class="kcard-action" onclick="deleteItem('${item.id}')">🗑</div>
+          <div class="kcard-action ${item.review?.text ? 'review-on' : ''}" onclick="openReview('${item.id}')">📝 نقد</div>
+          ${item.filePath ? `<div class="kcard-action" onclick="openInSubApp('${item.id}')">▶ باز</div>` : ''}
+          <div class="kcard-action del-btn" onclick="deleteItem('${item.id}')">🗑</div>
         </div>
       </div>`).join('');
   });
 }
+
+// ── Shelf drag & drop (reorder within row) ────────────────────────────────
+window.shelfDragStart = function(e, id) {
+  dragItemId = id;
+  setTimeout(() => { const el = document.getElementById('mcard-'+id); if (el) el.classList.add('dragging'); }, 0);
+  e.dataTransfer.effectAllowed = 'move';
+};
+window.shelfDragEnd = function(e) {
+  if (dragItemId) { const el = document.getElementById('mcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+};
+window.shelfDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+window.shelfDrop = function(e, targetId) {
+  e.preventDefault();
+  if (!dragItemId || dragItemId === targetId) return;
+  const fromIdx = library.findIndex(i => i.id === dragItemId);
+  const toIdx   = library.findIndex(i => i.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = library.splice(fromIdx, 1);
+  library.splice(toIdx, 0, moved);
+  dragItemId = null;
+  saveLib();
+  renderLibrary();
+};
+
+// ── Kanban drag & drop (move between columns) ─────────────────────────────
+window.kcardDragStart = function(e, id) {
+  dragItemId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => { const el = document.getElementById('kcard-'+id); if (el) el.classList.add('dragging'); }, 0);
+};
+window.kcardDragEnd = function(e) {
+  if (dragItemId) { const el = document.getElementById('kcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+};
+window.kcardDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+window.kcardDrop = function(e, targetId) {
+  e.preventDefault();
+  if (!dragItemId || dragItemId === targetId) return;
+  const fromIdx = library.findIndex(i => i.id === dragItemId);
+  const toIdx   = library.findIndex(i => i.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = library.splice(fromIdx, 1);
+  library.splice(toIdx, 0, moved);
+  dragItemId = null;
+  saveLib();
+  renderLibrary();
+};
+
+// Drop onto kanban column (change stage via drag)
+window.kanbanDragOver = function(e, col) {
+  e.preventDefault();
+  col.classList.add('drag-over');
+};
+window.kanbanDrop = function(e, stage) {
+  e.preventDefault();
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+  if (!dragItemId) return;
+  const item = library.find(i => i.id === dragItemId);
+  if (item && item.stage !== stage) {
+    item.stage = stage;
+    saveLib();
+    renderLibrary();
+    if (typeof renderHome === 'function') renderHome();
+  }
+  dragItemId = null;
+};
 
 window.rateItem = function(id, rating) {
   const item = library.find(i => i.id === id);
@@ -363,6 +513,60 @@ window.deleteItem = function(id) {
   if (activeSection === 'home') renderHome();
 };
 
+// ── Review ────────────────────────────────────────────────────────────────
+let reviewItemId = null;
+
+window.openReview = function(id) {
+  reviewItemId = id;
+  const item = library.find(i => i.id === id);
+  if (!item) return;
+
+  const coverEl = document.getElementById('review-cover-el');
+  coverEl.innerHTML = item.cover
+    ? `<img src="${esc(item.cover)}" onerror="this.parentElement.textContent='${typeEmoji(item.type)}'">`
+    : typeEmoji(item.type);
+
+  document.getElementById('review-item-title-el').textContent = item.title || '';
+  document.getElementById('review-item-sub-el').textContent   = [item.creator, item.year].filter(Boolean).join(' · ');
+  document.getElementById('review-title-inp').value  = item.review?.title || '';
+  document.getElementById('review-text-area').value  = item.review?.text  || '';
+
+  const openBtn = document.getElementById('review-open-app-btn');
+  openBtn.style.display = item.filePath ? 'block' : 'none';
+
+  document.getElementById('review-modal').classList.add('show');
+  setTimeout(() => document.getElementById('review-title-inp').focus(), 80);
+};
+
+window.closeReview = function() {
+  document.getElementById('review-modal').classList.remove('show');
+  reviewItemId = null;
+};
+
+window.saveReview = function() {
+  const item = library.find(i => i.id === reviewItemId);
+  if (!item) return;
+  const title = document.getElementById('review-title-inp').value.trim();
+  const text  = document.getElementById('review-text-area').value.trim();
+  item.review = { title, text, updatedAt: Date.now() };
+  if (text && item.stage !== 'done') item.stage = 'done';
+  saveLib();
+  closeReview();
+  renderLibrary();
+  if (activeSection === 'home') renderHome();
+};
+
+window.openInSubApp = function(id) {
+  const item = library.find(i => i.id === id);
+  if (!item || !item.filePath) return;
+  if (item.type === 'book') window.api.openBookReaderWithFile(item.filePath);
+  else if (item.type === 'film') window.api.openVideoPlayerWithFile(item.filePath);
+};
+
+window.openInSubAppFromReview = function() {
+  if (reviewItemId) openInSubApp(reviewItemId);
+};
+
 // Add item modal
 window.openAddItem = function(id) {
   editingItemId = id || null;
@@ -377,6 +581,14 @@ window.openAddItem = function(id) {
   });
   document.getElementById('add-item-modal').classList.add('show');
   setTimeout(() => document.getElementById('item-title').focus(), 100);
+};
+
+window.openAddItemOfType = function(type) {
+  openAddItem();
+  selectedItemType = type;
+  document.querySelectorAll('.type-opt[data-t]').forEach(o => {
+    o.classList.toggle('on', o.dataset.t === type);
+  });
 };
 
 window.closeAddItem = function() {
@@ -1065,6 +1277,7 @@ document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmdPal(); return; }
   if (e.key === 'Escape') {
     if (document.getElementById('cmdpal').classList.contains('show')) { closeCmdPal(); return; }
+    if (document.getElementById('review-modal').classList.contains('show')) { closeReview(); return; }
     if (document.getElementById('add-goal-modal').classList.contains('show')) { closeAddGoal(); return; }
     if (exitModal.classList.contains('show')) {
       exitModal.classList.remove('show');
@@ -1395,3 +1608,16 @@ window.toggleAdminUser = async function(libId, uid) {
       );
   } catch(e) { libEl.textContent = 'خطا در دریافت داده‌ها'; }
 };
+
+// ── Sub-app sync: receive items ───────────────────────────────────────────
+if (window.api?.onLibraryItem) {
+  window.api.onLibraryItem(function(item) {
+    const dup = library.find(i => i.id === item.id || (item.filePath && i.filePath === item.filePath));
+    if (!dup) {
+      library.push(item);
+      saveLib();
+      if (activeSection === 'library') renderLibrary();
+      if (activeSection === 'home')    renderHome();
+    }
+  });
+}

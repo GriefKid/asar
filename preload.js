@@ -18,9 +18,11 @@ contextBridge.exposeInMainWorld('api', {
   openPdfFiles:      ()                    => ipcRenderer.invoke('dialog:openPdfFiles'),
   readFileBuffer:    (path)                => ipcRenderer.invoke('file:readBuffer', path),
   fetchBookMeta:     (title)               => ipcRenderer.invoke('book:fetchMeta', title),
-  // Subtitles (OpenSubtitles)
-  subtitleSearch:    (title, year, key) => ipcRenderer.invoke('subtitle:search', title, year, key),
+  // Subtitles (subdl)
+  subtitleSearch:    (title, year, key, fileName, videoPath, imdbId) => ipcRenderer.invoke('subtitle:search', title, year, key, fileName, videoPath, imdbId),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
+  fetchMoviePoster:  (title)            => ipcRenderer.invoke('cover:fetchMoviePoster', title),
+  fetchImage:        (url)              => ipcRenderer.invoke('image:fetch', url),
   // Claude AI
   claudeChat: (sys, msgs, key, provider) => ipcRenderer.invoke('claude:chat', sys, msgs, key, provider),
   saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
@@ -31,4 +33,13 @@ contextBridge.exposeInMainWorld('api', {
   openMusicPlayer:   ()                    => ipcRenderer.invoke('app:open-music'),
   openVideoPlayer:   ()                    => ipcRenderer.invoke('app:open-video'),
   openBookReader:    ()                    => ipcRenderer.invoke('app:open-book'),
+  openWriter:        ()                    => ipcRenderer.invoke('app:open-writer'),
+  // Library sync (sub-apps → main library)
+  addToLibrary:    (item)  => ipcRenderer.invoke('lib:addItem', item),
+  onLibraryItem:   (cb)    => ipcRenderer.on('lib:item-added', (_, item) => cb(item)),
+  // Open sub-apps with a specific file (second monitor)
+  openBookReaderWithFile:  (path) => ipcRenderer.invoke('app:open-book-file', path),
+  openVideoPlayerWithFile: (path) => ipcRenderer.invoke('app:open-video-file', path),
+  // Sub-apps receive file open requests
+  onOpenFile: (cb) => ipcRenderer.on('open:file', (_, path) => cb(path)),
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -6,6 +6,7 @@ let mainWindow = null;
 let musicWindow = null;
 let videoWindow = null;
 let bookWindow = null;
+let writerWindow = null;
 
 const WEB_PREFS = {
   preload: path.join(__dirname, 'preload.js'),
@@ -44,6 +45,13 @@ function createBookReader() {
   bookWindow.on('closed', () => { bookWindow = null; });
 }
 
+function createWriter() {
+  writerWindow = new BrowserWindow({ width: 1100, height: 740, frame: false, backgroundColor: '#0f0f13', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
+  writerWindow.loadFile('src/apps/writer/index.html');
+  writerWindow.once('ready-to-show', () => writerWindow.show());
+  writerWindow.on('closed', () => { writerWindow = null; });
+}
+
 // ── IPC: Open sub-apps ─────────────────────────────────────────────────
 ipcMain.handle('app:open-music', () => {
   if (musicWindow) { musicWindow.focus(); return; }
@@ -56,6 +64,58 @@ ipcMain.handle('app:open-video', () => {
 ipcMain.handle('app:open-book', () => {
   if (bookWindow) { bookWindow.focus(); return; }
   createBookReader();
+});
+ipcMain.handle('app:open-writer', () => {
+  if (writerWindow) { writerWindow.focus(); return; }
+  createWriter();
+});
+
+// ── IPC: Library sync ──────────────────────────────────────────────────
+ipcMain.handle('lib:addItem', (_, item) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('lib:item-added', item);
+  }
+});
+
+// ── IPC: Open sub-apps with specific file (second monitor) ─────────────
+ipcMain.handle('app:open-book-file', async (_, filePath) => {
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  const second = displays.find(d => d.id !== primary.id);
+
+  if (!bookWindow || bookWindow.isDestroyed()) {
+    createBookReader();
+    await new Promise(resolve => bookWindow.once('ready-to-show', resolve));
+  } else {
+    bookWindow.focus();
+  }
+  if (second) bookWindow.setBounds(second.workArea);
+
+  setTimeout(() => {
+    if (bookWindow && !bookWindow.isDestroyed()) {
+      bookWindow.webContents.send('open:file', filePath);
+    }
+  }, 600);
+});
+
+ipcMain.handle('app:open-video-file', async (_, filePath) => {
+  const displays = screen.getAllDisplays();
+  const primary = screen.getPrimaryDisplay();
+  const second = displays.find(d => d.id !== primary.id);
+
+  if (!videoWindow || videoWindow.isDestroyed()) {
+    createVideoPlayer();
+    await new Promise(resolve => videoWindow.once('ready-to-show', resolve));
+  } else {
+    videoWindow.focus();
+  }
+  if (second) videoWindow.setBounds(second.workArea);
+
+  setTimeout(() => {
+    if (videoWindow && !videoWindow.isDestroyed()) {
+      videoWindow.webContents.send('open:file', filePath);
+    }
+  }, 600);
 });
 
 app.whenReady().then(() => {
@@ -165,14 +225,29 @@ ipcMain.handle('lyrics:fetch', async (_, artist, title) => {
 
 // ── IPC: Translate ─────────────────────────────────────────────────
 ipcMain.handle('translate:toFarsi', async (_, text) => {
+  // Try Google Translate (gtx — no key needed)
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=fa&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const data = await res.json();
-    return data[0].map(s => s[0]).join('');
-  } catch {
-    return null;
-  }
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (res.ok) {
+      const data = await res.json();
+      const result = data[0].map(s => s[0]).join('');
+      if (result && result.trim()) return result;
+    }
+  } catch {}
+
+  // Fallback: MyMemory (free, no key, works without VPN)
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|fa`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (res.ok) {
+      const data = await res.json();
+      const t = data.responseData?.translatedText;
+      if (t && t.trim() && !t.includes('PLEASE SELECT')) return t;
+    }
+  } catch {}
+
+  return null;
 });
 
 // ── IPC: Song info (MusicBrainz) ───────────────────────────────────
@@ -245,33 +320,49 @@ ipcMain.handle('dialog:openSubtitleFile', async () => {
   const win = videoWindow || BrowserWindow.getFocusedWindow();
   const result = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Subtitle Files', extensions: ['srt','vtt'] }]
+    filters: [{ name: 'Subtitle Files', extensions: ['srt','vtt','ass','ssa'] }]
   });
   if (result.canceled) return null;
   return fs.readFileSync(result.filePaths[0], 'utf8');
 });
 
 // ── IPC: TMDB search ───────────────────────────────────────────────────
+async function tmdbSearchRaw(title, apiKey) {
+  const q = encodeURIComponent(title);
+  const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${q}&language=en-US&page=1`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data.results?.length) return null;
+  const m = data.results[0];
+  return {
+    id: m.id, title: m.title, original_title: m.original_title,
+    overview: m.overview, release_date: m.release_date, vote_average: m.vote_average,
+    poster_path: m.poster_path ? `https://image.tmdb.org/t/p/w300${m.poster_path}` : null,
+    backdrop_path: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : null,
+    genre_ids: m.genre_ids
+  };
+}
+
 ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
   try {
-    const q = encodeURIComponent(title);
-    const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${q}&language=en-US&page=1`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.results?.length) return null;
-    const m = data.results[0];
-    return {
-      id: m.id,
-      title: m.title,
-      original_title: m.original_title,
-      overview: m.overview,
-      release_date: m.release_date,
-      vote_average: m.vote_average,
-      poster_path: m.poster_path ? `https://image.tmdb.org/t/p/w300${m.poster_path}` : null,
-      backdrop_path: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : null,
-      genre_ids: m.genre_ids
-    };
+    // Try as-is first
+    let result = await tmdbSearchRaw(title, apiKey);
+    if (result) return result;
+    // Strip year, release group, punctuation and retry
+    const stripped = title
+      .replace(/\b(19|20)\d{2}\b/g, '')
+      .replace(/-[A-Z0-9]+$/i, '')
+      .replace(/[:\-]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+    if (stripped && stripped !== title) {
+      result = await tmdbSearchRaw(stripped, apiKey);
+      if (result) return result;
+    }
+    // Last try: first 2 words only
+    const short = stripped.split(' ').slice(0, 2).join(' ');
+    if (short && short !== stripped) return await tmdbSearchRaw(short, apiKey);
+    return null;
   } catch { return null; }
 });
 
@@ -313,41 +404,267 @@ ipcMain.handle('file:readBuffer', async (_, filePath) => {
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 
-// ── IPC: OpenSubtitles search ──────────────────────────────────────────
-ipcMain.handle('subtitle:search', async (_, title, year, apiKey) => {
+// ── IPC: Subtitle search + download ───────────────────────────────────
+const AdmZip = require('adm-zip');
+const zlib = require('zlib');
+
+function scoreSubtitleSync(releaseName, fileName) {
+  if (!releaseName || !fileName) return 0;
+  const rn = releaseName.toLowerCase().replace(/[_\s]/g, '.');
+  const fn = fileName.toLowerCase().replace(/[_\s]/g, '.');
+  // Exact or near-exact match = highest priority
+  if (rn === fn || rn.startsWith(fn) || fn.startsWith(rn)) return 1000;
+  const tags = ['1080p','720p','2160p','4k','bluray','blu-ray','webrip','web-dl','webdl','hdtv','hdcam','x264','x265','hevc','h264','h265','avc'];
+  let score = 0;
+  for (const t of tags) {
+    const inRn = rn.includes(t), inFn = fn.includes(t);
+    if (inRn && inFn) score += 3;
+    else if (inRn !== inFn) score -= 1;
+  }
+  return score;
+}
+
+// OpenSubtitles file hash — guarantees subtitle sync with video
+function computeOSHash(filePath) {
   try {
-    let url = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(title)}&languages=en&order_by=download_count`;
-    if (year) url += `&year=${year}`;
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    if (fileSize < 131072) return null;
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(65536);
+    let hash = BigInt(fileSize);
+    fs.readSync(fd, buf, 0, 65536, 0);
+    for (let i = 0; i < 65536; i += 8) hash = BigInt.asUintN(64, hash + buf.readBigInt64LE(i));
+    fs.readSync(fd, buf, 0, 65536, fileSize - 65536);
+    for (let i = 0; i < 65536; i += 8) hash = BigInt.asUintN(64, hash + buf.readBigInt64LE(i));
+    fs.closeSync(fd);
+    return { hash: hash.toString(16).padStart(16, '0'), size: fileSize };
+  } catch { return null; }
+}
+
+async function searchByHash(videoPath, fileName) {
+  try {
+    const h = computeOSHash(videoPath);
+    if (!h) return null;
+    const url = `https://rest.opensubtitles.org/search/moviebytesize-${h.size}/moviehash-${h.hash}/sublanguageid-eng`;
     const res = await fetch(url, {
-      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'LifestyleApp/1.0' },
-      signal: AbortSignal.timeout(8000)
+      headers: { 'X-User-Agent': 'TemporaryUserAgent', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(6000)
     });
     if (!res.ok) return null;
     const data = await res.json();
-    return (data.data || []).slice(0, 5).map(item => ({
-      id: item.id,
-      fileId: item.attributes?.files?.[0]?.file_id || null,
-      name: item.attributes?.release || '',
-      downloads: item.attributes?.download_count || 0,
-    })).filter(r => r.fileId);
+    if (!Array.isArray(data) || !data.length) return null;
+    return data.filter(s => s.SubFormat === 'srt' || s.SubFormat === 'ass').slice(0, 3).map((s, i) => ({
+      fileId: s.SubDownloadLink,
+      name: s.MovieReleaseName || s.SubFileName || `Hash match ${i + 1}`,
+      score: 100,
+    }));
   } catch { return null; }
-});
+}
 
-// ── IPC: OpenSubtitles download ────────────────────────────────────────
-ipcMain.handle('subtitle:download', async (_, fileId, apiKey) => {
+async function searchSubdl(title, year, apiKey, fileName) {
   try {
-    const res = await fetch('https://api.opensubtitles.com/api/v1/download', {
-      method: 'POST',
-      headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json', 'User-Agent': 'LifestyleApp/1.0' },
-      body: JSON.stringify({ file_id: fileId }),
+    // Include year in film_name — subdl ignores the year param but searches it in the title
+    const query = year ? `${title} ${year}` : title;
+    const url = `https://api.subdl.com/api/v1/subtitles?api_key=${apiKey}&film_name=${encodeURIComponent(query)}&languages=EN`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.status || !data.subtitles?.length) return null;
+    // Filter: release_name must contain year (or no year known)
+    const yearStr = year ? String(year) : null;
+    const relevant = data.subtitles.filter(s => {
+      if (!yearStr) return true;
+      const rn = (s.release_name || '').toLowerCase();
+      return rn.includes(yearStr);
+    });
+    const source = relevant.length ? relevant : data.subtitles; // fallback to all if filter removes everything
+    const list = source.slice(0, 15).map((s, i) => ({
+      fileId: s.url,
+      name: s.release_name || `Subtitle ${i + 1}`,
+      score: fileName ? scoreSubtitleSync(s.release_name || '', fileName) : 0,
+      source: 'subdl',
+    }));
+    list.sort((a, b) => b.score - a.score);
+    return list.slice(0, 5);
+  } catch { return null; }
+}
+
+// OpenSubtitles.com v3 REST API (requires free API key from opensubtitles.com)
+async function searchOpenSubsV3(title, year, imdbId, apiKey, fileName) {
+  try {
+    let url = `https://api.opensubtitles.com/api/v1/subtitles?languages=en&type=movie`;
+    if (imdbId) url += `&imdb_id=${String(imdbId).replace(/^tt/i, '')}`;
+    else {
+      url += `&query=${encodeURIComponent(title)}`;
+      if (year) url += `&year=${year}`;
+    }
+    const res = await fetch(url, {
+      headers: {
+        'Api-Key': apiKey,
+        'Content-Type': 'application/json',
+        'User-Agent': 'ArasApp v1.0',
+      },
       signal: AbortSignal.timeout(10000)
     });
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data.link) return null;
-    const srtRes = await fetch(data.link, { signal: AbortSignal.timeout(15000) });
-    if (!srtRes.ok) return null;
-    return await srtRes.text();
+    if (!data.data?.length) return null;
+    const list = data.data.flatMap(item => {
+      const rel = item.attributes?.release || item.attributes?.feature_details?.movie_name || '';
+      return (item.attributes?.files || []).map(f => ({
+        fileId: `osv3:${f.file_id}:${apiKey}`,
+        name: rel || `OpenSubtitles ${item.id}`,
+        score: fileName ? scoreSubtitleSync(rel, fileName) : 0,
+        source: 'osv3',
+      }));
+    });
+    list.sort((a, b) => b.score - a.score);
+    return list.slice(0, 8);
+  } catch { return null; }
+}
+
+// OpenSubtitles.org v1 by title — no API key needed, free public search
+async function searchOSv1ByTitle(title, year, fileName) {
+  try {
+    const q = encodeURIComponent(title.replace(/\s+/g, '+'));
+    const url = `https://rest.opensubtitles.org/search/query-${q}/sublanguageid-eng`;
+    const res = await fetch(url, {
+      headers: { 'X-User-Agent': 'TemporaryUserAgent', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    const yearStr = year ? String(year) : null;
+    // Filter by year if known
+    const byYear = yearStr ? data.filter(s => String(s.MovieYear || '') === yearStr) : data;
+    const pool = byYear.length ? byYear : data;
+    const relevant = pool.filter(s => s.SubFormat === 'srt' || s.SubFormat === 'ass' || !s.SubFormat);
+    if (!relevant.length) return null;
+    relevant.sort((a, b) => (parseInt(b.SubDownloadsCnt) || 0) - (parseInt(a.SubDownloadsCnt) || 0));
+    return relevant.slice(0, 6).map((s, i) => ({
+      fileId: s.SubDownloadLink,
+      name: s.MovieReleaseName || s.SubFileName || `OS ${i + 1}`,
+      score: fileName ? scoreSubtitleSync(s.MovieReleaseName || '', fileName) : 0,
+      source: 'osv1_title',
+    }));
+  } catch { return null; }
+}
+
+// OS v1 hash-only text search — strictly filtered (v1 text search is unreliable but hash still works)
+async function searchOSv1ByImdb(imdbId, title, year, fileName) {
+  try {
+    const id = String(imdbId).replace(/^tt/i, '');
+    const res = await fetch(`https://rest.opensubtitles.org/search/imdbid-${id}/sublanguageid-eng`, {
+      headers: { 'X-User-Agent': 'TemporaryUserAgent', 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    const relevant = data.filter(s => s.SubFormat === 'srt' || s.SubFormat === 'ass');
+    if (!relevant.length) return null;
+    const list = relevant.slice(0, 15).map((s, i) => {
+      const syncScore = fileName ? scoreSubtitleSync(s.MovieReleaseName || s.SubFileName || '', fileName) : 0;
+      const dlCount = parseInt(s.SubDownloadsCnt) || 0;
+      return {
+        fileId: s.SubDownloadLink,
+        name: s.MovieReleaseName || s.SubFileName || `Subtitle ${i + 1}`,
+        score: syncScore,
+        sortKey: syncScore >= 1000 ? 1000000 + dlCount : syncScore * 10000 + Math.min(dlCount, 9999),
+        source: 'osv1',
+      };
+    });
+    list.sort((a, b) => b.sortKey - a.sortKey);
+    return list.slice(0, 5);
+  } catch { return null; }
+}
+
+ipcMain.handle('subtitle:search', async (_, title, year, apiKey, fileName, videoPath, imdbId) => {
+  // Run hash search AND text searches in parallel, combine (hash first for sync priority)
+  const parallelSearches = [];
+
+  if (videoPath) parallelSearches.push(searchByHash(videoPath, fileName));
+  else parallelSearches.push(Promise.resolve(null));
+
+  if (apiKey) {
+    parallelSearches.push(searchSubdl(title, year, apiKey, fileName));
+    parallelSearches.push(searchOpenSubsV3(title, year, imdbId, apiKey, fileName));
+  } else {
+    parallelSearches.push(Promise.resolve(null));
+    parallelSearches.push(Promise.resolve(null));
+  }
+
+  // OS v1 by title (no key needed) + by IMDB
+  parallelSearches.push(searchOSv1ByTitle(title, year, fileName));
+  if (imdbId) parallelSearches.push(searchOSv1ByImdb(imdbId, title, year, fileName));
+
+  const [hashR, subdlR, osv3R, osv1TitleR, ...rest] = await Promise.all(parallelSearches);
+  const imdbR = rest[0] || null;
+
+  // Combine: subdl first (most entries), then osv1_title, then hash (synced but sparse), then others
+  const combined = [
+    ...(subdlR || []),
+    ...(osv1TitleR || []),
+    ...(hashR || []),
+    ...(osv3R || []),
+    ...(imdbR || []),
+  ];
+
+  console.log(`[sub] hash:${hashR?.length??0} subdl:${subdlR?.length??0} osv3:${osv3R?.length??0} osv1_title:${osv1TitleR?.length??0} imdb:${imdbR?.length??0} → ${combined.length} total`);
+  return combined.length ? combined : null;
+});
+
+// ── IPC: Subtitle download (ZIP / gzip / plain) ────────────────────────
+ipcMain.handle('subtitle:download', async (_, fileUrl, apiKey) => {
+  try {
+    let fullUrl, extraHeaders = {};
+
+    // OpenSubtitles.com v3: needs 2-step download (get token then download)
+    if (fileUrl.startsWith('osv3:')) {
+      const [, fileId, key] = fileUrl.split(':');
+      const tokenRes = await fetch('https://api.opensubtitles.com/api/v1/download', {
+        method: 'POST',
+        headers: { 'Api-Key': key, 'Content-Type': 'application/json', 'User-Agent': 'ArasApp v1.0' },
+        body: JSON.stringify({ file_id: parseInt(fileId) }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!tokenRes.ok) return null;
+      const tokenData = await tokenRes.json();
+      if (!tokenData.link) return null;
+      fullUrl = tokenData.link;
+    } else if (fileUrl.startsWith('http')) {
+      fullUrl = fileUrl;
+      if (fileUrl.includes('opensubtitles')) extraHeaders = { 'X-User-Agent': 'TemporaryUserAgent', 'User-Agent': 'Mozilla/5.0' };
+    } else {
+      fullUrl = `https://dl.subdl.com${fileUrl}`;
+    }
+    const res = await fetch(fullUrl, { headers: extraHeaders, signal: AbortSignal.timeout(20000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    // Detect format by magic bytes
+    const magic = buf.slice(0, 2).toString('hex');
+    if (magic === '1f8b') {
+      return zlib.gunzipSync(buf).toString('utf8');
+    } else if (magic === '504b') {
+      const zip = new AdmZip(buf);
+      const sub = zip.getEntries().find(e => /\.(srt|ass|ssa|vtt)$/i.test(e.entryName));
+      return sub ? sub.getData().toString('utf8') : null;
+    } else {
+      return buf.toString('utf8');
+    }
+  } catch { return null; }
+});
+
+// ── IPC: Image proxy (bypass geo-blocked CDNs in renderer) ────────────
+ipcMain.handle('image:fetch', async (_, url) => {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const type = res.headers.get('content-type') || 'image/jpeg';
+    return `data:${type};base64,${buf.toString('base64')}`;
   } catch { return null; }
 });
 
@@ -447,14 +764,12 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
 });
 
 ipcMain.handle('save:textFile', async (_, content, defaultName) => {
-  const { dialog, BrowserWindow } = require('electron');
   const win = BrowserWindow.getFocusedWindow();
   const { filePath } = await dialog.showSaveDialog(win, {
     defaultPath: defaultName || 'export.md',
     filters: [{ name: 'Markdown', extensions: ['md'] }, { name: 'Text', extensions: ['txt'] }, { name: 'All Files', extensions: ['*'] }]
   });
   if (!filePath) return false;
-  const fs = require('fs');
   fs.writeFileSync(filePath, content, 'utf8');
   return true;
 });
@@ -479,4 +794,24 @@ ipcMain.handle('tmdb:details', async (_, movieId, apiKey) => {
       backdrop_path: m.backdrop_path ? `https://image.tmdb.org/t/p/w1280${m.backdrop_path}` : null,
     };
   } catch { return null; }
+});
+
+// ── IPC: Movie poster fallback (Deezer movie OST search) ──────────────
+ipcMain.handle('cover:fetchMoviePoster', async (_, title) => {
+  try {
+    const q = encodeURIComponent(title + ' soundtrack');
+    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=3`, { signal: AbortSignal.timeout(6000) });
+    const data = await res.json();
+    if (data.data?.length) {
+      return data.data[0].album?.cover_big || data.data[0].album?.cover_medium || null;
+    }
+  } catch {}
+  // Try plain title search
+  try {
+    const q = encodeURIComponent(title);
+    const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`, { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    if (data.data?.length) return data.data[0].album?.cover_big || null;
+  } catch {}
+  return null;
 });

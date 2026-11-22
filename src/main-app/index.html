@@ -115,24 +115,140 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .active-card-prog-fill{height:100%;border-radius:1px;background:linear-gradient(90deg,var(--accent),#a082ff)}
 
 /* ── LIBRARY ── */
-.lib-header{padding:36px 24px 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.lib-header{padding:20px 24px 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:10px;flex-wrap:wrap}
 .lib-tabs{display:flex;gap:3px;background:rgba(255,255,255,.04);border-radius:9px;padding:3px}
 .lib-tab{padding:6px 14px;border-radius:7px;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:12.5px;
   cursor:pointer;transition:all .13s;color:var(--t3);display:flex;align-items:center;gap:5px}
 .lib-tab:hover{color:var(--t2)}
 .lib-tab.on{color:var(--t1);background:var(--bg3)}
 
+.lib-view-toggle{display:flex;gap:3px;background:rgba(255,255,255,.04);border-radius:8px;padding:3px}
+.lib-view-btn{padding:5px 10px;border-radius:6px;cursor:pointer;font-size:13px;transition:all .13s;color:var(--t3)}
+.lib-view-btn.on{background:var(--bg3);color:var(--t1)}
+
 .lib-add-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:9px;
   background:var(--accent-lo);border:1px solid var(--accent-mid);color:var(--accent);
   font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
 .lib-add-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+/* ── Shelf (visual library) view ── */
+.library-scroll{flex:1;overflow-y:auto;padding:0 0 32px}
+.library-scroll::-webkit-scrollbar{width:5px}
+.library-scroll::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
+
+.shelf-section{margin-bottom:8px}
+.shelf-section-label{
+  display:flex;align-items:center;gap:10px;
+  padding:14px 24px 8px;
+  font-size:11px;color:var(--t3);letter-spacing:1px;text-transform:uppercase;
+  font-family:'Space Grotesk',sans-serif;font-weight:600;direction:rtl}
+.shelf-section-label .shelf-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.shelf-section-label .shelf-cnt{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.06);color:var(--t3);margin-right:4px}
+.shelf-section-label::after{content:'';flex:1;height:1px;background:var(--bd)}
+.shelf-section-label .shelf-add-sm{margin-right:auto;font-size:11px;padding:3px 9px;border-radius:5px;
+  background:var(--bg3);border:1px solid var(--bd);color:var(--t3);cursor:pointer;transition:all .13s;white-space:nowrap}
+.shelf-section-label .shelf-add-sm:hover{color:var(--t1);border-color:var(--bd2)}
+
+/* The physical shelf rows */
+.shelf-row{
+  display:flex;flex-wrap:wrap;gap:8px;
+  padding:10px 24px 20px;
+  position:relative;
+  min-height:120px;
+  align-items:flex-end;
+}
+.shelf-row::after{/* wooden shelf plank */
+  content:'';position:absolute;bottom:0;left:0;right:0;height:14px;
+  background:linear-gradient(180deg,#3a2b1a 0%,#2a1e10 50%,#1e150a 100%);
+  border-radius:2px;box-shadow:0 4px 12px rgba(0,0,0,.7);
+}
+.shelf-row.drag-over{background:rgba(123,94,255,.06);border-radius:8px}
+
+/* Media items on shelf */
+.mcard{
+  position:relative;cursor:pointer;border-radius:3px;overflow:hidden;
+  flex-shrink:0;transition:transform .18s,box-shadow .18s;
+}
+.mcard:hover{transform:translateY(-6px);box-shadow:0 10px 28px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.08)}
+.mcard.dragging{opacity:.4}
+.mcard.book,.mcard.film{width:60px;height:88px}
+.mcard.music{width:80px;height:80px}
+
+/* Book spine style */
+.mcard.book{
+  box-shadow:3px 0 6px rgba(0,0,0,.5),-1px 0 3px rgba(0,0,0,.3);
+  border-radius:2px 4px 4px 2px;
+}
+
+/* Film/DVD case style */
+.mcard.film{
+  box-shadow:2px 2px 8px rgba(0,0,0,.6);border-radius:4px;
+}
+
+/* Music CD */
+.mcard.music{
+  border-radius:6px;box-shadow:0 3px 10px rgba(0,0,0,.5);
+}
+
+.mcard img{width:100%;height:100%;object-fit:cover;display:block}
+.mcard-fallback{
+  width:100%;height:100%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+}
+.mcard.book .mcard-fallback{background:linear-gradient(135deg,var(--bg3) 0%,var(--bg4) 100%)}
+.mcard.film .mcard-fallback{background:linear-gradient(135deg,#1a1030 0%,#0d0820 100%)}
+.mcard.music .mcard-fallback{background:linear-gradient(135deg,#0a2020 0%,#041515 100%)}
+
+/* Status indicator on card corner */
+.mcard-status{
+  position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;
+  box-shadow:0 0 0 2px rgba(0,0,0,.7);
+}
+.mcard-status.queue{background:#454568}
+.mcard-status.active{background:var(--accent)}
+.mcard-status.done{background:var(--ok)}
+
+/* Hover overlay */
+.mcard-ov{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,.96) 0%,rgba(0,0,0,.7) 60%,rgba(0,0,0,.2) 100%);
+  opacity:0;transition:opacity .18s;
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:6px 5px;gap:4px;
+}
+.mcard:hover .mcard-ov{opacity:1}
+.mcard-ov-title{font-size:9.5px;color:#fff;line-height:1.35;text-align:center;
+  overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  word-break:break-word}
+.mcard-ov-actions{display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin-top:3px}
+.mov-btn{font-size:9px;padding:2px 5px;border-radius:3px;border:none;cursor:pointer;
+  background:rgba(255,255,255,.12);color:#fff;transition:background .12s;white-space:nowrap}
+.mov-btn:hover{background:rgba(123,94,255,.7)}
+.mov-btn.del{background:rgba(255,95,126,.18);color:var(--err)}
+.mov-btn.del:hover{background:rgba(255,95,126,.6);color:#fff}
+.mov-btn.ok{background:rgba(47,214,168,.15);color:var(--ok)}
+.mov-btn.ok:hover{background:rgba(47,214,168,.5);color:#fff}
+.mov-btn.note{background:rgba(47,214,168,.12);color:var(--ok)}
+.mcard-add{
+  width:60px;height:88px;border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;color:var(--t3);cursor:pointer;
+  background:rgba(255,255,255,.03);border:1px dashed rgba(255,255,255,.1);
+  transition:all .15s;flex-shrink:0;
+}
+.mcard-add:hover{background:rgba(123,94,255,.08);border-color:var(--accent-mid);color:var(--accent)}
+.mcard-add.music{width:80px;height:80px}
+.shelf-empty-hint{font-size:12px;color:var(--t3);display:flex;align-items:center;gap:6px;padding:12px 0}
+
+/* ── Kanban (list) view ── */
 .kanban{display:flex;gap:16px;padding:16px 24px 24px;overflow-x:auto;flex:1;overflow-y:hidden}
 .kanban::-webkit-scrollbar{height:5px}
 .kanban::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
 
 .kanban-col{flex:1;min-width:260px;display:flex;flex-direction:column;background:rgba(255,255,255,.025);
   border-radius:14px;border:1px solid var(--bd);overflow:hidden}
+.kanban-col.drag-over{border-color:var(--accent-mid);background:rgba(123,94,255,.06)}
 .kanban-col-hd{padding:12px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;direction:rtl;flex-shrink:0}
 .col-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .col-title{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px}
@@ -142,8 +258,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .kanban-cards::-webkit-scrollbar-thumb{background:var(--bg4)}
 
 .kcard{background:var(--bg2);border:1px solid var(--bd);border-radius:11px;padding:11px 12px;
-  cursor:pointer;transition:all .13s;direction:rtl;position:relative}
+  cursor:grab;transition:all .13s;direction:rtl;position:relative;user-select:none}
 .kcard:hover{background:var(--bg3);border-color:var(--bd2)}
+.kcard.dragging{opacity:.4;cursor:grabbing}
 .kcard-top{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px}
 .kcard-cover{width:36px;height:52px;border-radius:5px;flex-shrink:0;overflow:hidden;
   background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:16px}
@@ -159,13 +276,50 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .kcard-rating{display:flex;gap:2px;margin-top:5px}
 .star{font-size:12px;cursor:pointer;color:var(--t3);transition:color .1s}
 .star.on{color:var(--warn)}
-.kcard-actions{display:flex;gap:5px;margin-top:8px}
+.kcard-actions{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 .kcard-action{font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;border:1px solid var(--bd);
   color:var(--t3);transition:all .13s;font-family:'Space Grotesk',sans-serif}
 .kcard-action:hover{background:var(--bg4);color:var(--t2)}
 .kcard-action.primary{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
 .kcard-action.primary:hover{background:var(--accent);color:#fff}
+.kcard-action.review-on{background:rgba(47,214,168,.1);border-color:rgba(47,214,168,.3);color:var(--ok)}
+.kcard-action.del-btn{color:var(--err);border-color:rgba(255,95,126,.2)}
+.kcard-action.del-btn:hover{background:rgba(255,95,126,.15);color:var(--err);border-color:var(--err)}
+.kcard-review-snip{font-size:11px;color:var(--t2);margin-top:5px;line-height:1.5;border-right:2px solid var(--ok);padding-right:7px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .kcard-empty{padding:20px;text-align:center;color:var(--t3);font-size:12.5px;line-height:1.6}
+
+/* ── Review modal ── */
+.review-modal-bg{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);display:none}
+.review-modal-bg.show{display:flex}
+.review-box{width:580px;max-width:94vw;background:var(--bg1);border:1px solid var(--bd2);border-radius:18px;
+  padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:88vh;direction:rtl}
+.review-box-head{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.review-item-cover{width:38px;height:52px;border-radius:6px;overflow:hidden;background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.review-item-cover img{width:100%;height:100%;object-fit:cover}
+.review-item-meta{flex:1;min-width:0}
+.review-item-title{font-weight:600;font-size:14px;margin-bottom:2px}
+.review-item-sub{font-size:12px;color:var(--t3)}
+.review-open-btn{padding:5px 11px;border-radius:8px;background:var(--accent-lo);border:1px solid var(--accent-mid);
+  color:var(--accent);font-size:11.5px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .13s;flex-shrink:0}
+.review-open-btn:hover{background:var(--accent);color:#fff}
+.review-box-body{flex:1;padding:18px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.review-title-inp{background:var(--bg2);border:1px solid var(--bd2);border-radius:9px;padding:9px 13px;
+  color:var(--t1);font-size:13.5px;font-family:'Space Grotesk',sans-serif;font-weight:500;width:100%;
+  outline:none;transition:border-color .15s}
+.review-title-inp:focus{border-color:var(--accent)}
+.review-text-area{background:var(--bg2);border:1px solid var(--bd2);border-radius:9px;padding:12px 14px;
+  color:var(--t1);font-size:13px;font-family:'Inter',sans-serif;line-height:1.75;resize:none;width:100%;
+  min-height:220px;outline:none;transition:border-color .15s}
+.review-text-area:focus{border-color:var(--accent)}
+.review-box-foot{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+.review-save-btn{padding:7px 18px;border-radius:9px;background:var(--ok);color:#0a1a0a;font-weight:600;
+  font-family:'Space Grotesk',sans-serif;font-size:13px;cursor:pointer;border:none;transition:opacity .15s}
+.review-save-btn:hover{opacity:.88}
+.review-close-btn{padding:7px 14px;border-radius:9px;background:var(--bg3);border:1px solid var(--bd);
+  color:var(--t2);font-size:13px;font-family:'Space Grotesk',sans-serif;cursor:pointer;transition:all .13s}
+.review-close-btn:hover{background:var(--bg4);color:var(--t1)}
 
 /* ── PLANNER ── */
 .planner-layout{display:flex;height:100%;overflow:hidden}
@@ -566,6 +720,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <span class="nav-badge">↗</span>
   </div>
 
+  <div class="nav-item subapp" onclick="window.api.openWriter()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
+    <span class="nav-label">نویسنده</span>
+    <span class="nav-badge">↗</span>
+  </div>
+
   <div class="nav-divider"></div>
 
   <div class="nav-item" onclick="showSection('community',this)" id="nav-community">
@@ -683,10 +843,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
         <div class="lib-tab" data-type="film" onclick="filterLib(this,'film')">🎬 فیلم</div>
         <div class="lib-tab" data-type="music" onclick="filterLib(this,'music')">🎵 موزیک</div>
       </div>
-      <div class="sort-controls" style="margin:0 8px">
-        <span style="font-size:11px;color:var(--t3)">مرتب‌سازی:</span>
+      <div class="lib-view-toggle">
+        <div class="lib-view-btn on" id="view-shelf" onclick="setLibView('shelf',this)" title="نمای قفسه">🗂</div>
+        <div class="lib-view-btn" id="view-kanban" onclick="setLibView('kanban',this)" title="نمای کانبان">≡</div>
+      </div>
+      <div class="sort-controls" style="margin:0 4px">
+        <span style="font-size:11px;color:var(--t3)">مرتب:</span>
         <div class="sort-btn on" id="sort-default" onclick="setSortMode('default',this)">پیش‌فرض</div>
-        <div class="sort-btn" id="sort-rating" onclick="setSortMode('rating',this)">★ امتیاز</div>
+        <div class="sort-btn" id="sort-rating" onclick="setSortMode('rating',this)">★</div>
         <div class="sort-btn" id="sort-recent" onclick="setSortMode('recent',this)">جدید</div>
       </div>
       <button class="lib-add-btn no-drag" onclick="openAddItem()">
@@ -694,16 +858,49 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
         افزودن
       </button>
     </div>
-    <div class="kanban" id="kanban">
-      <div class="kanban-col">
+
+    <!-- SHELF VIEW (default) -->
+    <div class="library-scroll" id="lib-shelf-view">
+      <div class="shelf-section" id="shelf-books">
+        <div class="shelf-section-label">
+          <span class="shelf-dot" style="background:var(--ok)"></span>
+          کتاب‌ها
+          <span class="shelf-cnt" id="shelf-cnt-book">۰</span>
+          <span style="flex:1"></span>
+        </div>
+        <div class="shelf-row" id="shelf-row-book" data-type="book"></div>
+      </div>
+      <div class="shelf-section" id="shelf-films">
+        <div class="shelf-section-label">
+          <span class="shelf-dot" style="background:var(--accent)"></span>
+          فیلم‌ها
+          <span class="shelf-cnt" id="shelf-cnt-film">۰</span>
+          <span style="flex:1"></span>
+        </div>
+        <div class="shelf-row" id="shelf-row-film" data-type="film"></div>
+      </div>
+      <div class="shelf-section" id="shelf-music">
+        <div class="shelf-section-label">
+          <span class="shelf-dot" style="background:var(--warn)"></span>
+          موزیک
+          <span class="shelf-cnt" id="shelf-cnt-music">۰</span>
+          <span style="flex:1"></span>
+        </div>
+        <div class="shelf-row" id="shelf-row-music" data-type="music"></div>
+      </div>
+    </div>
+
+    <!-- KANBAN VIEW (hidden by default) -->
+    <div class="kanban" id="kanban" style="display:none">
+      <div class="kanban-col" id="kol-queue" ondragover="kanbanDragOver(event,this)" ondrop="kanbanDrop(event,'queue')" ondragleave="this.classList.remove('drag-over')">
         <div class="kanban-col-hd"><div class="col-dot" style="background:#454568"></div><span class="col-title">می‌خوام</span><span class="col-count" id="cnt-queue">۰</span></div>
         <div class="kanban-cards" id="col-queue"></div>
       </div>
-      <div class="kanban-col">
+      <div class="kanban-col" id="kol-active" ondragover="kanbanDragOver(event,this)" ondrop="kanbanDrop(event,'active')" ondragleave="this.classList.remove('drag-over')">
         <div class="kanban-col-hd"><div class="col-dot" style="background:#7B5EFF"></div><span class="col-title">در حال بررسی</span><span class="col-count" id="cnt-active">۰</span></div>
         <div class="kanban-cards" id="col-active"></div>
       </div>
-      <div class="kanban-col">
+      <div class="kanban-col" id="kol-done" ondragover="kanbanDragOver(event,this)" ondrop="kanbanDrop(event,'done')" ondragleave="this.classList.remove('drag-over')">
         <div class="kanban-col-hd"><div class="col-dot" style="background:#2FD6A8"></div><span class="col-title">تمام شد</span><span class="col-count" id="cnt-done">۰</span></div>
         <div class="kanban-cards" id="col-done"></div>
       </div>
@@ -901,6 +1098,29 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
 </div><!-- .main -->
 </div><!-- .app -->
+
+<!-- REVIEW MODAL -->
+<div class="review-modal-bg" id="review-modal" onclick="if(event.target===this)closeReview()">
+  <div class="review-box no-drag">
+    <div class="review-box-head">
+      <div class="review-item-cover" id="review-cover-el"></div>
+      <div class="review-item-meta">
+        <div class="review-item-title" id="review-item-title-el">عنوان اثر</div>
+        <div class="review-item-sub" id="review-item-sub-el">نویسنده / کارگردان</div>
+      </div>
+      <div class="review-open-btn" id="review-open-app-btn" onclick="openInSubAppFromReview()">▶ باز کن</div>
+      <div class="modal-close" onclick="closeReview()" style="margin-right:4px">✕</div>
+    </div>
+    <div class="review-box-body">
+      <input class="review-title-inp" id="review-title-inp" placeholder="عنوان نقد...">
+      <textarea class="review-text-area" id="review-text-area" placeholder="نقد و نظرت رو اینجا بنویس...&#10;&#10;چی دوست داشتی؟ چی دوست نداشتی؟ به کی پیشنهاد می‌دی؟"></textarea>
+    </div>
+    <div class="review-box-foot">
+      <button class="review-close-btn" onclick="closeReview()">بستن</button>
+      <button class="review-save-btn" onclick="saveReview()">ذخیره نقد ✓</button>
+    </div>
+  </div>
+</div>
 
 <!-- ADD ITEM MODAL -->
 <div class="modal-bg" id="add-item-modal" onclick="if(event.target===this)closeAddItem()">

@@ -80,40 +80,200 @@ function setSubAutoStatus(msg, type) {
 }
 
 // ── Auto-fetch subtitle ────────────────────────────────────────────────
+async function checkSubtitleSync(parsedSubs, movieTitle) {
+  const aiKey = getAIKey();
+  if (!aiKey || parsedSubs.length < 3) return true; // no key or too short → accept
+  try {
+    const sample = parsedSubs.slice(0, Math.min(8, parsedSubs.length));
+    const lines = sample.map((s, i) => {
+      const mins = Math.floor(s.start / 60);
+      const secs = Math.floor(s.start % 60);
+      return `[${mins}:${secs.toString().padStart(2,'0')}] ${s.en}`;
+    }).join('\n');
+    const sys = `You are a movie subtitle sync checker. Given a movie title and sample subtitle lines with timestamps, determine if the dialogue seems plausible for that movie at approximately those timestamps. Answer with just YES or NO.`;
+    const msg = `Movie: "${movieTitle}"\n\nSample subtitle lines:\n${lines}\n\nDoes this subtitle content seem plausible for this movie? YES or NO.`;
+    const reply = await window.api.claudeChat(sys, [{ role: 'user', content: msg }], aiKey);
+    if (!reply) return true; // AI failed → accept
+    return reply.trim().toUpperCase().startsWith('YES');
+  } catch { return true; }
+}
+
 async function autoFetchSubtitle(video) {
-  const key = getOsubKey();
-  if (!key) {
-    document.getElementById('osub-banner')?.classList.add('show');
+  const subdlKey = getOsubKey();
+
+  const fileName = video.fileName || '';
+  const videoPath = video.path || '';
+  const { title: parsedTitle, year: parsedYear } = parseVideoFileName(fileName);
+  const title = parsedTitle || video.title || fileName;
+  // parsedYear (from filename) takes priority — TMDB may match a wrong movie
+  const year  = parsedYear || video.year || null;
+  const imdbId = video.imdbId || null;
+
+  // If no subdl key and no IMDB, show banner and stop — hash search only works with file path
+  if (!subdlKey) {
+    setSubAutoStatus('⚠️ کلید subdl لازمه', 'error');
+    setTimeout(() => document.getElementById('osub-banner')?.classList.add('show'), 300);
     return;
   }
 
-  const title = video.title || video.fileName;
-  const year  = video.year || null;
+  // Build title variations: original, with/without "The "
+  const titleVariants = [title];
+  if (!title.toLowerCase().startsWith('the ')) titleVariants.push('The ' + title);
+  else titleVariants.push(title.replace(/^the\s+/i, ''));
 
-  setSubAutoStatus('🔍 جستجوی زیرنویس...', '');
+  showSubAIBtn(false);
+  let results = null;
 
-  const results = await window.api.subtitleSearch(title, year, key).catch(() => null);
+  for (const t of titleVariants) {
+    setSubAutoStatus(`🔍 "${t}" ${year || ''}...`, '');
+    const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(e => {
+      setSubAutoStatus(`❌ خطای IPC: ${e?.message || e}`, 'error');
+      return null;
+    });
+    if (r?.length) { results = r; break; }
+    setSubAutoStatus(`⚠️ "${t}" — ۰ نتیجه`, '');
+    await sleep(500);
+  }
+
   if (!results?.length) {
-    setSubAutoStatus('زیرنویس پیدا نشد', 'error');
+    setSubAutoStatus(`⚠️ نتیجه‌ای یافت نشد — "${title}" ${year||''}`, 'error');
+    showSubAIBtn(true);
     return;
   }
 
-  setSubAutoStatus('📥 دانلود زیرنویس...', '');
-  const srtText = await window.api.subtitleDownload(results[0].fileId, key).catch(() => null);
+  // Show subtitle picker — user selects the synced one, then translates
+  showSubtitlePicker(results, subdlKey);
+}
+
+let _pickerResults = [];
+let _pickerKey = '';
+
+function showSubtitlePicker(results, subdlKey) {
+  _pickerResults = results.slice(0, 10);
+  _pickerKey = subdlKey;
+
+  const list = document.getElementById('sub-picker-list');
+  if (!list) return;
+
+  list.innerHTML = _pickerResults.map((r, i) => {
+    const src = r.source || '';
+    const name = (r.name || '—').slice(0, 48);
+    return `<div class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})">
+      <span class="sub-pick-src">${src}</span>
+      <span class="sub-pick-name">${name}</span>
+    </div>`;
+  }).join('');
+
+  const picker = document.getElementById('sub-picker');
+  if (picker) picker.style.display = 'block';
+  document.getElementById('sub-translate-btn').style.display = 'none';
+  setSubAutoStatus(`${_pickerResults.length} زیرنویس — یکی انتخاب کن`, '');
+}
+
+async function selectSubtitleFromPicker(idx) {
+  const r = _pickerResults[idx];
+  if (!r) return;
+
+  // Visual feedback
+  document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
+    el.classList.remove('selected', 'loading', 'done');
+    if (i === idx) el.classList.add('loading');
+  });
+  document.getElementById('sub-translate-btn').style.display = 'none';
+  setSubAutoStatus(`📥 در حال دانلود...`, '');
+
+  const srtText = await window.api.subtitleDownload(r.fileId, _pickerKey).catch(() => null);
   if (!srtText) {
-    setSubAutoStatus('دانلود ناموفق بود', 'error');
+    document.getElementById(`spitem-${idx}`)?.classList.replace('loading', 'sub-pick-item');
+    setSubAutoStatus(`❌ دانلود ناموفق`, 'error');
+    return;
+  }
+  const parsed = parseSrt(srtText);
+  if (!parsed.length) {
+    setSubAutoStatus(`❌ فایل ناخوانا`, 'error');
     return;
   }
 
-  subtitles = parseSrt(srtText);
-  if (!subtitles.length) {
-    setSubAutoStatus('زیرنویس خوانده نشد', 'error');
-    return;
-  }
+  document.getElementById(`spitem-${idx}`)?.classList.add('done');
+  document.getElementById(`spitem-${idx}`)?.classList.remove('loading');
+  document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
+    if (i !== idx) el.classList.remove('selected');
+  });
+  document.getElementById(`spitem-${idx}`)?.classList.add('selected');
 
+  subtitles = parsed;
+  subOffset = 0;
+  const offsetBar = document.getElementById('sub-offset-bar');
+  const offsetVal = document.getElementById('sub-offset-val');
+  if (offsetBar) offsetBar.style.display = 'flex';
+  if (offsetVal) offsetVal.textContent = '0.0s';
+
+  document.getElementById('sub-translate-btn').style.display = 'block';
+  setSubAutoStatus(`✓ ${parsed.length} خط | سینک تنظیم کن، بعد ترجمه بزن`, 'done');
+}
+
+async function translateNowFromPicker() {
+  if (!subtitles.length) return;
+  const btn = document.getElementById('sub-translate-btn');
+  if (btn) btn.disabled = true;
   setSubAutoStatus(`🌐 ترجمه ${subtitles.length} خط...`, '');
   await translateSubtitles();
-  setSubAutoStatus('✓ زیرنویس آماده‌ست', 'done');
+  if (btn) { btn.disabled = false; btn.textContent = '✓ ترجمه شد'; }
+  setSubAutoStatus(`✓ ترجمه کامل شد`, 'done');
+}
+
+let subOffset = 0;
+
+function shiftSubs(delta) {
+  if (!subtitles.length) return;
+  subOffset += delta;
+  for (const s of subtitles) {
+    s.start += delta;
+    s.end += delta;
+  }
+  const bar = document.getElementById('sub-offset-bar');
+  const val = document.getElementById('sub-offset-val');
+  if (bar) bar.style.display = 'flex';
+  if (val) val.textContent = (subOffset >= 0 ? '+' : '') + subOffset.toFixed(1) + 's';
+}
+
+function showSubAIBtn(show, video) {
+  const btn = document.getElementById('sub-ai-btn');
+  if (!btn) return;
+  btn.style.display = show ? '' : 'none';
+  if (show && video) btn.dataset.title = video.title || video.fileName || '';
+}
+
+async function fetchSubtitleWithAI(video) {
+  const title = video?.title || video?.fileName || queue[queueIdx]?.title || queue[queueIdx]?.fileName || '';
+  const key = getAIKey();
+  if (!key) { setSubAutoStatus('کلید AI ندارم', 'error'); return; }
+
+  showSubAIBtn(false);
+  setSubAutoStatus('🤖 ساخت زیرنویس با AI...', '');
+
+  const sys = `You are a subtitle generator. Generate approximate English subtitles in SRT format for the given movie. Create 25-35 key dialogue/scene description lines spread through a typical ~2 hour movie. Use realistic timestamps. Format strictly as:
+1
+00:00:30,000 --> 00:00:33,000
+dialogue here
+
+2
+00:02:15,000 --> 00:02:18,500
+next line
+
+(blank line between entries)`;
+  const msg = `Generate English subtitles for: "${title}"`;
+
+  try {
+    const reply = await window.api.claudeChat(sys, [{ role: 'user', content: msg }], key);
+    subtitles = parseSrt(reply);
+    if (!subtitles.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
+    setSubAutoStatus(`🤖 ${subtitles.length} خط از AI (تقریبی)`, 'done');
+    await translateSubtitles();
+  } catch {
+    setSubAutoStatus('خطا در AI', 'error');
+    showSubAIBtn(true, queue[queueIdx]);
+  }
 }
 
 // ── Collections ────────────────────────────────────────────────────────
@@ -197,11 +357,13 @@ async function addVideosToColl(paths) {
     }
   }
 
+  const newPaths = [];
   for (const p of paths) {
     if (coll.videos.find(v => v.path === p)) continue;
     const fileName = p.split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
-    const title = cleanTitle(fileName);
-    coll.videos.push({ path: p, fileName, title, year: null, poster: null, duration: null });
+    const { title, year } = parseVideoFileName(fileName);
+    coll.videos.push({ path: p, fileName, title, year, poster: null, duration: null });
+    newPaths.push({ p, title, year });
   }
 
   coll.open = true;
@@ -209,30 +371,76 @@ async function addVideosToColl(paths) {
   saveState();
   renderColls();
   fetchMetadataForColl(coll);
+
+  // sync to main library
+  for (const { p, title, year } of newPaths) {
+    if (window.api?.addToLibrary) {
+      window.api.addToLibrary({
+        id: 'film_' + p.split(/[\\/]/).pop().replace(/\W/g,'').slice(0,14) + '_' + Date.now().toString(36),
+        type: 'film', title, creator: '', year: year || '',
+        stage: 'queue', rating: 0, cover: null, filePath: p, createdAt: Date.now()
+      });
+    }
+  }
+}
+
+function parseVideoFileName(name) {
+  // Find year (1900–2099) — everything before it is the title
+  const yearMatch = name.match(/\b(19\d{2}|20\d{2})\b/);
+  const year = yearMatch ? yearMatch[1] : null;
+  let raw = yearMatch ? name.slice(0, yearMatch.index) : name;
+  let title = raw
+    .replace(/\./g, ' ')
+    .replace(/[-_]/g, ' ')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\(.*?\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Fix spaced-out titles like "L o l i t a" → "Lolita"
+  // If 3+ consecutive single-letter tokens exist, collapse them
+  title = title.replace(/\b([A-Za-z])((?:\s[A-Za-z]){2,})\b/g, (_, first, rest) => first + rest.replace(/\s/g, ''));
+  return { title: title || name, year };
 }
 
 function cleanTitle(name) {
-  return name
-    .replace(/\./g, ' ')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\b(1080p|720p|480p|4K|BluRay|WEBRip|HDRip|x264|x265|HEVC|AAC|AC3)\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return parseVideoFileName(name).title;
 }
 
 async function fetchMetadataForColl(coll) {
   const key = getTmdbKey();
-  if (!key) return;
   for (const v of coll.videos) {
-    if (v.poster) continue;
-    const info = await window.api.tmdbSearch(v.title, key).catch(() => null);
-    if (!info) continue;
-    v.poster = info.poster_path || null;
-    v.year = info.release_date?.slice(0, 4) || null;
-    v.tmdbId = info.id;
-    saveState();
-    renderColls();
+    // Skip only if we have a proxied data: URL or confirmed-accessible Deezer CDN URL
+    const hasGoodPoster = v.poster && (v.poster.startsWith('data:') || v.poster.includes('dzcdn.net'));
+    if (hasGoodPoster) continue;
+
+    let poster = null;
+
+    if (key) {
+      const info = await window.api.tmdbSearch(v.title, key).catch(() => null);
+      if (info) {
+        v.year = v.year || info.release_date?.slice(0, 4) || null;
+        v.tmdbId = v.tmdbId || info.id;
+        // Fetch details to get imdb_id (used for subtitle search)
+        if (!v.imdbId && info.id) {
+          const details = await window.api.tmdbDetails(info.id, key).catch(() => null);
+          if (details?.imdb_id) v.imdbId = details.imdb_id;
+        }
+        if (info.poster_path) {
+          poster = await window.api.fetchImage(info.poster_path).catch(() => null);
+        }
+      }
+    }
+
+    // Deezer soundtrack fallback
+    if (!poster) {
+      poster = await window.api.fetchMoviePoster(v.title).catch(() => null);
+    }
+
+    if (poster) {
+      v.poster = poster;
+      saveState();
+      renderColls();
+    }
   }
 }
 
@@ -315,6 +523,7 @@ function loadVideo(video) {
   subtitles = [];
   hideSubtitle();
   setSubAutoStatus('', '');
+  showSubAIBtn(false);
 
   // load duration later
   currentMovieInfo = video;
@@ -636,6 +845,12 @@ async function loadSubtitle() {
     return;
   }
 
+  subOffset = 0;
+  const offsetBar = document.getElementById('sub-offset-bar');
+  const offsetVal = document.getElementById('sub-offset-val');
+  if (offsetBar) offsetBar.style.display = 'flex';
+  if (offsetVal) offsetVal.textContent = '0.0s';
+
   status.innerHTML = `<span class="ok">✓ ${subtitles.length} خط لود شد.</span> در حال ترجمه...`;
   modal.classList.add('show');
 
@@ -644,16 +859,21 @@ async function loadSubtitle() {
 }
 
 function parseSrt(text) {
-  const result = [];
-  // normalize line endings
+  if (!text) return [];
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Auto-detect ASS/SSA format
+  if (/^\[Script Info\]/m.test(normalized) || /^Dialogue:/m.test(normalized)) {
+    return parseAss(normalized);
+  }
+
+  const result = [];
   const blocks = normalized.split(/\n\n+/);
 
   for (const block of blocks) {
     const lines = block.trim().split('\n');
     if (lines.length < 2) continue;
 
-    // skip index line if numeric
     let i = 0;
     if (/^\d+$/.test(lines[0].trim())) i = 1;
 
@@ -673,6 +893,36 @@ function parseSrt(text) {
   return result;
 }
 
+function parseAss(text) {
+  const result = [];
+  const lines = text.split('\n');
+  let fmtIdx = { start: -1, end: -1, text: -1 };
+  for (const line of lines) {
+    const ltr = line.trim();
+    if (ltr.startsWith('Format:') && fmtIdx.start === -1) {
+      const cols = ltr.replace('Format:', '').split(',').map(s => s.trim().toLowerCase());
+      fmtIdx = { start: cols.indexOf('start'), end: cols.indexOf('end'), text: cols.indexOf('text') };
+    } else if (ltr.startsWith('Dialogue:') && fmtIdx.start >= 0) {
+      const vals = ltr.replace('Dialogue:', '').split(',');
+      const startStr = vals[fmtIdx.start]?.trim();
+      const endStr   = vals[fmtIdx.end]?.trim();
+      const textPart = vals.slice(fmtIdx.text).join(',').replace(/\{[^}]+\}/g, '').replace(/\\N/gi, ' ').trim();
+      if (!startStr || !endStr || !textPart) continue;
+      const start = parseAssTime(startStr);
+      const end   = parseAssTime(endStr);
+      if (start < 0 || !textPart) continue;
+      result.push({ start, end, en: textPart, fa: '' });
+    }
+  }
+  return result;
+}
+
+function parseAssTime(t) {
+  const m = t.match(/(\d+):(\d{2}):(\d{2})[.,](\d+)/);
+  if (!m) return -1;
+  return parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3]) + parseInt(m[4]) / 100;
+}
+
 function parseSrtTime(t) {
   const clean = t.replace(',', '.');
   const parts = clean.split(':');
@@ -684,21 +934,49 @@ function parseSrtTime(t) {
 
 async function translateSubtitles() {
   subTranslating = true;
-  const chunkSize = 8;
-  for (let i = 0; i < subtitles.length; i += chunkSize) {
-    const chunk = subtitles.slice(i, i + chunkSize);
-    const joined = chunk.map(s => s.en).join('\n');
-    try {
-      const translated = await window.api.translate(joined);
-      if (translated) {
-        const parts = translated.split('\n');
-        for (let j = 0; j < chunk.length; j++) {
-          subtitles[i + j].fa = parts[j]?.trim() || '';
-        }
+  const CHUNK = 15; // smaller chunk — reduces Google Translate rate-limiting
+  const total = subtitles.length;
+  let failCount = 0;
+
+  for (let i = 0; i < total; i += CHUNK) {
+    const chunk = subtitles.slice(i, i + CHUNK);
+    const nonEmpty = chunk.map((s, j) => ({ j, text: s.en })).filter(x => x.text);
+    if (!nonEmpty.length) continue;
+
+    const joined = nonEmpty.map(x => x.text).join('\n');
+    let translated = null;
+
+    for (let attempt = 0; attempt < 2 && !translated; attempt++) {
+      try { translated = await window.api.translate(joined); } catch {}
+      if (!translated && attempt < 1) await sleep(1000);
+    }
+
+    if (translated) {
+      failCount = 0;
+      // Google Translate returns segments joined; newlines may or may not be preserved
+      // Split on newline, also try counting segments if lines mismatch
+      let parts = translated.split('\n').filter(p => p.trim() !== '');
+      // If segment count doesn't match, try line-by-line split on the raw response
+      if (parts.length !== nonEmpty.length && translated.includes('\n')) {
+        const raw = translated.split('\n');
+        if (raw.filter(p => p.trim()).length === nonEmpty.length) parts = raw.filter(p => p.trim());
       }
-    } catch {}
-    await sleep(250);
+      for (let k = 0; k < nonEmpty.length; k++) {
+        subtitles[i + nonEmpty[k].j].fa = parts[k]?.trim() || '';
+      }
+    } else {
+      failCount++;
+      // After 2 consecutive failed chunks, stop trying translation
+      if (failCount >= 2) {
+        setSubAutoStatus('⚠️ ترجمه در دسترس نیست (شبکه)', 'error');
+        subTranslating = false;
+        return;
+      }
+    }
+    setSubAutoStatus(`🌐 ترجمه ${Math.min(i + CHUNK, total)}/${total}...`, '');
+    await sleep(300); // small delay between chunks to avoid rate-limiting
   }
+
   subTranslating = false;
 }
 
@@ -719,9 +997,10 @@ function updateSubtitle() {
   display.classList.remove('hidden');
 
   enLine.textContent = sub.en;
-  faLine.textContent = sub.fa || '...';
+  faLine.textContent = sub.fa || '';
 
   enLine.style.display = (subMode === 'en' || subMode === 'both') ? 'inline-block' : 'none';
+  // Hide FA line if translation isn't available (empty string) rather than showing "..."
   faLine.style.display = (subMode === 'fa' || subMode === 'both') && sub.fa ? 'inline-block' : 'none';
 }
 
@@ -1118,4 +1397,35 @@ initThumbPreview();
 if (!getTmdbKey() && state.collections.length > 0) {
   setTimeout(() => document.getElementById('setup-banner').classList.add('show'), 1000);
 }
+
+// Startup: fetch covers for all videos that don't have a good poster yet
+setTimeout(() => {
+  for (const coll of state.collections) {
+    const needsCover = coll.videos?.some(v => !v.poster || (!v.poster.startsWith('data:') && !v.poster.includes('dzcdn.net')));
+    if (needsCover) fetchMetadataForColl(coll);
+  }
+}, 500);
+
 initFirebase();
+
+// receive open-file request from main library
+if (window.api?.onOpenFile) {
+  window.api.onOpenFile(function(filePath) {
+    let found = null;
+    for (const coll of state.collections) {
+      const v = coll.videos.find(v => v.path === filePath);
+      if (v) { found = { coll, v }; break; }
+    }
+    if (found) {
+      const idx = found.coll.videos.indexOf(found.v);
+      playVideo(found.coll.id, idx);
+    } else {
+      addVideosToColl([filePath]).then(() => {
+        for (const coll of state.collections) {
+          const idx = coll.videos.findIndex(v => v.path === filePath);
+          if (idx >= 0) { playVideo(coll.id, idx); break; }
+        }
+      });
+    }
+  });
+}

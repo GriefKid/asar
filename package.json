@@ -40,6 +40,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "preload.cjs",
       "src/**/*",
       "assets/**/*",
       "package.json"
@@ -50,10 +51,11 @@
     "asar": true
   },
   "devDependencies": {
-    "electron": "^36.3.1",
+    "electron": "^28.3.3",
     "electron-builder": "^26.18.0"
   },
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "electron-store": "^8.2.0"
   }
 }
