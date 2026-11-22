@@ -469,27 +469,67 @@ ipcMain.handle('tmdb:search', async (_, title, apiKey) => {
   } catch { return null; }
 });
 
-// ── IPC: Book metadata (Google Books) ────────────────────────────────
+// ── IPC: Book metadata (Google Books + Open Library fallback) ─────────
 ipcMain.handle('book:fetchMeta', async (_, title) => {
+  // Strip leading order numbers like "0001 - ", "12. ", "003-" from filename-based titles
+  const cleanTitle = title
+    .replace(/^\d{1,4}\s*[-–—.]\s*/, '')   // "0001 - " or "001." at start
+    .replace(/[_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // ── Try Google Books first ──
   try {
-    const q = encodeURIComponent(title.replace(/[_\-\.]/g, ' ').trim());
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const item = data.items?.[0];
-    if (!item) return null;
-    const vol = item.volumeInfo;
-    const thumb = vol.imageLinks?.thumbnail || vol.imageLinks?.smallThumbnail || null;
-    return {
-      title:       vol.title || null,
-      authors:     vol.authors || [],
-      description: vol.description || null,
-      cover:       thumb ? thumb.replace('http:', 'https:').replace('zoom=1', 'zoom=3') : null,
-      publishedDate: vol.publishedDate || null,
-      categories:  vol.categories || [],
-    };
-  } catch { return null; }
+    const q = encodeURIComponent(cleanTitle);
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(cleanTitle)}&maxResults=3`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const data = await res.json();
+      // Pick first result that has a cover
+      const item = (data.items || []).find(i => i.volumeInfo?.imageLinks) || data.items?.[0];
+      if (item) {
+        const vol = item.volumeInfo;
+        const thumb = vol.imageLinks?.thumbnail || vol.imageLinks?.smallThumbnail || null;
+        const cover = thumb ? thumb.replace('http:', 'https:').replace('zoom=1', 'zoom=5') : null;
+        if (cover) {
+          return {
+            title: vol.title || cleanTitle,
+            authors: vol.authors || [],
+            description: vol.description || null,
+            cover,
+            publishedDate: vol.publishedDate || null,
+            categories: vol.categories || [],
+          };
+        }
+        // Google found it but no cover — still return metadata, try OL for cover below
+      }
+    }
+  } catch {}
+
+  // ── Fallback: Open Library ──
+  try {
+    const olUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(cleanTitle)}&fields=key,title,author_name,cover_i,first_publish_year&limit=5`;
+    const olRes = await fetch(olUrl, { signal: AbortSignal.timeout(8000) });
+    if (olRes.ok) {
+      const olData = await olRes.json();
+      const olItem = (olData.docs || []).find(d => d.cover_i) || olData.docs?.[0];
+      if (olItem) {
+        const cover = olItem.cover_i
+          ? `https://covers.openlibrary.org/b/id/${olItem.cover_i}-L.jpg`
+          : null;
+        return {
+          title: olItem.title || cleanTitle,
+          authors: olItem.author_name || [],
+          description: null,
+          cover,
+          publishedDate: olItem.first_publish_year ? String(olItem.first_publish_year) : null,
+          categories: [],
+        };
+      }
+    }
+  } catch {}
+
+  return null;
 });
 
 // ── IPC: Book / PDF ───────────────────────────────────────────────────

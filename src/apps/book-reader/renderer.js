@@ -149,13 +149,22 @@ function setBookRating(path, n) {
   initFirebase();
 }
 
+function cleanBookTitle(raw) {
+  return raw
+    .replace(/^\d{1,4}\s*[-–—.]\s*/, '')  // strip "0001 - " prefix
+    .replace(/[_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || raw;
+}
+
 async function importPdf() {
   const paths = await window.api.openPdfFiles();
   if (!paths.length) return;
   const newPaths = [];
   for (const p of paths) {
     if (state.books.find(b => b.path === p)) continue;
-    const fileName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
+    const rawName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
+    const fileName = cleanBookTitle(rawName);
     state.books.push({ path: p, title: fileName, author: '', totalPages: 0, lastPage: 1, cover: null });
     newPaths.push(p);
   }
@@ -182,7 +191,8 @@ async function fetchAndSaveBookMeta(path) {
   const book = state.books.find(b => b.path === path);
   if (!book || book.cover) return;
   try {
-    const meta = await window.api.fetchBookMeta(book.title);
+    const searchTitle = cleanBookTitle(book.title);
+    const meta = await window.api.fetchBookMeta(searchTitle);
     if (!meta) return;
     if (meta.cover)   book.cover  = meta.cover;
     if (meta.authors?.length) book.author = meta.authors[0];
@@ -1828,6 +1838,24 @@ async function suggestReadingMusic() {
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
 initFirebase();
+
+// Auto-clean titles and fetch missing covers for all existing books
+(async () => {
+  let changed = false;
+  for (const book of state.books) {
+    // Clean title if it still has the number prefix
+    const cleaned = cleanBookTitle(book.title);
+    if (cleaned !== book.title) { book.title = cleaned; changed = true; }
+  }
+  if (changed) { saveState(); renderLibrary(); }
+
+  // Now fetch covers for books that don't have one yet (stagger to avoid rate-limit)
+  const needsCover = state.books.filter(b => !b.cover);
+  for (let i = 0; i < needsCover.length; i++) {
+    await new Promise(r => setTimeout(r, i * 400)); // 400ms between requests
+    fetchAndSaveBookMeta(needsCover[i].path);
+  }
+})();
 
 // receive open-file request from main library
 if (window.api?.onOpenFile) {
