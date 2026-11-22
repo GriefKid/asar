@@ -74,14 +74,20 @@ function renderLibrary() {
     return;
   }
 
-  el.innerHTML = state.books.map(b => {
+  el.innerHTML = state.books.map((b, bi) => {
     const isActive = b.path === currentBookPath;
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
     const rating = (state.ratings || {})[b.path] || 0;
     const stars = [1,2,3,4,5].map(n =>
       `<span onclick="event.stopPropagation();setBookRating(${JSON.stringify(b.path)},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
     ).join('');
-    return `<div class="book-item ${isActive ? 'active' : ''}" onclick="openBook(${JSON.stringify(b.path)})">
+    return `<div class="book-item ${isActive ? 'active' : ''}"
+        draggable="true"
+        ondragstart="bookDragStart(event,${bi})"
+        ondragend="bookDragEnd(event)"
+        ondragover="bookDragOver(event)"
+        ondrop="bookDrop(event,${bi})"
+        onclick="openBook(${JSON.stringify(b.path)})">
       <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
       <div class="book-meta">
         <div class="book-title">${esc(b.title)}</div>
@@ -89,8 +95,44 @@ function renderLibrary() {
         <div class="book-prog"><div class="book-prog-fill" style="width:${pct}%"></div></div>
         <div style="display:flex;gap:1px;margin-top:3px">${stars}</div>
       </div>
+      <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${JSON.stringify(b.path)})" title="حذف">🗑</div>
     </div>`;
   }).join('');
+}
+
+function deleteBook(path) {
+  state.books = state.books.filter(b => b.path !== path);
+  if (currentBookPath === path) currentBookPath = null;
+  saveState();
+  renderLibrary();
+}
+
+let dragBookIdx = null;
+
+function bookDragStart(e, idx) {
+  dragBookIdx = idx;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => e.currentTarget.style.opacity = '0.4', 0);
+}
+
+function bookDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  dragBookIdx = null;
+}
+
+function bookDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function bookDrop(e, toIdx) {
+  e.preventDefault();
+  if (dragBookIdx === null || dragBookIdx === toIdx) return;
+  const [b] = state.books.splice(dragBookIdx, 1);
+  state.books.splice(toIdx, 0, b);
+  dragBookIdx = null;
+  saveState();
+  renderLibrary();
 }
 
 function setBookRating(path, n) {

@@ -294,7 +294,12 @@ function renderColls() {
     const videos = c.videos || [];
     const thumb = videos.find(v => v.poster)?.poster || null;
 
-    return `<div class="coll ${isActive ? 'active' : ''} ${c.open ? 'open' : ''}" id="coll-${c.id}">
+    return `<div class="coll ${isActive ? 'active' : ''} ${c.open ? 'open' : ''}" id="coll-${c.id}"
+         draggable="true"
+         ondragstart="collHeaderDragStart(event,'${c.id}')"
+         ondragend="collHeaderDragEnd(event)"
+         ondragover="collHeaderDragOverReorder(event,'${c.id}')"
+         ondrop="collHeaderDropReorder(event,'${c.id}')">
       <div class="coll-hd" onclick="toggleColl('${c.id}')">
         <div class="coll-thumb">
           ${thumb ? `<img src="${esc(thumb)}" alt="">` : '🎬'}
@@ -303,6 +308,7 @@ function renderColls() {
           <div class="coll-name">${esc(c.name)}</div>
           <div class="coll-cnt">${videos.length} فیلم</div>
         </div>
+        <div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>
         <span class="coll-chev">›</span>
       </div>
       <div class="coll-items" id="coll-items-${c.id}"
@@ -353,6 +359,48 @@ function removeVideoFromColl(collId, idx) {
   const c = state.collections.find(c => c.id === collId);
   if (!c) return;
   c.videos.splice(idx, 1);
+  saveState();
+  renderColls();
+}
+
+function deleteColl(id) {
+  state.collections = state.collections.filter(c => c.id !== id);
+  if (activeColl === id) activeColl = state.collections[0]?.id || null;
+  saveState();
+  renderColls();
+}
+
+// ── Drag & drop: reorder collections ─────────────────────────────────
+let dragCollId = null;
+
+function collHeaderDragStart(e, id) {
+  dragCollId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.5';
+}
+
+function collHeaderDragEnd(e) {
+  dragCollId = null;
+  e.currentTarget.style.opacity = '';
+}
+
+function collHeaderDragOverReorder(e, id) {
+  if (!dragCollId || dragCollId === id) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function collHeaderDropReorder(e, targetId) {
+  if (!dragCollId || dragCollId === targetId) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const fromIdx = state.collections.findIndex(c => c.id === dragCollId);
+  const toIdx = state.collections.findIndex(c => c.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = state.collections.splice(fromIdx, 1);
+  state.collections.splice(toIdx, 0, moved);
+  dragCollId = null;
   saveState();
   renderColls();
 }

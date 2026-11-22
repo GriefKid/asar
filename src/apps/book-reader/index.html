@@ -41,6 +41,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .empty-lib{padding:28px 16px;text-align:center;color:var(--t3);direction:rtl}
 .empty-lib p{font-size:13px;line-height:1.6;margin-bottom:12px}
 
+.book-del-btn{opacity:0;padding:3px 6px;border-radius:4px;font-size:11px;cursor:pointer;
+  flex-shrink:0;transition:opacity .12s,background .12s;color:var(--t3)}
+.book-item:hover .book-del-btn{opacity:1}
+.book-del-btn:hover{background:rgba(255,95,126,.18);color:var(--err)}
 .book-item{display:flex;align-items:center;gap:10px;padding:8px 10px;direction:rtl;
   border-radius:10px;cursor:pointer;transition:all .13s;margin-bottom:3px}
 .book-item:hover{background:var(--bg2)}

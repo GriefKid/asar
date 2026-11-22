@@ -69,26 +69,39 @@ function renderColls() {
     return;
   }
 
-  el.innerHTML = state.collections.map(c => {
+  el.innerHTML = state.collections.map((c, ci) => {
     const isActive = c.id === activeColl;
     const isOpen = c.open;
     const songs = c.songs || [];
     return `
-    <div class="coll ${isActive ? 'active' : ''} ${isOpen ? 'open' : ''}" id="coll-${c.id}">
+    <div class="coll ${isActive ? 'active' : ''} ${isOpen ? 'open' : ''}" id="coll-${c.id}"
+         draggable="true"
+         ondragstart="collDragStart(event,'${c.id}')"
+         ondragend="collDragEnd(event)"
+         ondragover="collHeaderDragOver(event,'${c.id}')"
+         ondrop="collHeaderDrop(event,'${c.id}')">
       <div class="coll-hd" onclick="toggleColl('${c.id}')">
         <div class="coll-icon">🎵</div>
         <div class="coll-meta">
           <div class="coll-name">${esc(c.name)}</div>
           <div class="coll-cnt">${songs.length} آهنگ</div>
         </div>
+        <div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>
         <span class="coll-chev">›</span>
       </div>
-      <div class="coll-songs">
+      <div class="coll-songs" id="csongs-${c.id}"
+           ondragover="songColDragOver(event,'${c.id}')"
+           ondrop="songColDrop(event,'${c.id}')"
+           ondragleave="document.getElementById('csongs-${c.id}').style.background=''">
         ${songs.map((s, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === s.path && activeColl === c.id;
           const songRating = getSongRating(s.path);
           const ratingDot = songRating > 0 ? `<span style="color:var(--warn);font-size:9px;margin-right:2px">${'★'.repeat(songRating)}</span>` : '';
-          return `<div class="song ${playing ? 'playing' : ''}" onclick="playSong('${c.id}',${i})">
+          return `<div class="song ${playing ? 'playing' : ''}"
+              draggable="true"
+              ondragstart="songDragStart(event,'${c.id}',${i})"
+              ondragend="songDragEnd(event)"
+              onclick="playSong('${c.id}',${i})">
             <span class="song-n">${i + 1}</span>
             <div class="eq"><span></span><span></span><span></span></div>
             <div class="song-info">
@@ -96,6 +109,7 @@ function renderColls() {
               <div class="song-artist">${esc(s.artist || '')}</div>
             </div>
             <span class="song-dur">${s.duration ? fmtTime(s.duration) : ''}</span>
+            <div class="song-del-btn" onclick="event.stopPropagation();removeSongFromColl('${c.id}',${i})" title="حذف">🗑</div>
           </div>`;
         }).join('')}
       </div>
@@ -835,6 +849,94 @@ document.addEventListener('keydown', e => {
     window.api.closeWindow();
   }
 });
+
+// ── Delete helpers ─────────────────────────────────────────────────────
+function deleteColl(id) {
+  state.collections = state.collections.filter(c => c.id !== id);
+  if (activeColl === id) activeColl = state.collections[0]?.id || null;
+  saveState();
+  renderColls();
+}
+
+function removeSongFromColl(collId, idx) {
+  const coll = state.collections.find(c => c.id === collId);
+  if (!coll) return;
+  coll.songs.splice(idx, 1);
+  saveState();
+  renderColls();
+}
+
+// ── Drag & Drop ────────────────────────────────────────────────────────
+let dragCollId = null;
+let dragSong = null; // { collId, idx }
+
+function collDragStart(e, id) {
+  dragCollId = id;
+  dragSong = null;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.5';
+}
+
+function collDragEnd(e) {
+  dragCollId = null;
+  e.currentTarget.style.opacity = '';
+}
+
+function collHeaderDragOver(e, id) {
+  if (!dragCollId || dragCollId === id) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function collHeaderDrop(e, targetId) {
+  if (!dragCollId || dragCollId === targetId) return;
+  e.preventDefault();
+  const fromIdx = state.collections.findIndex(c => c.id === dragCollId);
+  const toIdx = state.collections.findIndex(c => c.id === targetId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const [moved] = state.collections.splice(fromIdx, 1);
+  state.collections.splice(toIdx, 0, moved);
+  dragCollId = null;
+  saveState();
+  renderColls();
+}
+
+function songDragStart(e, collId, idx) {
+  dragSong = { collId, idx };
+  dragCollId = null;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.5';
+  e.stopPropagation();
+}
+
+function songDragEnd(e) {
+  dragSong = null;
+  e.currentTarget.style.opacity = '';
+}
+
+function songColDragOver(e, collId) {
+  if (!dragSong) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  document.getElementById('csongs-' + collId).style.background = 'rgba(123,94,255,.1)';
+}
+
+function songColDrop(e, targetCollId) {
+  if (!dragSong) return;
+  e.preventDefault();
+  e.stopPropagation();
+  document.getElementById('csongs-' + targetCollId).style.background = '';
+  const { collId: srcCollId, idx: srcIdx } = dragSong;
+  const srcColl = state.collections.find(c => c.id === srcCollId);
+  const dstColl = state.collections.find(c => c.id === targetCollId);
+  if (!srcColl || !dstColl) return;
+  const [song] = srcColl.songs.splice(srcIdx, 1);
+  dstColl.songs.push(song);
+  dragSong = null;
+  saveState();
+  renderColls();
+}
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderColls();

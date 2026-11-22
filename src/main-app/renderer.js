@@ -802,6 +802,7 @@ function renderDayView() {
                onclick="openEditEvent('${key}','${ev.id}')">
             <div class="event-title">${esc(ev.title)}</div>
             <div class="event-meta">${ev.time}${ev.duration?' — '+toFarsiNum(ev.duration)+' دقیقه':''}</div>
+            <div class="event-del-btn" onclick="event.stopPropagation();deleteEvent('${key}','${ev.id}')" title="حذف">✕</div>
           </div>`).join('')}
         ${slotEvs.length === 0 ? `<div class="event-empty" onclick="quickAddEvent('${hStr}:00')"></div>` : ''}
       </div>
@@ -871,6 +872,15 @@ window.saveEvent = function() {
   }
   saveEvents();
   closeAddEvent();
+  renderDayView();
+  renderCalendar();
+  if (activeSection === 'home') renderHome();
+};
+
+window.deleteEvent = function(key, id) {
+  if (!events[key]) return;
+  events[key] = events[key].filter(e => e.id !== id);
+  saveEvents();
   renderDayView();
   renderCalendar();
   if (activeSection === 'home') renderHome();
