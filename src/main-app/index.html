@@ -1058,6 +1058,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
             <div class="settings-desc">برای دریافت پوستر و اطلاعات فیلم — از themoviedb.org</div>
           </div>
           <input class="settings-input no-drag" id="tmdb-key-input" placeholder="eyJhbGci..." type="password">
+          <button class="settings-save-btn no-drag" onclick="toggleKeyVisibility('tmdb-key-input',this)" title="نمایش/پنهان">👁</button>
+          <button class="settings-save-btn no-drag" onclick="copyApiKey('tmdb-key-input',this)" title="کپی">کپی</button>
           <button class="settings-save-btn no-drag" onclick="saveSetting('tmdb-key','tmdb-key-input')">ذخیره</button>
         </div>
         <div class="settings-row" style="flex-wrap:wrap;gap:8px">
@@ -1117,7 +1119,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
           </div>
           <div style="width:100%;display:flex;flex-direction:column;gap:8px">
             <input class="settings-input no-drag" id="sb-url-inp" placeholder="https://xxxx.supabase.co" dir="ltr" style="font-family:monospace;font-size:12px">
-            <input class="settings-input no-drag" id="sb-key-inp" placeholder="eyJhbGci... (anon/public key)" dir="ltr" style="font-family:monospace;font-size:11px" type="password">
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="settings-input no-drag" id="sb-key-inp" placeholder="eyJhbGci... (anon/public key)" dir="ltr" style="font-family:monospace;font-size:11px;flex:1" type="password">
+              <button class="settings-save-btn no-drag" onclick="toggleKeyVisibility('sb-key-inp',this)" title="نمایش/پنهان">👁</button>
+              <button class="settings-save-btn no-drag" onclick="copyApiKey('sb-key-inp',this)" title="کپی">کپی</button>
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;width:100%">
             <button class="settings-save-btn no-drag" onclick="saveSupabaseConfig()">ذخیره و اتصال</button>
