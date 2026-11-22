@@ -1627,7 +1627,7 @@ window.submitAuth = async function() {
       if (error) throw error;
     } else {
       const name = (document.getElementById('auth-name') || {}).value || '';
-      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
+      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name }, emailRedirectTo: 'https://github.com/GriefKid/asar' } });
       if (error) throw error;
       // Create profile row
       if (data.user) {
@@ -1637,11 +1637,15 @@ window.submitAuth = async function() {
   } catch(e) {
     const msgs = {
       'Invalid login credentials': 'ایمیل یا رمز اشتباهه',
-      'Email not confirmed': 'ایمیلت رو تأیید کن',
+      'Email not confirmed': 'ایمیلت رو تأیید نکردی — لینک رو چک کن',
       'User already registered': 'این ایمیل قبلاً ثبت شده',
-      'Password should be at least 6 characters': 'رمز باید حداقل ۶ کاراکتر باشه'
+      'Password should be at least 6 characters': 'رمز باید حداقل ۶ کاراکتر باشه',
+      'Email rate limit exceeded': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
+      'email rate limit exceeded': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
+      'over_email_send_rate_limit': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
     };
-    errEl.textContent = msgs[e.message] || e.message;
+    const msg = msgs[e.message] || msgs[e.code] || e.message;
+    errEl.textContent = msg;
   } finally {
     btn.textContent = _authMode === 'login' ? 'ورود' : 'ثبت‌نام';
     btn.disabled = false;
