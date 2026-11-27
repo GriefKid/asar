@@ -37,8 +37,38 @@ async function runIn(name, code) {
   throw new Error('Timed out waiting for ' + name);
 }
 
-function testPage(file) {
-  const stream = 'BT /F1 18 Tf 100 680 Td (Asar test) Tj ET';
+async function waitIn(name, code) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const value = await runIn(name, code);
+    if (value) return value;
+    await delay(100);
+  }
+  throw new Error(`Timed out in ${name}: ${code}`);
+}
+
+async function clickIn(name, selector) {
+  const point = await runIn(name, `(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    target.scrollIntoView({ block: 'nearest' });
+    const rect = target.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    if (!target.contains(document.elementFromPoint(x, y))) throw new Error('Click target is covered');
+    return { x, y };
+  })()`);
+  const debuggerClient = windows.get(name).webContents.debugger;
+  debuggerClient.attach();
+  try {
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await debuggerClient.sendCommand('Input.dispatchMouseEvent', { type, ...point, button: 'left', clickCount: 1 });
+    }
+  } finally {
+    debuggerClient.detach();
+  }
+}
+
+function testPage(file, label) {
+  const stream = `BT /F1 18 Tf 100 680 Td (${label}) Tj ET`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -212,21 +242,68 @@ app.whenReady().then(async () => {
   assert.deepEqual(scene, { preview: true, cleared: true });
   assert.match(sceneRequest.text, /Describe this frame/);
   assert.match(sceneRequest.frame, /^\/9j\//);
-  await main('window.api.openBookReader()');
-  const file = path.join(profile, "Asar's offline file.pdf");
-  testPage(file);
-  await main('window.api.openBookReaderWithFile(' + JSON.stringify(file) + ')');
-  let pdf;
-  for (let attempt = 0; attempt < 70; attempt++) {
-    pdf = await runIn('book-reader', `({
-      canvas: !!document.querySelector('#pdf-container canvas'),
-      click: typeof document.querySelector('#library-list .book-item')?.onclick,
-      folders: typeof window.asarCollections?.show
-    })`);
-    if (pdf.canvas) break;
-    await delay(100);
+
+  const subtitleLines = ['Where is the library?', 'What did you see?'];
+  const srt = `1\n00:00:00,000 --> 00:00:01,000\n${subtitleLines[0]}\n\n2\n00:00:01,100 --> 00:00:04,000\n${subtitleLines[1]}`;
+  const vtt = `WEBVTT\n\nfirst-cue\n00:00.000 --> 00:01.000\n${subtitleLines[0]}\n\nsecond-cue\n00:01.100 --> 00:04.000\n${subtitleLines[1]}`;
+  ipcMain.removeHandler('subtitle:search');
+  ipcMain.handle('subtitle:search', () => [
+    { fileId: 'fixture-srt', name: 'SRT candidate' }, { fileId: 'fixture-vtt', name: 'VTT candidate' }
+  ]);
+  ipcMain.removeHandler('subtitle:download');
+  ipcMain.handle('subtitle:download', (_, id) => id === 'fixture-vtt' ? vtt : srt);
+  const subtitleCalls = [];
+  const liveSubtitles = process.env.ASAR_LIVE_SUBTITLES === '1';
+  if (!liveSubtitles) {
+    ipcMain.removeHandler('subtitle:translate');
+    ipcMain.handle('subtitle:translate', (_, cues) => {
+      subtitleCalls.push(cues);
+      return subtitleCalls.length === 1 ? ['کتابخانه کجاست؟', null] : ['چه دیدی؟'];
+    });
   }
-  assert.deepEqual(pdf, { canvas: true, click: 'function', folders: 'function' });
+  await runIn('video-player', `(() => {
+    localStorage.setItem('osub-key', 'test-only');
+    document.querySelector('.stab[data-mode="en"]').click();
+    autoFetchSubtitle({ title: 'Desktop fixture' });
+  })()`);
+  await waitIn('video-player', '!!document.getElementById("spitem-1")');
+  await runIn('video-player', 'document.getElementById("spitem-1").click()');
+  await waitIn('video-player', 'document.getElementById("spitem-1").classList.contains("selected")');
+  await runIn('video-player', 'document.getElementById("sub-translate-btn").click()');
+  if (!liveSubtitles) {
+    await waitIn('video-player', 'document.getElementById("sub-auto-status").classList.contains("error")');
+    assert.deepEqual(await runIn('video-player', 'subtitles.map(cue => cue.fa)'), ['کتابخانه کجاست؟', '']);
+    await runIn('video-player', 'document.getElementById("sub-translate-btn").click()');
+  }
+  await waitIn('video-player', 'document.getElementById("sub-translate-btn").textContent === "✓ ترجمه شد"');
+  if (!liveSubtitles) assert.deepEqual(subtitleCalls, [subtitleLines, [subtitleLines[1]]]);
+  const translated = await runIn('video-player', `({
+    times: subtitles.map(cue => [cue.start, cue.end]),
+    persian: subtitles.map(cue => cue.fa),
+    mode: subMode,
+    displayed: document.getElementById('sub-fa-line').textContent
+  })`);
+  assert.deepEqual(translated.times, [[0, 1], [1.1, 4]]);
+  assert.equal(translated.mode, 'both');
+  for (const cue of translated.persian) assert.match(cue, /[آ-ی]/);
+  assert.equal(translated.displayed, translated.persian[0]);
+
+  await main('window.api.openBookReader()');
+  const file = path.join(profile, "Asar's offline & کتاب.pdf");
+  const otherFile = path.join(profile, 'Another offline book.pdf');
+  testPage(file, 'First offline document');
+  testPage(otherFile, 'Second offline document');
+  ipcMain.removeHandler('dialog:openPdfFiles');
+  ipcMain.handle('dialog:openPdfFiles', () => [file, otherFile]);
+  ipcMain.removeHandler('book:fetchMeta');
+  ipcMain.handle('book:fetchMeta', () => null);
+  await waitIn('book-reader', 'typeof window.asarCollections?.show === "function"');
+  await runIn('book-reader', 'importPdf()');
+  assert.equal(await runIn('book-reader', 'currentBookPath'), null);
+  await clickIn('book-reader', '#library-list .book-title');
+  const readBook = label => waitIn('book-reader',
+    `document.querySelector('#pdf-container .textLayer')?.textContent.includes(${JSON.stringify(label)})`);
+  await readBook('First offline document');
   const filedBook = await runIn('book-reader', `(() => {
     const original = document.querySelector('#library-list .book-item');
     const panel = document.getElementById('asar-collection-tree');
@@ -245,10 +322,17 @@ app.whenReady().then(async () => {
     const savedFolder = [...panel.querySelectorAll('details[data-folder-id]')].find(node => node.dataset.folderId === folderId);
     return { accepted, moved: tree.items['item:' + currentBookPath] === folderId,
       visibleInFolder: Boolean(savedFolder.querySelector('.asar-tree-item')),
-      rootCardLeft: Boolean(document.querySelector('#library-list .book-item')),
+      rootCards: document.querySelectorAll('#library-list .book-item').length,
       readerStillOpen: Boolean(original && document.querySelector('#pdf-container canvas')) };
   })()`);
-  assert.deepEqual(filedBook, { accepted:true, moved:true, visibleInFolder:true, rootCardLeft:false, readerStillOpen:true });
+  assert.deepEqual(filedBook, { accepted:true, moved:true, visibleInFolder:true, rootCards:1, readerStillOpen:true });
+  await clickIn('book-reader', '#library-list .book-title');
+  await readBook('Second offline document');
+  await runIn('book-reader', 'document.getElementById("asar-collection-tree").open = true');
+  await clickIn('book-reader', '#asar-collection-tree .asar-tree-item button');
+  await readBook('First offline document');
+  await main('window.api.openBookReaderWithFile(' + JSON.stringify(otherFile) + ')');
+  await readBook('Second offline document');
   assert.deepEqual(errors, []);
   console.log('Desktop smoke test passed');
   app.exit(0);

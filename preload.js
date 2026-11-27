@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   // Subtitles (subdl)
   subtitleSearch:    (title, year, key, fileName, videoPath, imdbId) => ipcRenderer.invoke('subtitle:search', title, year, key, fileName, videoPath, imdbId),
   subtitleDownload:  (fileId, key)      => ipcRenderer.invoke('subtitle:download', fileId, key),
+  subtitleTranslate: (cues)             => ipcRenderer.invoke('subtitle:translate', cues),
   fetchMoviePoster:  (title)            => ipcRenderer.invoke('cover:fetchMoviePoster', title),
   fetchImage:        (url)              => ipcRenderer.invoke('image:fetch', url),
   // Claude AI

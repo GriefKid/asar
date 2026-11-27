@@ -5,6 +5,7 @@ let pdfDoc = null;
 let currentPage = 1;
 let totalPages = 0;
 let currentBookPath = null;
+let bookOpenRequest = 0;
 let readMode = 'original';   // 'original' | 'both' | 'persian'
 let fontSize = 18;
 let activeTab = 0;
@@ -86,11 +87,10 @@ function renderLibrary() {
         ondragstart="bookDragStart(event,${bi})"
         ondragend="bookDragEnd(event)"
         ondragover="bookDragOver(event)"
-        ondrop="bookDrop(event,${bi})"
-        onclick="openBook(${esc(JSON.stringify(b.path))})">
+        ondrop="bookDrop(event,${bi})">
       <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="" draggable="false">` : '📖'}</div>
       <div class="book-meta">
-        <div class="book-title">${esc(b.title)}</div>
+        <button type="button" class="book-title" title="${esc(b.title)}">${esc(b.title)}</button>
         ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
         <div class="book-prog"><div class="book-prog-fill" style="width:${pct}%"></div></div>
         <div style="display:flex;gap:1px;margin-top:3px">${stars}</div>
@@ -98,6 +98,9 @@ function renderLibrary() {
       <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${esc(JSON.stringify(b.path))})" title="حذف">🗑</div>
     </div>`;
   }).join('');
+  el.querySelectorAll('.book-item').forEach((card, index) => {
+    card.onclick = () => openBook(visible[index].book.path);
+  });
 }
 
 function deleteBook(path) {
@@ -265,7 +268,15 @@ async function openBook(path) {
     state.books.push(book);
   }
 
+  const request = ++bookOpenRequest;
+  recordReadSpeed();
+  const previousDoc = pdfDoc;
+  pdfDoc = null;
+  if (previousDoc) previousDoc.destroy().catch(() => {});
   currentBookPath = path;
+  currentPage = 1;
+  totalPages = 0;
+  updateNav();
   renderLibrary();
 
   // load PDF
@@ -275,12 +286,18 @@ async function openBook(path) {
 
   try {
     const buf = await window.api.readFileBuffer(path);
+    if (request !== bookOpenRequest) return;
     const resources = new URL('../../../node_modules/pdfjs-dist/', document.baseURI);
-    pdfDoc = await pdfjsLib.getDocument({
+    const documentPdf = await pdfjsLib.getDocument({
       data: new Uint8Array(buf), isEvalSupported: false,
       cMapUrl: new URL('cmaps/', resources).href, cMapPacked: true,
       standardFontDataUrl: new URL('standard_fonts/', resources).href
     }).promise;
+    if (request !== bookOpenRequest) {
+      await documentPdf.destroy();
+      return;
+    }
+    pdfDoc = documentPdf;
     totalPages = pdfDoc.numPages;
 
     book.totalPages = totalPages;
@@ -291,24 +308,27 @@ async function openBook(path) {
     document.getElementById('btn-next').disabled = false;
 
     // restore last page
-    currentPage = book.lastPage || 1;
+    currentPage = Math.min(totalPages, Math.max(1, Number(book.lastPage) || 1));
     document.getElementById('book-name-tb').textContent = book.title;
 
     // load TOC
     loadToc();
 
     await renderCurrentPage();
+    if (request !== bookOpenRequest) return;
     updateNav();
     checkTranslateBtn();
   } catch (e) {
+    if (request !== bookOpenRequest) return;
     const msg = String(e.message || e);
     const notFound = msg.includes('ENOENT') || msg.includes('no such file') || msg.includes('cannot find');
     document.getElementById('pdf-container').innerHTML =
       `<div style="color:var(--err);text-align:center;padding:40px;direction:rtl;line-height:2">
         ${notFound ? '📂 فایل پیدا نشد' : '❌ خطا در بارگذاری'}
         <br><span style="font-size:11px;color:var(--t3);direction:ltr;display:block;word-break:break-all">${esc(path)}</span>
-        ${notFound ? `<button onclick="relocateBook(${JSON.stringify(path)})" style="margin-top:12px;padding:7px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px">انتخاب مجدد فایل</button>` : ''}
+        ${notFound ? `<button type="button" class="relocate-book" style="margin-top:12px;padding:7px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px">انتخاب مجدد فایل</button>` : ''}
       </div>`;
+    if (notFound) document.querySelector('#pdf-container .relocate-book').onclick = () => relocateBook(path);
   }
 }
 
@@ -328,9 +348,11 @@ async function relocateBook(oldPath) {
 
 // ── TOC ────────────────────────────────────────────────────────────────
 async function loadToc() {
-  if (!pdfDoc) return;
+  const documentPdf = pdfDoc;
+  if (!documentPdf) return;
   try {
-    const outline = await pdfDoc.getOutline();
+    const outline = await documentPdf.getOutline();
+    if (documentPdf !== pdfDoc) return;
     if (!outline || !outline.length) {
       if (activeTab === 0) renderTocPanel([]);
       return;
@@ -379,15 +401,17 @@ async function tocGo(dest) {
 
 // ── Rendering ──────────────────────────────────────────────────────────
 async function renderCurrentPage() {
-  if (!pdfDoc) return;
+  const documentPdf = pdfDoc;
+  if (!documentPdf) return;
   recordReadSpeed(); // record time on prev page before switching
   const container = document.getElementById('pdf-container');
 
   if (readMode === 'original') {
-    await renderPdfCanvas(container);
+    await renderPdfCanvas(container, documentPdf);
   } else {
-    await renderTextMode(container);
+    await renderTextMode(container, documentPdf);
   }
+  if (documentPdf !== pdfDoc) return;
 
   updateNav();
   updateProgress();
@@ -399,8 +423,8 @@ async function renderCurrentPage() {
   if (book) { book.lastPage = currentPage; saveState(); }
 }
 
-async function renderSinglePageWrap(pageNum, availWidth) {
-  const page = await pdfDoc.getPage(pageNum);
+async function renderSinglePageWrap(documentPdf, pageNum, availWidth) {
+  const page = await documentPdf.getPage(pageNum);
   const scale = ((availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
   const viewport = page.getViewport({ scale });
   const wrap = document.createElement('div');
@@ -421,6 +445,7 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   const textContent = await page.getTextContent();
   textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
   await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
+  if (documentPdf !== pdfDoc) return;
   renderRectAnnotations(annotLayer, viewport);
   wrap.addEventListener('mouseup', onTextSelect);
   wrap.addEventListener('contextmenu', e => e.preventDefault());
@@ -432,15 +457,16 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   return { wrap, viewport };
 }
 
-async function renderPdfCanvas(container) {
+async function renderPdfCanvas(container, documentPdf) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     if (dualPage && currentPage < totalPages) {
       const avail = (container.clientWidth - 60) / 2;
       const [r1, r2] = await Promise.all([
-        renderSinglePageWrap(currentPage, avail),
-        renderSinglePageWrap(currentPage + 1, avail),
+        renderSinglePageWrap(documentPdf, currentPage, avail),
+        renderSinglePageWrap(documentPdf, currentPage + 1, avail),
       ]);
+      if (documentPdf !== pdfDoc) return;
       const dw = document.createElement('div');
       dw.className = 'dual-wrap';
       dw.appendChild(r1.wrap);
@@ -450,7 +476,8 @@ async function renderPdfCanvas(container) {
       container.appendChild(makePageNum());
       return;
     }
-    const page = await pdfDoc.getPage(currentPage);
+    const page = await documentPdf.getPage(currentPage);
+    if (documentPdf !== pdfDoc) return;
     const scale = ((container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
     const viewport = page.getViewport({ scale });
 
@@ -487,6 +514,7 @@ async function renderPdfCanvas(container) {
     const textContent = await page.getTextContent();
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
     await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
+    if (documentPdf !== pdfDoc) return;
 
     // render saved rect annotations
     renderRectAnnotations(annotLayer, viewport);
@@ -502,15 +530,17 @@ async function renderPdfCanvas(container) {
     });
 
   } catch (e) {
+    if (documentPdf !== pdfDoc) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
 
-async function renderTextMode(container) {
+async function renderTextMode(container, documentPdf) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
-    const page = await pdfDoc.getPage(currentPage);
+    const page = await documentPdf.getPage(currentPage);
     const textContent = await page.getTextContent();
+    if (documentPdf !== pdfDoc) return;
     let rawText = textContent.items.map(i => i.str).join(' ').trim();
 
     if (rawText.length < 30) {
@@ -583,6 +613,7 @@ async function renderTextMode(container) {
     // text selection for highlights
     wrap.addEventListener('mouseup', onTextSelect);
   } catch (e) {
+    if (documentPdf !== pdfDoc) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
@@ -1733,6 +1764,7 @@ if (window.api?.onOpenFile) {
 
 window.asarCollectionSource = {
   items: () => state.books.map(book => ({ id: book.path, title: book.title })),
+  openOnTitle: true,
   open: id => openBook(id),
   fileType: /\.pdf$/i,
   importFiles: paths => addBooks(paths, false),

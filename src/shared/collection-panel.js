@@ -259,11 +259,17 @@
       for (const [id, item] of grouped.get(parent) || []) {
         const row = el('div', '', 'asar-tree-item');
         row.dataset.itemId = id;
-        const open = button(item.title, () => { selected = { scope: page, type: 'item', id }; }, row);
-        open.title = 'انتخاب برای انتقال';
-        open.addEventListener('dblclick', () => source.open?.(id));
-        const launch = button('بازکردن', () => source.open?.(id), row);
-        launch.title = item.title;
+        const selectItem = () => { selected = { scope: page, type: 'item', id }; };
+        const launchItem = () => source.open?.(id);
+        if (source.openOnTitle) {
+          button(item.title, launchItem, row).title = item.title;
+          button('انتخاب', selectItem, row).title = 'انتخاب برای انتقال';
+        } else {
+          const select = button(item.title, selectItem, row);
+          select.title = 'انتخاب برای انتقال';
+          select.addEventListener('dblclick', launchItem);
+          button('بازکردن', launchItem, row).title = item.title;
+        }
         dragSource(row, 'item', id);
         node.append(row);
       }

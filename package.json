@@ -1,6 +1,6 @@
 {
   "name": "asar-desktop",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "اثر — مدیریت تجربه‌های فرهنگی شخصی",
   "main": "main.js",
   "scripts": {

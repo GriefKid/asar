@@ -4,6 +4,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { selectProfilePath } = require('./src/shared/profile-path.cjs');
+const { createSubtitleTranslator } = require('./src/shared/subtitle-translation.cjs');
 
 const profilePath = selectProfilePath(app.getPath('appData'), app.getPath('userData'));
 if (fs.existsSync(profilePath)) app.setPath('userData', profilePath);
@@ -343,6 +344,9 @@ ipcMain.handle('lyrics:fetch', async (_, artist, title) => {
 });
 
 // ── IPC: Translate ─────────────────────────────────────────────────
+const translateSubtitleCues = createSubtitleTranslator();
+ipcMain.handle('subtitle:translate', (_, cues) => translateSubtitleCues(cues));
+
 ipcMain.handle('translate:toFarsi', async (_, text) => {
   // Try Google Translate (gtx — no key needed)
   try {
@@ -442,7 +446,7 @@ ipcMain.handle('dialog:openSubtitleFile', async () => {
     filters: [{ name: 'Subtitle Files', extensions: ['srt','vtt','ass','ssa'] }]
   });
   if (result.canceled) return null;
-  return fs.readFileSync(result.filePaths[0], 'utf8');
+  return decodeSubtitle(fs.readFileSync(result.filePaths[0]));
 });
 
 // ── IPC: TMDB search ───────────────────────────────────────────────────
@@ -794,6 +798,16 @@ ipcMain.handle('subtitle:search', async (_, title, year, apiKey, fileName, video
 });
 
 // ── IPC: Subtitle download (ZIP / gzip / plain) ────────────────────────
+function decodeSubtitle(buffer) {
+  if (buffer.length < 2) return buffer.toString('utf8');
+  const marker = buffer.readUInt16BE(0);
+  if (marker === 0xfffe || marker === 0xfeff) {
+    return new TextDecoder(marker === 0xfffe ? 'utf-16le' : 'utf-16be').decode(buffer);
+  }
+  const utf8 = buffer.toString('utf8');
+  return utf8.includes('\ufffd') ? new TextDecoder('windows-1252').decode(buffer) : utf8;
+}
+
 ipcMain.handle('subtitle:download', async (_, fileUrl, apiKey) => {
   try {
     let fullUrl, extraHeaders = {};
@@ -823,13 +837,17 @@ ipcMain.handle('subtitle:download', async (_, fileUrl, apiKey) => {
     // Detect format by magic bytes
     const magic = buf.slice(0, 2).toString('hex');
     if (magic === '1f8b') {
-      return zlib.gunzipSync(buf).toString('utf8');
+      return decodeSubtitle(zlib.gunzipSync(buf));
     } else if (magic === '504b') {
       const zip = new AdmZip(buf);
-      const sub = zip.getEntries().find(e => /\.(srt|ass|ssa|vtt)$/i.test(e.entryName));
-      return sub ? sub.getData().toString('utf8') : null;
+      for (const entry of zip.getEntries()) {
+        if (entry.isDirectory || !/\.(srt|ass|ssa|vtt)$/i.test(entry.name) || entry.name.startsWith('._')) continue;
+        const subtitle = decodeSubtitle(entry.getData());
+        if (/\d\s*-->\s*\d|^Dialogue:/m.test(subtitle)) return subtitle;
+      }
+      return null;
     } else {
-      return buf.toString('utf8');
+      return decodeSubtitle(buf);
     }
   } catch { return null; }
 });

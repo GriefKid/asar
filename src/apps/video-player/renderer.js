@@ -44,7 +44,9 @@ let queue = [];
 let queueIdx = -1;
 let subMode = 'both';
 let subtitles = [];        // [{start, end, en, fa}]
-let subTranslating = false;
+let translatingTrack = null;
+let subtitleSearchRequest = 0;
+let subtitleSelection = 0;
 let cmtTimestamp = 0;
 let isDraggingProg = false;
 let isDraggingVol = false;
@@ -138,6 +140,7 @@ async function checkSubtitleSync(parsedSubs, movieTitle) {
 }
 
 async function autoFetchSubtitle(video) {
+  const request = ++subtitleSearchRequest;
   const subdlKey = getOsubKey();
 
   const fileName = video.fileName || '';
@@ -164,16 +167,19 @@ async function autoFetchSubtitle(video) {
   let results = null;
 
   for (const t of titleVariants) {
+    if (request !== subtitleSearchRequest) return;
     setSubAutoStatus(`🔍 "${t}" ${year || ''}...`, '');
     const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(e => {
-      setSubAutoStatus(`❌ خطای IPC: ${e?.message || e}`, 'error');
+      if (request === subtitleSearchRequest) setSubAutoStatus(`❌ خطای IPC: ${e?.message || e}`, 'error');
       return null;
     });
+    if (request !== subtitleSearchRequest) return;
     if (r?.length) { results = r; break; }
     setSubAutoStatus(`⚠️ "${t}" — ۰ نتیجه`, '');
     await sleep(500);
   }
 
+  if (request !== subtitleSearchRequest) return;
   if (!results?.length) {
     setSubAutoStatus(`⚠️ نتیجه‌ای یافت نشد — "${title}" ${year||''}`, 'error');
     showSubAIBtn(true);
@@ -198,8 +204,8 @@ function showSubtitlePicker(results, subdlKey) {
     const src = r.source || '';
     const name = (r.name || '—').slice(0, 48);
     return `<div class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})">
-      <span class="sub-pick-src">${src}</span>
-      <span class="sub-pick-name">${name}</span>
+      <span class="sub-pick-src">${esc(src)}</span>
+      <span class="sub-pick-name">${esc(name)}</span>
     </div>`;
   }).join('');
 
@@ -212,18 +218,21 @@ function showSubtitlePicker(results, subdlKey) {
 async function selectSubtitleFromPicker(idx) {
   const r = _pickerResults[idx];
   if (!r) return;
+  const request = ++subtitleSelection;
+  const btn = document.getElementById('sub-translate-btn');
 
   // Visual feedback
   document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
     el.classList.remove('selected', 'loading', 'done');
     if (i === idx) el.classList.add('loading');
   });
-  document.getElementById('sub-translate-btn').style.display = 'none';
+  btn.style.display = 'none';
   setSubAutoStatus(`📥 در حال دانلود...`, '');
 
   const srtText = await window.api.subtitleDownload(r.fileId, _pickerKey).catch(() => null);
+  if (request !== subtitleSelection || r !== _pickerResults[idx]) return;
+  document.getElementById(`spitem-${idx}`)?.classList.remove('loading');
   if (!srtText) {
-    document.getElementById(`spitem-${idx}`)?.classList.replace('loading', 'sub-pick-item');
     setSubAutoStatus(`❌ دانلود ناموفق`, 'error');
     return;
   }
@@ -234,31 +243,36 @@ async function selectSubtitleFromPicker(idx) {
   }
 
   document.getElementById(`spitem-${idx}`)?.classList.add('done');
-  document.getElementById(`spitem-${idx}`)?.classList.remove('loading');
   document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
     if (i !== idx) el.classList.remove('selected');
   });
   document.getElementById(`spitem-${idx}`)?.classList.add('selected');
 
   subtitles = parsed;
+  updateSubtitle();
   subOffset = 0;
   const offsetBar = document.getElementById('sub-offset-bar');
   const offsetVal = document.getElementById('sub-offset-val');
   if (offsetBar) offsetBar.style.display = 'flex';
   if (offsetVal) offsetVal.textContent = '0.0s';
 
-  document.getElementById('sub-translate-btn').style.display = 'block';
+  btn.style.display = 'block';
+  btn.disabled = false;
+  btn.textContent = 'ترجمه به فارسی';
   setSubAutoStatus(`✓ ${parsed.length} خط | سینک تنظیم کن، بعد ترجمه بزن`, 'done');
 }
 
 async function translateNowFromPicker() {
-  if (!subtitles.length) return;
+  const track = subtitles;
+  const selection = subtitleSelection;
+  if (!track.length || translatingTrack === track) return;
   const btn = document.getElementById('sub-translate-btn');
-  if (btn) btn.disabled = true;
-  setSubAutoStatus(`🌐 ترجمه ${subtitles.length} خط...`, '');
-  await translateSubtitles();
-  if (btn) { btn.disabled = false; btn.textContent = '✓ ترجمه شد'; }
-  setSubAutoStatus(`✓ ترجمه کامل شد`, 'done');
+  btn.disabled = true;
+  btn.textContent = 'در حال ترجمه…';
+  const result = await translateSubtitles((message, type) => setSubAutoStatus(message, type));
+  if (!result || track !== subtitles || selection !== subtitleSelection) return;
+  btn.disabled = result.complete;
+  btn.textContent = result.complete ? '✓ ترجمه شد' : 'تلاش دوباره برای ترجمه';
 }
 
 let subOffset = 0;
@@ -287,6 +301,7 @@ async function fetchSubtitleWithAI(video) {
   const title = video?.title || video?.fileName || queue[queueIdx]?.title || queue[queueIdx]?.fileName || '';
   const key = getAIKey();
   if (!key) { setSubAutoStatus('کلید AI ندارم', 'error'); return; }
+  const request = ++subtitleSelection;
 
   showSubAIBtn(false);
   setSubAutoStatus('🤖 ساخت زیرنویس با AI...', '');
@@ -305,11 +320,13 @@ next line
 
   try {
     const reply = await window.api.claudeChat(sys, [{ role: 'user', content: msg }], key);
+    if (request !== subtitleSelection) return;
     subtitles = parseSrt(reply);
     if (!subtitles.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
     setSubAutoStatus(`🤖 ${subtitles.length} خط از AI (تقریبی)`, 'done');
-    await translateSubtitles();
+    await translateSubtitles((message, type) => setSubAutoStatus(message, type));
   } catch {
+    if (request !== subtitleSelection) return;
     setSubAutoStatus('خطا در AI', 'error');
     showSubAIBtn(true, queue[queueIdx]);
   }
@@ -613,6 +630,10 @@ function loadVideo(video) {
   renderMetaTags(video);
 
   // reset subtitles
+  ++subtitleSelection;
+  _pickerResults = [];
+  document.getElementById('sub-picker').style.display = 'none';
+  document.getElementById('sub-modal').classList.remove('show');
   subtitles = [];
   hideSubtitle();
   setSubAutoStatus('', '');
@@ -969,34 +990,49 @@ document.addEventListener('fullscreenchange', () => {
 async function loadSubtitle() {
   const modal = document.getElementById('sub-modal');
   const status = document.getElementById('sub-status');
+  const retry = document.getElementById('sub-modal-retry');
   modal.classList.add('show');
+  retry.hidden = true;
   status.innerHTML = `<span class="translating">در حال بارگذاری...</span>`;
 
+  const selection = subtitleSelection;
   const raw = await window.api.openSubtitleFile().catch(() => null);
+  if (selection !== subtitleSelection) return;
   if (!raw) { modal.classList.remove('show'); return; }
 
-  subtitles = parseSrt(raw);
-  if (!subtitles.length) {
+  const parsed = parseSrt(raw);
+  if (!parsed.length) {
     status.innerHTML = `<span style="color:var(--err)">فایل زیرنویس ناخوانا بود.</span>`;
     return;
   }
 
+  ++subtitleSelection;
+  subtitles = parsed;
+  document.getElementById('sub-translate-btn').style.display = 'none';
+  updateSubtitle();
   subOffset = 0;
   const offsetBar = document.getElementById('sub-offset-bar');
   const offsetVal = document.getElementById('sub-offset-val');
   if (offsetBar) offsetBar.style.display = 'flex';
   if (offsetVal) offsetVal.textContent = '0.0s';
 
-  status.innerHTML = `<span class="ok">✓ ${subtitles.length} خط لود شد.</span> در حال ترجمه...`;
-  modal.classList.add('show');
+  await translateLocalSubtitle();
+}
 
-  await translateSubtitles();
-  status.innerHTML = `<span class="ok">✓ ترجمه کامل شد. زیرنویس آماده‌ست.</span>`;
+async function translateLocalSubtitle() {
+  const retry = document.getElementById('sub-modal-retry');
+  const status = document.getElementById('sub-status');
+  retry.hidden = true;
+  const result = await translateSubtitles((message, type) => {
+    status.textContent = message;
+    status.className = `sub-status ${type || 'translating'}`;
+  });
+  if (result) retry.hidden = result.complete;
 }
 
 function parseSrt(text) {
   if (!text) return [];
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
   // Auto-detect ASS/SSA format
   if (/^\[Script Info\]/m.test(normalized) || /^Dialogue:/m.test(normalized)) {
@@ -1004,19 +1040,14 @@ function parseSrt(text) {
   }
 
   const result = [];
-  const blocks = normalized.split(/\n\n+/);
+  const blocks = normalized.split(/\n(?:[ \t]*\n)+/);
+  const timing = /^\s*((?:\d+:)?\d{2}:\d{2}(?:[,.]\d{1,3})?)\s*-->\s*((?:\d+:)?\d{2}:\d{2}(?:[,.]\d{1,3})?)(?:\s|$)/;
 
   for (const block of blocks) {
     const lines = block.trim().split('\n');
-    if (lines.length < 2) continue;
-
-    let i = 0;
-    if (/^\d+$/.test(lines[0].trim())) i = 1;
-
-    const timeLine = lines[i];
-    if (!timeLine) continue;
-
-    const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]?\d{0,3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]?\d{0,3})/);
+    if (/^(WEBVTT|NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0])) continue;
+    const i = timing.test(lines[0]) ? 0 : 1;
+    const timeMatch = lines[i]?.match(timing);
     if (!timeMatch) continue;
 
     const start = parseSrtTime(timeMatch[1]);
@@ -1060,60 +1091,55 @@ function parseAssTime(t) {
 }
 
 function parseSrtTime(t) {
-  const clean = t.replace(',', '.');
-  const parts = clean.split(':');
-  const h = parseInt(parts[0]) || 0;
-  const m = parseInt(parts[1]) || 0;
-  const s = parseFloat(parts[2]) || 0;
-  return h * 3600 + m * 60 + s;
+  return t.replace(',', '.').split(':').reduce((seconds, part) => seconds * 60 + Number(part), 0);
 }
 
-async function translateSubtitles() {
-  subTranslating = true;
-  const CHUNK = 15; // smaller chunk — reduces Google Translate rate-limiting
-  const total = subtitles.length;
-  let failCount = 0;
+async function translateSubtitles(report) {
+  const track = subtitles;
+  const selection = subtitleSelection;
+  if (!track.length || translatingTrack === track) return;
+  translatingTrack = track;
+  const pending = track.filter(cue => !cue.fa);
+  let translated = track.length - pending.length;
+  let emptyBatches = 0;
+  const progress = () => report(`در حال ترجمه · ${translated} از ${track.length} خط`, '');
 
-  for (let i = 0; i < total; i += CHUNK) {
-    const chunk = subtitles.slice(i, i + CHUNK);
-    const nonEmpty = chunk.map((s, j) => ({ j, text: s.en })).filter(x => x.text);
-    if (!nonEmpty.length) continue;
+  try {
+    progress();
+    for (let index = 0; index < pending.length && emptyBatches < 2;) {
+      const batch = [];
+      let querySize = 0;
+      while (index < pending.length && batch.length < 32) {
+        const cue = pending[index];
+        const size = new URLSearchParams({ q: cue.en }).toString().length + 1;
+        if (batch.length && querySize + size > 3400) break;
+        batch.push(cue);
+        querySize += size;
+        index++;
+      }
 
-    const joined = nonEmpty.map(x => x.text).join('\n');
-    let translated = null;
-
-    for (let attempt = 0; attempt < 2 && !translated; attempt++) {
-      try { translated = await window.api.translate(joined); } catch {}
-      if (!translated && attempt < 1) await sleep(1000);
+      const result = await window.api.subtitleTranslate(batch.map(cue => cue.en)).catch(() => null);
+      if (track !== subtitles || selection !== subtitleSelection) return;
+      const before = translated;
+      if (result?.length === batch.length) {
+        batch.forEach((cue, index) => {
+          if (!result[index]) return;
+          cue.fa = result[index];
+          translated++;
+        });
+      }
+      emptyBatches = translated === before ? emptyBatches + 1 : 0;
+      if (translated && subMode === 'en') setSubMode(document.querySelector('.stab[data-mode="both"]'), 'both');
+      updateSubtitle();
+      progress();
     }
 
-    if (translated) {
-      failCount = 0;
-      // Google Translate returns segments joined; newlines may or may not be preserved
-      // Split on newline, also try counting segments if lines mismatch
-      let parts = translated.split('\n').filter(p => p.trim() !== '');
-      // If segment count doesn't match, try line-by-line split on the raw response
-      if (parts.length !== nonEmpty.length && translated.includes('\n')) {
-        const raw = translated.split('\n');
-        if (raw.filter(p => p.trim()).length === nonEmpty.length) parts = raw.filter(p => p.trim());
-      }
-      for (let k = 0; k < nonEmpty.length; k++) {
-        subtitles[i + nonEmpty[k].j].fa = parts[k]?.trim() || '';
-      }
-    } else {
-      failCount++;
-      // After 2 consecutive failed chunks, stop trying translation
-      if (failCount >= 2) {
-        setSubAutoStatus('⚠️ ترجمه در دسترس نیست (شبکه)', 'error');
-        subTranslating = false;
-        return;
-      }
-    }
-    setSubAutoStatus(`🌐 ترجمه ${Math.min(i + CHUNK, total)}/${total}...`, '');
-    await sleep(300); // small delay between chunks to avoid rate-limiting
+    const complete = translated === track.length;
+    report(complete ? '✓ ترجمه کامل شد' : `ترجمه ناقص ماند · ${translated} از ${track.length} خط`, complete ? 'done' : 'error');
+    return { complete };
+  } finally {
+    if (translatingTrack === track) translatingTrack = null;
   }
-
-  subTranslating = false;
 }
 
 function updateSubtitle() {
@@ -1147,7 +1173,8 @@ function hideSubtitle() {
 function setSubMode(btn, mode) {
   subMode = mode;
   document.querySelectorAll('.stab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
+  btn?.classList.add('on');
+  updateSubtitle();
 }
 
 // ── Info modal ─────────────────────────────────────────────────────────
