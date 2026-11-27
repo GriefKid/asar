@@ -220,23 +220,34 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)}
 .info-loading{color:var(--t3);font-size:13px;text-align:center;padding:20px 0}
 
-/* ── TMDB key setup ── */
-.osub-banner{position:fixed;top:calc(72px + var(--asar-windowbar-height));right:270px;left:0;z-index:10;
-  background:rgba(14,14,36,.96);border-bottom:1px solid rgba(47,214,168,.18);
-  padding:6px 16px;display:none;align-items:center;gap:10px;direction:rtl;
-  backdrop-filter:blur(10px);flex-wrap:wrap}
-.osub-banner.show{display:flex}
-.sub-pick-item{display:flex;align-items:center;gap:7px;padding:7px 12px;cursor:pointer;border-radius:8px;margin:2px 4px;transition:background .12s}
-.sub-pick-item:hover{background:rgba(255,255,255,.07)}
-.sub-pick-item.selected{background:rgba(80,180,120,.18);border:1px solid rgba(80,180,120,.3)}
-.sub-pick-src{font-size:9.5px;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.1);color:#888;white-space:nowrap;flex-shrink:0}
-.sub-pick-name{font-size:11.5px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left}
-.sub-pick-item.loading .sub-pick-name{color:#8af}
-.sub-pick-item.done .sub-pick-name{color:#6d6}
-.sub-auto-status{position:absolute;top:42px;left:12px;padding:5px 12px;border-radius:20px;
-  background:rgba(8,8,26,.88);border:1px solid var(--bd2);font-size:12px;color:var(--t2);
-  backdrop-filter:blur(8px);z-index:5;transition:opacity .3s;pointer-events:none;white-space:nowrap}
-.sub-auto-status.hidden{display:none}
+/* ── Subtitle selection ── */
+.sub-picker-toggle,.sub-picker button{color:var(--t1);border:1px solid var(--bd2);background:var(--bg3);
+  cursor:pointer;border-radius:8px;padding:5px 9px;font-size:12px}
+.sub-picker-toggle{position:absolute;top:10px;right:12px;z-index:9;background:#17142bee}
+.sub-picker-toggle[hidden],.sub-picker [hidden],.sub-picker[hidden]{display:none}
+.sub-picker{position:absolute;top:48px;right:12px;z-index:9;width:min(356px,calc(100% - 24px));
+  max-height:min(400px,calc(100% - 150px));display:flex;flex-direction:column;overflow:hidden;
+  background:#161226f7;border:1px solid var(--bd2);border-radius:14px;backdrop-filter:blur(12px);direction:rtl}
+.sub-picker-header,.sub-picker-actions,.sub-sync{display:flex;align-items:center;gap:6px}
+.sub-picker-header{padding:8px 10px;border-bottom:1px solid var(--bd2);justify-content:space-between;flex-wrap:wrap}
+.sub-picker-header strong{font-size:12px}
+.sub-picker button:hover,.sub-picker-toggle:hover{border-color:var(--asar-focus)}
+.sub-picker button:disabled{opacity:.6;cursor:default}
+.sub-picker-list{min-height:0;overflow:auto;padding:4px 8px;scrollbar-width:thin}
+.sub-picker .sub-pick-item{width:100%;display:flex;align-items:center;gap:7px;margin:3px 0;text-align:start}
+.sub-picker .sub-pick-item.selected{color:var(--asar-focus);border-color:var(--asar-focus);background:#282738}
+.sub-pick-src{font-size:10px;color:var(--t2);flex-shrink:0}
+.sub-pick-name{min-width:0;overflow-wrap:anywhere;direction:ltr;text-align:left}
+.sub-pick-item.loading .sub-pick-name{color:#a8bcff}
+.sub-picker-footer{display:grid;gap:6px;padding:8px 10px;border-top:1px solid var(--bd2)}
+.sub-key-form{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+.sub-key-form input{min-width:0}
+.sub-sync{justify-content:space-between;flex-wrap:wrap;font-size:11px;color:var(--t2)}
+.sub-sync-buttons{display:flex;align-items:center;gap:3px;direction:ltr;flex-wrap:wrap}
+.sub-sync-buttons button{padding:3px 5px}
+#sub-offset-val{min-width:36px;text-align:center;font-variant-numeric:tabular-nums;color:var(--t1)}
+#sub-translate-btn{color:#171424;background:var(--asar-focus);font-weight:700}
+.sub-auto-status{color:var(--t2);font-size:11px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .sub-auto-status.done{color:var(--ok)}
 .sub-auto-status.error{color:var(--err)}
 .setup-banner{position:fixed;top:calc(40px + var(--asar-windowbar-height));right:270px;left:0;z-index:10;
@@ -416,13 +427,6 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 </head>
 <body class="asar-media asar-video-player">
 <header class="asar-windowbar"></header>
-<!-- OpenSubtitles key banner -->
-<div class="osub-banner" id="osub-banner">
-  <span style="color:var(--t2);font-size:12.5px;white-space:nowrap">برای زیرنویس خودکار، subdl API key بده:</span>
-  <input class="setup-input no-drag" id="osub-key-input" placeholder="از subdl.com">
-  <button class="setup-save no-drag" onclick="saveOsubKey()">ذخیره</button>
-  <button class="btn-cancel no-drag" style="font-size:11.5px" onclick="document.getElementById('osub-banner').classList.remove('show')">بعداً</button>
-</div>
 
 <!-- TMDB key banner -->
 <div class="setup-banner" id="setup-banner">
@@ -472,33 +476,40 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
     <div class="info-pill" onclick="openInfo()">ℹ اطلاعات بیشتر</div>
   </div>
 
-  <!-- auto-subtitle status -->
-  <div class="sub-auto-status hidden" id="sub-auto-status"></div>
-  <!-- AI subtitle fallback button -->
-  <button id="sub-ai-btn" onclick="fetchSubtitleWithAI()" style="display:none;position:absolute;top:46px;left:12px;padding:4px 12px;border-radius:14px;background:rgba(123,94,255,.85);color:#fff;border:none;font-size:11.5px;cursor:pointer;z-index:6;backdrop-filter:blur(6px)">🤖 زیرنویس با AI</button>
-  <!-- subtitle offset controls -->
-  <div id="sub-offset-bar" style="display:none;position:absolute;top:46px;right:12px;z-index:6;align-items:center;gap:2px;background:rgba(8,8,26,.92);border:1px solid rgba(255,255,255,.14);border-radius:22px;padding:4px 10px;backdrop-filter:blur(8px)">
-    <button onclick="shiftSubs(-5)" title="-5s" style="background:rgba(255,255,255,.08);border:none;color:#aaa;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">−5s</button>
-    <button onclick="shiftSubs(-1)" title="-1s" style="background:rgba(255,255,255,.08);border:none;color:#bbb;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">−1s</button>
-    <button onclick="shiftSubs(-0.5)" title="-0.5s" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 3px;line-height:1">−</button>
-    <span id="sub-offset-val" style="font-size:11px;color:#8af;min-width:42px;text-align:center;font-variant-numeric:tabular-nums">0.0s</span>
-    <button onclick="shiftSubs(+0.5)" title="+0.5s" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 3px;line-height:1">+</button>
-    <button onclick="shiftSubs(+1)" title="+1s" style="background:rgba(255,255,255,.08);border:none;color:#bbb;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">+1s</button>
-    <button onclick="shiftSubs(+5)" title="+5s" style="background:rgba(255,255,255,.08);border:none;color:#aaa;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">+5s</button>
-    <span style="font-size:9px;color:#555;margin-left:3px">sync</span>
-  </div>
-
-  <!-- subtitle picker panel -->
-  <div id="sub-picker" style="display:none;position:absolute;top:76px;right:12px;z-index:9;width:300px;max-height:260px;overflow-y:auto;background:rgba(6,6,20,.96);border:1px solid rgba(255,255,255,.14);border-radius:14px;backdrop-filter:blur(12px);direction:rtl">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 6px;border-bottom:1px solid rgba(255,255,255,.08)">
-      <span style="font-size:12px;color:#aaa;font-family:'Space Grotesk',sans-serif">انتخاب زیرنویس</span>
-      <button onclick="document.getElementById('sub-picker').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>
+  <button type="button" class="sub-picker-toggle no-drag" id="sub-picker-toggle" aria-controls="sub-picker"
+    aria-expanded="false" onclick="setSubtitlePickerOpen(document.getElementById('sub-picker').hidden)" hidden>زیرنویس</button>
+  <section class="sub-picker no-drag" id="sub-picker" aria-labelledby="sub-picker-title" hidden>
+    <div class="sub-picker-header">
+      <strong id="sub-picker-title">پیشنهادهای زیرنویس انگلیسی</strong>
+      <div class="sub-picker-actions">
+        <button type="button" id="sub-search-btn" onclick="if (currentMovieInfo) autoFetchSubtitle(currentMovieInfo)">جست‌وجوی دوباره</button>
+        <button type="button" id="sub-picker-close" onclick="setSubtitlePickerOpen(false)" aria-label="بستن پنل زیرنویس">×</button>
+      </div>
     </div>
-    <div id="sub-picker-list" style="padding:4px 0"></div>
-    <div style="padding:6px 10px 8px;border-top:1px solid rgba(255,255,255,.06)">
-      <button id="sub-translate-btn" onclick="translateNowFromPicker()" style="display:none;width:100%;padding:7px;border-radius:10px;background:rgba(80,180,120,.9);color:#fff;border:none;cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;font-weight:600">ترجمه به فارسی</button>
+    <div class="sub-picker-list" id="sub-picker-list"></div>
+    <div class="sub-picker-footer">
+      <p class="sub-auto-status" id="sub-auto-status" role="status" hidden></p>
+      <form class="sub-key-form" id="osub-banner" onsubmit="event.preventDefault(); saveOsubKey()" hidden>
+        <label for="osub-key-input">کلید Subdl</label>
+        <input type="password" class="setup-input no-drag" id="osub-key-input" autocomplete="off" required>
+        <button type="submit">ذخیره</button>
+      </form>
+      <button type="button" id="sub-ai-btn" onclick="fetchSubtitleWithAI()" hidden>زیرنویس تقریبی با هوش مصنوعی</button>
+      <div class="sub-sync" id="sub-offset-bar" hidden>
+        <span>سینک زیرنویس</span>
+        <div class="sub-sync-buttons" role="group" aria-label="تنظیم زمان زیرنویس به ثانیه">
+          <button type="button" onclick="shiftSubs(-5)">−5</button>
+          <button type="button" onclick="shiftSubs(-1)">−1</button>
+          <button type="button" onclick="shiftSubs(-0.5)">−0.5</button>
+          <button type="button" id="sub-offset-val" onclick="setSubOffset(0)" title="بازنشانی سینک">0.0s</button>
+          <button type="button" onclick="shiftSubs(0.5)">+0.5</button>
+          <button type="button" onclick="shiftSubs(1)">+1</button>
+          <button type="button" onclick="shiftSubs(5)">+5</button>
+        </div>
+      </div>
+      <button type="button" id="sub-translate-btn" onclick="translateNowFromPicker()" hidden>ترجمه به فارسی</button>
     </div>
-  </div>
+  </section>
 
   <!-- subtitle display -->
   <div class="subtitle-display hidden" id="sub-display">

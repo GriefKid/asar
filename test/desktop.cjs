@@ -245,22 +245,47 @@ app.whenReady().then(async () => {
     document.getElementById('ai-textarea').value = 'Describe this frame';
     await sendAI();
     localStorage.removeItem('claude-api-key');
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+    const clip = new Promise((resolve, reject) => {
+      recorder.ondataavailable = async event => resolve(Array.from(new Uint8Array(await event.data.arrayBuffer())));
+      recorder.onerror = reject;
+    });
+    recorder.start();
+    const paint = setInterval(() => ctx.fillRect(0, 0, 96, 56), 40);
+    await new Promise(resolve => setTimeout(resolve, 600));
+    clearInterval(paint);
+    recorder.stop();
+    const bytes = await clip;
     stream.getTracks().forEach(track => track.stop());
-    return { preview, cleared: document.getElementById('scene-preview').hidden };
+    vid.srcObject = null;
+    return { preview, cleared: document.getElementById('scene-preview').hidden, bytes };
   })()`);
-  assert.deepEqual(scene, { preview: true, cleared: true });
+  assert.equal(scene.preview, true);
+  assert.equal(scene.cleared, true);
   assert.match(sceneRequest.text, /Describe this frame/);
   assert.match(sceneRequest.frame, /^\/9j\//);
+  const film = path.join(profile, 'Desktop fixture film.webm');
+  fs.writeFileSync(film, Buffer.from(scene.bytes));
 
   const subtitleLines = ['Where is the library?', 'What did you see?'];
-  const srt = `1\n00:00:00,000 --> 00:00:01,000\n${subtitleLines[0]}\n\n2\n00:00:01,100 --> 00:00:04,000\n${subtitleLines[1]}`;
+  const srt = '1\n00:00:00,000 --> 00:00:04,000\nAn alternative English preview.';
   const vtt = `WEBVTT\n\nfirst-cue\n00:00.000 --> 00:01.000\n${subtitleLines[0]}\n\nsecond-cue\n00:01.100 --> 00:04.000\n${subtitleLines[1]}`;
+  const release = 'Desktop.Fixture.1080p.BluRay.x264.English.Full.Release.Name';
   ipcMain.removeHandler('subtitle:search');
-  ipcMain.handle('subtitle:search', () => [
-    { fileId: 'fixture-srt', name: 'SRT candidate' }, { fileId: 'fixture-vtt', name: 'VTT candidate' }
-  ]);
+  const searchKeys = [];
+  ipcMain.handle('subtitle:search', (_, _title, _year, key) => {
+    searchKeys.push(key);
+    return [
+      { fileId: 'fixture-srt', name: release },
+      { fileId: 'fixture-vtt', name: 'VTT candidate' },
+      ...Array.from({ length: 10 }, (_, index) => ({ fileId: `fixture-extra-${index}`, name: `Candidate ${index + 3}` }))
+    ];
+  });
   ipcMain.removeHandler('subtitle:download');
-  ipcMain.handle('subtitle:download', (_, id) => id === 'fixture-vtt' ? vtt : srt);
+  const tracks = new Map([
+    ['fixture-srt', srt], ['fixture-vtt', vtt]
+  ]);
+  ipcMain.handle('subtitle:download', (_, id) => tracks.get(id) || null);
   const subtitleCalls = [];
   const liveSubtitles = process.env.ASAR_LIVE_SUBTITLES === '1';
   if (!liveSubtitles) {
@@ -271,14 +296,39 @@ app.whenReady().then(async () => {
     });
   }
   await runIn('video-player', `(() => {
-    localStorage.setItem('osub-key', 'test-only');
-    document.querySelector('.stab[data-mode="en"]').click();
-    autoFetchSubtitle({ title: 'Desktop fixture' });
+    localStorage.removeItem('osub-key');
+    document.querySelector('.stab[data-mode="fa"]').click();
+    vid.addEventListener('loadeddata', () => { vid.pause(); vid.currentTime = 0; }, { once: true });
+    loadVideo(${JSON.stringify({ path: film, fileName: path.basename(film), title: 'Desktop fixture film' })});
   })()`);
-  await waitIn('video-player', '!!document.getElementById("spitem-1")');
-  await runIn('video-player', 'document.getElementById("spitem-1").click()');
+  await waitIn('video-player', 'vid.readyState >= 2 && vid.paused && !!document.getElementById("spitem-11")');
+  assert.deepEqual(searchKeys, ['']);
+  assert.equal(await runIn('video-player', 'document.querySelector("#spitem-0 .sub-pick-name").textContent'), release);
+  await clickIn('video-player', '#spitem-0');
+  await waitIn('video-player', 'document.getElementById("spitem-0").classList.contains("selected")');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-en-line").textContent'), 'An alternative English preview.');
+  assert.equal(await runIn('video-player', 'getComputedStyle(document.getElementById("sub-en-line")).display'), 'inline-block');
+  await clickIn('video-player', '#spitem-11');
+  await waitIn('video-player', 'document.getElementById("sub-auto-status").classList.contains("error")');
+  assert.equal(await runIn('video-player', 'document.getElementById("spitem-0").classList.contains("selected")'), true);
+  await clickIn('video-player', '#spitem-1');
   await waitIn('video-player', 'document.getElementById("spitem-1").classList.contains("selected")');
-  await runIn('video-player', 'document.getElementById("sub-translate-btn").click()');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-en-line").textContent'), subtitleLines[0]);
+  await clickIn('video-player', '#sub-offset-bar button[onclick="shiftSubs(0.5)"]');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-display").classList.contains("hidden")'), true);
+  await clickIn('video-player', '#sub-picker-close');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-picker").hidden'), true);
+  await clickIn('video-player', '#sub-picker-toggle');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-offset-val").textContent'), '+0.5s');
+  await clickIn('video-player', '#sub-search-btn');
+  await waitIn('video-player', 'document.getElementById("sub-auto-status").classList.contains("done")');
+  assert.equal(searchKeys.length, 2);
+  assert.equal(await runIn('video-player', 'document.getElementById("spitem-1").classList.contains("selected") && subOffset === 0.5'), true);
+  await clickIn('video-player', '#sub-offset-val');
+  await clickIn('video-player', '#sub-offset-bar button[onclick="shiftSubs(-0.5)"]');
+  assert.equal(await runIn('video-player', 'document.getElementById("sub-display").classList.contains("hidden")'), false);
+  assert.deepEqual(subtitleCalls, []);
+  await clickIn('video-player', '#sub-translate-btn');
   if (!liveSubtitles) {
     await waitIn('video-player', 'document.getElementById("sub-auto-status").classList.contains("error")');
     assert.deepEqual(await runIn('video-player', 'subtitles.map(cue => cue.fa)'), ['کتابخانه کجاست؟', '']);
@@ -288,11 +338,13 @@ app.whenReady().then(async () => {
   if (!liveSubtitles) assert.deepEqual(subtitleCalls, [subtitleLines, [subtitleLines[1]]]);
   const translated = await runIn('video-player', `({
     times: subtitles.map(cue => [cue.start, cue.end]),
+    offset: subOffset,
     persian: subtitles.map(cue => cue.fa),
     mode: subMode,
     displayed: document.getElementById('sub-fa-line').textContent
   })`);
   assert.deepEqual(translated.times, [[0, 1], [1.1, 4]]);
+  assert.equal(translated.offset, -0.5);
   assert.equal(translated.mode, 'both');
   for (const cue of translated.persian) assert.match(cue, /[آ-ی]/);
   assert.equal(translated.displayed, translated.persian[0]);

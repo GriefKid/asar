@@ -47,6 +47,9 @@ let subtitles = [];        // [{start, end, en, fa}]
 let translatingTrack = null;
 let subtitleSearchRequest = 0;
 let subtitleSelection = 0;
+let subtitleDownloadRequest = 0;
+let selectedSubtitleId = null;
+let subOffset = 0;
 let cmtTimestamp = 0;
 let isDraggingProg = false;
 let isDraggingVol = false;
@@ -97,27 +100,29 @@ function getOsubKey() {
 }
 
 function saveOsubKey() {
-  const key = document.getElementById('osub-key-input').value.trim();
+  const input = document.getElementById('osub-key-input');
+  const key = input.value.trim();
   if (!key) return;
   try { localStorage.setItem('osub-key', key); } catch {}
-  document.getElementById('osub-banner').classList.remove('show');
-  // retry subtitle fetch for current video
-  if (queue[queueIdx]) autoFetchSubtitle(queue[queueIdx]);
+  input.value = '';
+  if (currentMovieInfo) autoFetchSubtitle(currentMovieInfo);
 }
 
 // ── Auto-subtitle status ───────────────────────────────────────────────
-let subStatusTimer = null;
-
 function setSubAutoStatus(msg, type) {
   const el = document.getElementById('sub-auto-status');
-  if (!el) return;
-  clearTimeout(subStatusTimer);
-  if (!msg) { el.classList.add('hidden'); return; }
   el.textContent = msg;
+  el.hidden = !msg;
   el.className = 'sub-auto-status' + (type ? ' ' + type : '');
-  if (type === 'done' || type === 'error') {
-    subStatusTimer = setTimeout(() => el.classList.add('hidden'), 4000);
-  }
+}
+
+function setSubtitlePickerOpen(open) {
+  const picker = document.getElementById('sub-picker');
+  const toggle = document.getElementById('sub-picker-toggle');
+  if (!open && picker.contains(document.activeElement)) toggle.focus();
+  if (open) toggle.hidden = false;
+  picker.hidden = !open;
+  toggle.setAttribute('aria-expanded', String(open));
 }
 
 // ── Auto-fetch subtitle ────────────────────────────────────────────────
@@ -151,37 +156,33 @@ async function autoFetchSubtitle(video) {
   const year  = parsedYear || video.year || null;
   const imdbId = video.imdbId || null;
 
-  // If no subdl key and no IMDB, show banner and stop — hash search only works with file path
-  if (!subdlKey) {
-    setSubAutoStatus('⚠️ کلید subdl لازمه', 'error');
-    setTimeout(() => document.getElementById('osub-banner')?.classList.add('show'), 300);
-    return;
-  }
-
   // Build title variations: original, with/without "The "
   const titleVariants = [title];
   if (!title.toLowerCase().startsWith('the ')) titleVariants.push('The ' + title);
   else titleVariants.push(title.replace(/^the\s+/i, ''));
 
+  const searchButton = document.getElementById('sub-search-btn');
+  const keyForm = document.getElementById('osub-banner');
+  searchButton.disabled = true;
+  keyForm.hidden = true;
   showSubAIBtn(false);
   let results = null;
 
   for (const t of titleVariants) {
     if (request !== subtitleSearchRequest) return;
     setSubAutoStatus(`🔍 "${t}" ${year || ''}...`, '');
-    const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(e => {
-      if (request === subtitleSearchRequest) setSubAutoStatus(`❌ خطای IPC: ${e?.message || e}`, 'error');
-      return null;
-    });
+    const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(() => null);
     if (request !== subtitleSearchRequest) return;
-    if (r?.length) { results = r; break; }
+    if (r?.some(result => result.fileId)) { results = r; break; }
     setSubAutoStatus(`⚠️ "${t}" — ۰ نتیجه`, '');
     await sleep(500);
   }
 
   if (request !== subtitleSearchRequest) return;
+  searchButton.disabled = false;
   if (!results?.length) {
-    setSubAutoStatus(`⚠️ نتیجه‌ای یافت نشد — "${title}" ${year||''}`, 'error');
+    keyForm.hidden = false;
+    setSubAutoStatus(_pickerResults.length ? 'پیشنهاد تازه‌ای پیدا نشد.' : 'زیرنویس انگلیسی پیدا نشد.', 'error');
     showSubAIBtn(true);
     return;
   }
@@ -194,72 +195,74 @@ let _pickerResults = [];
 let _pickerKey = '';
 
 function showSubtitlePicker(results, subdlKey) {
-  _pickerResults = results.slice(0, 10);
+  _pickerResults = [...new Map(results.filter(result => result.fileId).map(result => [result.fileId, result])).values()];
   _pickerKey = subdlKey;
 
   const list = document.getElementById('sub-picker-list');
-  if (!list) return;
-
   list.innerHTML = _pickerResults.map((r, i) => {
     const src = r.source || '';
-    const name = (r.name || '—').slice(0, 48);
-    return `<div class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})">
+    const name = r.name || '—';
+    return `<button type="button" class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})" aria-pressed="false">
       <span class="sub-pick-src">${esc(src)}</span>
       <span class="sub-pick-name">${esc(name)}</span>
-    </div>`;
+    </button>`;
   }).join('');
-
-  const picker = document.getElementById('sub-picker');
-  if (picker) picker.style.display = 'block';
-  document.getElementById('sub-translate-btn').style.display = 'none';
-  setSubAutoStatus(`${_pickerResults.length} زیرنویس — یکی انتخاب کن`, '');
+  updateSubtitleChoices();
+  document.getElementById('sub-picker-toggle').textContent = `زیرنویس (${_pickerResults.length})`;
+  if (!selectedSubtitleId) setSubAutoStatus('یک پیشنهاد را برای پیش‌نمایش انگلیسی انتخاب کن.', '');
+  else setSubAutoStatus('فهرست پیشنهادها به‌روز شد.', 'done');
 }
 
 async function selectSubtitleFromPicker(idx) {
   const r = _pickerResults[idx];
   if (!r) return;
-  const request = ++subtitleSelection;
-  const btn = document.getElementById('sub-translate-btn');
+  const request = ++subtitleDownloadRequest;
+  const selection = subtitleSelection;
 
-  // Visual feedback
   document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
-    el.classList.remove('selected', 'loading', 'done');
-    if (i === idx) el.classList.add('loading');
+    el.classList.toggle('loading', i === idx);
   });
-  btn.style.display = 'none';
-  setSubAutoStatus(`📥 در حال دانلود...`, '');
+  setSubAutoStatus('در حال دریافت زیرنویس…', '');
 
   const srtText = await window.api.subtitleDownload(r.fileId, _pickerKey).catch(() => null);
-  if (request !== subtitleSelection || r !== _pickerResults[idx]) return;
-  document.getElementById(`spitem-${idx}`)?.classList.remove('loading');
+  if (request !== subtitleDownloadRequest || selection !== subtitleSelection) return;
+  document.querySelector('.sub-pick-item.loading')?.classList.remove('loading');
   if (!srtText) {
-    setSubAutoStatus(`❌ دانلود ناموفق`, 'error');
+    setSubAutoStatus('دریافت این زیرنویس ناموفق بود. دوباره امتحان کن یا پیشنهاد دیگری را بزن.', 'error');
     return;
   }
   const parsed = parseSrt(srtText);
   if (!parsed.length) {
-    setSubAutoStatus(`❌ فایل ناخوانا`, 'error');
+    setSubAutoStatus('این فایل زیرنویس خوانده نشد. پیشنهاد دیگری را امتحان کن.', 'error');
     return;
   }
 
-  document.getElementById(`spitem-${idx}`)?.classList.add('done');
-  document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
-    if (i !== idx) el.classList.remove('selected');
-  });
-  document.getElementById(`spitem-${idx}`)?.classList.add('selected');
-
-  subtitles = parsed;
-  updateSubtitle();
-  subOffset = 0;
-  const offsetBar = document.getElementById('sub-offset-bar');
-  const offsetVal = document.getElementById('sub-offset-val');
-  if (offsetBar) offsetBar.style.display = 'flex';
-  if (offsetVal) offsetVal.textContent = '0.0s';
-
-  btn.style.display = 'block';
+  loadSubtitleTrack(parsed, r.fileId);
+  setSubMode(document.querySelector('.stab[data-mode="en"]'), 'en');
+  const btn = document.getElementById('sub-translate-btn');
+  btn.hidden = false;
   btn.disabled = false;
   btn.textContent = 'ترجمه به فارسی';
-  setSubAutoStatus(`✓ ${parsed.length} خط | سینک تنظیم کن، بعد ترجمه بزن`, 'done');
+  setSubAutoStatus('پیش‌نمایش انگلیسی فعال است. بعد از تنظیم سینک می‌توانی ترجمه را شروع کنی.', 'done');
+}
+
+function updateSubtitleChoices() {
+  document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
+    const selected = _pickerResults[i]?.fileId === selectedSubtitleId;
+    el.classList.toggle('selected', selected);
+    el.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function loadSubtitleTrack(parsed, fileId = null) {
+  ++subtitleSelection;
+  selectedSubtitleId = fileId;
+  subtitles = parsed;
+  document.querySelector('.sub-pick-item.loading')?.classList.remove('loading');
+  updateSubtitleChoices();
+  document.getElementById('sub-offset-bar').hidden = false;
+  document.getElementById('sub-translate-btn').hidden = true;
+  setSubOffset(0);
 }
 
 async function translateNowFromPicker() {
@@ -275,33 +278,27 @@ async function translateNowFromPicker() {
   btn.textContent = result.complete ? '✓ ترجمه شد' : 'تلاش دوباره برای ترجمه';
 }
 
-let subOffset = 0;
-
 function shiftSubs(delta) {
   if (!subtitles.length) return;
-  subOffset += delta;
-  for (const s of subtitles) {
-    s.start += delta;
-    s.end += delta;
-  }
-  const bar = document.getElementById('sub-offset-bar');
-  const val = document.getElementById('sub-offset-val');
-  if (bar) bar.style.display = 'flex';
-  if (val) val.textContent = (subOffset >= 0 ? '+' : '') + subOffset.toFixed(1) + 's';
+  setSubOffset(subOffset + delta);
 }
 
-function showSubAIBtn(show, video) {
-  const btn = document.getElementById('sub-ai-btn');
-  if (!btn) return;
-  btn.style.display = show ? '' : 'none';
-  if (show && video) btn.dataset.title = video.title || video.fileName || '';
+function setSubOffset(offset) {
+  subOffset = offset;
+  document.getElementById('sub-offset-val').textContent = `${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`;
+  updateSubtitle();
+}
+
+function showSubAIBtn(show) {
+  document.getElementById('sub-ai-btn').hidden = !show;
 }
 
 async function fetchSubtitleWithAI(video) {
   const title = video?.title || video?.fileName || queue[queueIdx]?.title || queue[queueIdx]?.fileName || '';
   const key = getAIKey();
   if (!key) { setSubAutoStatus('کلید AI ندارم', 'error'); return; }
-  const request = ++subtitleSelection;
+  const request = ++subtitleDownloadRequest;
+  const selection = subtitleSelection;
 
   showSubAIBtn(false);
   setSubAutoStatus('🤖 ساخت زیرنویس با AI...', '');
@@ -320,15 +317,16 @@ next line
 
   try {
     const reply = await window.api.claudeChat(sys, [{ role: 'user', content: msg }], key);
-    if (request !== subtitleSelection) return;
-    subtitles = parseSrt(reply);
-    if (!subtitles.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
-    setSubAutoStatus(`🤖 ${subtitles.length} خط از AI (تقریبی)`, 'done');
+    if (request !== subtitleDownloadRequest || selection !== subtitleSelection) return;
+    const parsed = parseSrt(reply);
+    if (!parsed.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
+    loadSubtitleTrack(parsed);
+    setSubAutoStatus(`🤖 ${parsed.length} خط از AI (تقریبی)`, 'done');
     await translateSubtitles((message, type) => setSubAutoStatus(message, type));
   } catch {
-    if (request !== subtitleSelection) return;
+    if (request !== subtitleDownloadRequest) return;
     setSubAutoStatus('خطا در AI', 'error');
-    showSubAIBtn(true, queue[queueIdx]);
+    showSubAIBtn(true);
   }
 }
 
@@ -631,17 +629,23 @@ function loadVideo(video) {
 
   // reset subtitles
   ++subtitleSelection;
-  _pickerResults = [];
-  document.getElementById('sub-picker').style.display = 'none';
-  document.getElementById('sub-modal').classList.remove('show');
+  ++subtitleDownloadRequest;
   subtitles = [];
-  hideSubtitle();
+  selectedSubtitleId = null;
+  _pickerResults = [];
+  document.getElementById('sub-picker-toggle').textContent = 'زیرنویس';
+  document.getElementById('sub-picker-list').replaceChildren();
+  document.getElementById('sub-offset-bar').hidden = true;
+  document.getElementById('sub-translate-btn').hidden = true;
+  document.getElementById('sub-modal').classList.remove('show');
+  setSubOffset(0);
   setSubAutoStatus('', '');
   showSubAIBtn(false);
 
   // load duration later
   currentMovieInfo = video;
   fetchMovieDetails(video);
+  setSubtitlePickerOpen(true);
   autoFetchSubtitle(video);
 }
 
@@ -728,6 +732,7 @@ vid.addEventListener('ended', () => {
 });
 vid.addEventListener('play', updatePlayBtn);
 vid.addEventListener('pause', updatePlayBtn);
+vid.addEventListener('seeked', updateSubtitle);
 
 function updatePlayBtn() {
   const icon = document.getElementById('play-icon');
@@ -876,7 +881,7 @@ function getAIContext() {
   const name = v.path ? v.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') : 'Unknown';
   const secs = Math.floor(vid.currentTime);
   const timeStr = `${Math.floor(secs/3600).toString().padStart(2,'0')}:${(Math.floor(secs/60)%60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
-  const curSub = subtitles.find(s => vid.currentTime >= s.start && vid.currentTime <= s.end);
+  const curSub = activeSubtitle();
   const info = currentMovieInfo ? `\nMovie: ${currentMovieInfo.title} (${currentMovieInfo.release_date?.slice(0,4)||''})\nOverview: ${(currentMovieInfo.overview||'').slice(0,300)}` : '';
   return `Video: "${name}"\nTimestamp: ${timeStr}${info}\nCurrent subtitle: "${curSub?.en || ''}"`;
 }
@@ -956,10 +961,14 @@ document.addEventListener('keydown', e => {
     const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show,.sub-modal.show');
     if (openModal) { openModal.classList.remove('show'); return; }
     if (aiOpen) { toggleAI(); return; }
+    if (!document.getElementById('sub-picker').hidden) { setSubtitlePickerOpen(false); return; }
     window.api.closeWindow();
     return;
   }
-  if (e.code === 'Space' && !e.target.closest('.asar-window-actions')) { e.preventDefault(); togglePlay(); }
+  if (e.code === 'Space' && !e.target.closest('.asar-window-actions, .sub-picker, .sub-picker-toggle')) {
+    e.preventDefault();
+    togglePlay();
+  }
   if (e.code === 'KeyF') toggleFullscreen();
   if (e.code === 'ArrowRight') vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 10);
   if (e.code === 'ArrowLeft') vid.currentTime = Math.max(0, vid.currentTime - 10);
@@ -1006,16 +1015,7 @@ async function loadSubtitle() {
     return;
   }
 
-  ++subtitleSelection;
-  subtitles = parsed;
-  document.getElementById('sub-translate-btn').style.display = 'none';
-  updateSubtitle();
-  subOffset = 0;
-  const offsetBar = document.getElementById('sub-offset-bar');
-  const offsetVal = document.getElementById('sub-offset-val');
-  if (offsetBar) offsetBar.style.display = 'flex';
-  if (offsetVal) offsetVal.textContent = '0.0s';
-
+  loadSubtitleTrack(parsed);
   await translateLocalSubtitle();
 }
 
@@ -1142,11 +1142,13 @@ async function translateSubtitles(report) {
   }
 }
 
-function updateSubtitle() {
-  if (!subtitles.length) return;
-  const t = vid.currentTime;
-  const sub = subtitles.find(s => t >= s.start && t <= s.end);
+function activeSubtitle() {
+  const t = vid.currentTime - subOffset;
+  return subtitles.find(s => t >= s.start && t <= s.end);
+}
 
+function updateSubtitle() {
+  const sub = activeSubtitle();
   const display = document.getElementById('sub-display');
   const enLine = document.getElementById('sub-en-line');
   const faLine = document.getElementById('sub-fa-line');
@@ -1161,13 +1163,9 @@ function updateSubtitle() {
   enLine.textContent = sub.en;
   faLine.textContent = sub.fa || '';
 
-  enLine.style.display = (subMode === 'en' || subMode === 'both') ? 'inline-block' : 'none';
+  enLine.style.display = subMode !== 'fa' || !sub.fa ? 'inline-block' : 'none';
   // Hide FA line if translation isn't available (empty string) rather than showing "..."
   faLine.style.display = (subMode === 'fa' || subMode === 'both') && sub.fa ? 'inline-block' : 'none';
-}
-
-function hideSubtitle() {
-  document.getElementById('sub-display').classList.add('hidden');
 }
 
 function setSubMode(btn, mode) {
