@@ -434,6 +434,15 @@ app.whenReady().then(async () => {
     assert.equal(window.isNormal(), true, name);
     const normal = window.getBounds();
     await runIn(name, 'document.body.dataset.windowState = "preserved"');
+
+    await clickIn(name, '[data-window-action="minimize"]');
+    await waitForWindowState(() => !window.isDestroyed() && window.isMinimized(), `${name} to minimize`);
+    assert.equal(window.isDestroyed(), false, name);
+    if (reopen) await main(`window.api.${reopen}()`);
+    else window.restore();
+    await waitForWindowState(() => !window.isDestroyed() && window.isNormal(), `${name} to restore`);
+    assert.equal(windows.get(name), window, name);
+
     const fullscreenSelector = '[data-window-action="fullscreen"]';
     await clickIn(name, fullscreenSelector);
     await waitForWindowState(() => window.isFullScreen(), `${name} to enter fullscreen`);
@@ -442,16 +451,8 @@ app.whenReady().then(async () => {
     await waitForWindowState(() => window.isNormal(), `${name} to leave fullscreen`);
     await waitIn(name, `document.querySelector('${fullscreenSelector}').getAttribute('aria-pressed') === 'false'`);
     assert.deepEqual(window.getBounds(), normal, name);
+    await runIn(name, 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))');
     if (name === 'main-app') await dragWindowFromContent(window);
-    await clickIn(name, '[data-window-action="minimize"]');
-    await waitForWindowState(() => !window.isDestroyed() && window.isMinimized(), `${name} to minimize`);
-    assert.equal(window.isDestroyed(), false, name);
-
-    if (reopen) await main(`window.api.${reopen}()`);
-    else window.restore();
-    await waitForWindowState(() => !window.isDestroyed() && !window.isMinimized(), `${name} to restore`);
-    assert.equal(windows.get(name), window, name);
-    assert.equal(window.isNormal(), true, name);
     assert.equal(await runIn(name, 'document.body.dataset.windowState'), 'preserved', name);
     if (name === 'book-reader') await readBook('Second offline document');
 
