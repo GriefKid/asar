@@ -1,7 +1,3 @@
-// ── pdf.js setup ───────────────────────────────────────────────────────
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 // ── State ──────────────────────────────────────────────────────────────
 const DATA_KEY = 'book-reader';
 let state = loadState();
@@ -45,6 +41,7 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch {}
+  window.asarCollections?.refresh();
 }
 
 function getTransCache(path, page) {
@@ -80,7 +77,7 @@ function renderLibrary() {
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
     const rating = (state.ratings || {})[b.path] || 0;
     const stars = [1,2,3,4,5].map(n =>
-      `<span onclick="event.stopPropagation();setBookRating(${JSON.stringify(b.path)},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
+      `<span onclick="event.stopPropagation();setBookRating(${esc(JSON.stringify(b.path))},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
     ).join('');
     return `<div class="book-item ${isActive ? 'active' : ''}"
         draggable="true"
@@ -88,7 +85,7 @@ function renderLibrary() {
         ondragend="bookDragEnd(event)"
         ondragover="bookDragOver(event)"
         ondrop="bookDrop(event,${bi})"
-        onclick="openBook(${JSON.stringify(b.path)})">
+        onclick="openBook(${esc(JSON.stringify(b.path))})">
       <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
       <div class="book-meta">
         <div class="book-title">${esc(b.title)}</div>
@@ -96,7 +93,7 @@ function renderLibrary() {
         <div class="book-prog"><div class="book-prog-fill" style="width:${pct}%"></div></div>
         <div style="display:flex;gap:1px;margin-top:3px">${stars}</div>
       </div>
-      <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${JSON.stringify(b.path)})" title="حذف">🗑</div>
+      <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${esc(JSON.stringify(b.path))})" title="حذف">🗑</div>
     </div>`;
   }).join('');
 }
@@ -255,8 +252,12 @@ async function fetchAndSaveBookMeta(path) {
 }
 
 async function openBook(path) {
-  const book = state.books.find(b => b.path === path);
-  if (!book) return;
+  let book = state.books.find(b => b.path === path);
+  if (!book) {
+    if (typeof path !== 'string' || !/\.pdf$/i.test(path)) return;
+    book = { path, title: cleanBookTitle(path.split(/[\\/]/).pop().slice(0, -4)), author: '', lastPage: 1, totalPages: 0 };
+    state.books.push(book);
+  }
 
   currentBookPath = path;
   renderLibrary();
@@ -268,7 +269,12 @@ async function openBook(path) {
 
   try {
     const buf = await window.api.readFileBuffer(path);
-    pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    const resources = new URL('../../../node_modules/pdfjs-dist/', document.baseURI);
+    pdfDoc = await pdfjsLib.getDocument({
+      data: new Uint8Array(buf), isEvalSupported: false,
+      cMapUrl: new URL('cmaps/', resources).href, cMapPacked: true,
+      standardFontDataUrl: new URL('standard_fonts/', resources).href
+    }).promise;
     totalPages = pdfDoc.numPages;
 
     book.totalPages = totalPages;
@@ -407,7 +413,8 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   wrap.appendChild(annotLayer);
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
   const textContent = await page.getTextContent();
-  await pdfjsLib.renderTextLayer({ textContent, container: textLayerDiv, viewport, textDivs: [] }).promise;
+  textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
+  await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
   renderRectAnnotations(annotLayer, viewport);
   wrap.addEventListener('mouseup', onTextSelect);
   wrap.addEventListener('contextmenu', e => e.preventDefault());
@@ -472,12 +479,8 @@ async function renderPdfCanvas(container) {
 
     // render text layer
     const textContent = await page.getTextContent();
-    await pdfjsLib.renderTextLayer({
-      textContent,
-      container: textLayerDiv,
-      viewport,
-      textDivs: []
-    }).promise;
+    textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
+    await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
 
     // render saved rect annotations
     renderRectAnnotations(annotLayer, viewport);
@@ -1729,3 +1732,8 @@ initFirebase();
 if (window.api?.onOpenFile) {
   window.api.onOpenFile(function(path) { openBook(path); });
 }
+
+window.asarCollectionSource = {
+  items: () => state.books.map(book => ({ id: book.path, title: book.title })),
+  open: id => openBook(id)
+};

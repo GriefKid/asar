@@ -830,10 +830,11 @@ ipcMain.handle('image:fetch', async (_, url) => {
 });
 
 // ── IPC: AI chat (Claude / Groq / DeepSeek) ───────────────────────────
-ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider) => {
+ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider, frame) => {
   // Auto-detect provider from key prefix if not specified
   if (!provider) {
     if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
+    else if (apiKey && apiKey.startsWith('sk-ant-')) provider = 'claude';
     else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
     else if (apiKey && apiKey.startsWith('sk-or-')) provider = 'openrouter';
     else if (apiKey && apiKey.startsWith('hf_')) provider = 'huggingface';
@@ -842,10 +843,16 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     else provider = 'claude';
   }
 
+  if (frame && (!['gemini', 'claude', 'openrouter'].includes(provider) || typeof frame !== 'string' || frame.length > 1_000_000 || !/^[A-Za-z0-9+/=]+$/.test(frame))) {
+    throw new Error('برای پرسش تصویری از کلید Gemini، Claude یا OpenRouter استفاده کن.');
+  }
+  const withFrame = (items, image) => frame
+    ? items.map((item, index) => index === items.length - 1 ? { ...item, content: [{ type: 'text', text: item.content }, image] } : item)
+    : items;
   let url, headers, body, extractText;
 
   if (provider === 'gemini') {
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-flash';
     // Both AQ. and AIza keys use x-goog-api-key header
     url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
@@ -855,6 +862,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     if (!geminiMsgs.length || geminiMsgs[geminiMsgs.length - 1].role !== 'user') {
       geminiMsgs.push({ role: 'user', parts: [{ text: 'سلام' }] });
     }
+    if (frame) geminiMsgs.at(-1).parts.push({ inlineData: { mimeType: 'image/jpeg', data: frame } });
     body = JSON.stringify({
       systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
       contents: geminiMsgs,
@@ -889,8 +897,8 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   } else if (provider === 'openrouter') {
     url = 'https://openrouter.ai/api/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-    body = JSON.stringify({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    body = JSON.stringify({ model: frame ? 'google/gemini-3-flash-preview' : 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...withFrame(messages, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + frame } })] });
     extractText = d => d.choices[0].message.content;
 
   } else if (provider === 'huggingface') {
@@ -911,12 +919,14 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     // Claude (Anthropic)
     url = 'https://api.anthropic.com/v1/messages';
     headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
-    body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 2048, system: systemPrompt, messages });
+    body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 2048, system: systemPrompt,
+      messages: withFrame(messages, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: frame } }) });
     extractText = d => d.content[0].text;
   }
 
   const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(90000) });
   if (!resp.ok) {
+    if (frame) throw new Error('سرویس تصویر پاسخ نداد (' + resp.status + ').');
     const errText = await resp.text().catch(() => '');
     throw new Error(errText.slice(0, 400) || `HTTP ${resp.status}`);
   }

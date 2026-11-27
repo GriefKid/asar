@@ -128,7 +128,7 @@ function syncSubAppsToLibrary() {
   if (changed) saveLib();
 }
 
-function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
+function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); window.asarCollections?.refresh(); }
 function saveEvents()   { localStorage.setItem(KEY_EVENTS, JSON.stringify(events));  }
 function saveActualEvents() { localStorage.setItem(KEY_ACTUAL, JSON.stringify(actualEvents)); debouncedSync(); }
 function saveSettings() { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); }
@@ -1868,3 +1868,8 @@ if (window.api?.onLibraryItem) {
     }
   });
 }
+
+window.asarCollectionSource = {
+  items: () => library,
+  open: id => openReview(id)
+};

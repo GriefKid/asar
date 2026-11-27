@@ -6,7 +6,6 @@
 <title>بوک ریدر — اثر</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
   --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
@@ -728,9 +727,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+<script src="../../../node_modules/@supabase/supabase-js/dist/umd/supabase.js"></script>
 <script src="../../shared/supabase-init.js"></script>
-<script src="renderer.js"></script>
+<script type="module" src="pdf-runtime.mjs"></script>
+<script src="../../shared/collections.js"></script>
 <script src="../../shared/appearance.js"></script>
 </body>
 </html>

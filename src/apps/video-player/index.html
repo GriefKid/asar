@@ -652,6 +652,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
       <span id="ai-ctx-lbl">اضافه کردن اطلاعات صحنه</span>
     </button>
   </div>
+  <div class="asar-scene-frame no-drag">
+    <button id="scene-attach" type="button" onclick="attachSceneFrame()" disabled>از این صحنه بپرس</button>
+    <div id="scene-preview" hidden><img id="scene-preview-image" alt="پیش‌نمایش صحنه"><span id="scene-frame-time"></span><button type="button" onclick="clearSceneFrame()">حذف تصویر</button></div>
+    <small id="scene-status" role="status">برای افزودن تصویر، فیلم را مکث کن.</small>
+  </div>
   <div class="ai-input-row">
     <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
     <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
@@ -668,9 +673,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+<script src="../../../node_modules/@supabase/supabase-js/dist/umd/supabase.js"></script>
 <script src="../../shared/supabase-init.js"></script>
 <script src="renderer.js"></script>
+<script src="../../shared/collections.js"></script>
+<script src="../../shared/collection-panel.js"></script>
 <script src="../../shared/appearance.js"></script>
 </body>
 </html>

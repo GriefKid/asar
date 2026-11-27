@@ -349,6 +349,7 @@ function loadAll() {
 
 function saveDocs() {
   localStorage.setItem(WRITER_KEY, JSON.stringify(docs));
+  window.asarCollections?.refresh();
 }
 
 function uid() {
@@ -592,7 +593,14 @@ try {
     }
   }
 } catch {}
+window.asarCollectionSource = {
+  items: () => docs,
+  open: id => openDoc(id)
+};
+
 </script>
+<script src="../../shared/collections.js"></script>
+<script src="../../shared/collection-panel.js"></script>
 <script src="../../shared/appearance.js"></script>
 </body>
 </html>

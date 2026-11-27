@@ -25,7 +25,7 @@ contextBridge.exposeInMainWorld('api', {
   fetchMoviePoster:  (title)            => ipcRenderer.invoke('cover:fetchMoviePoster', title),
   fetchImage:        (url)              => ipcRenderer.invoke('image:fetch', url),
   // Claude AI
-  claudeChat: (sys, msgs, key, provider) => ipcRenderer.invoke('claude:chat', sys, msgs, key, provider),
+  claudeChat: (sys, msgs, key, provider, frame) => ipcRenderer.invoke('claude:chat', sys, msgs, key, provider, frame),
   saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
   // Window controls
   closeWindow:     () => ipcRenderer.invoke('window:close'),

@@ -74,6 +74,7 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch {}
+  window.asarCollections?.refresh();
 }
 
 // ── TMDB key ───────────────────────────────────────────────────────────
@@ -633,6 +634,7 @@ async function playVideo(collId, idx) {
 }
 
 function loadVideo(video) {
+  clearSceneFrame();
   const path = video.path.replace(/\\/g, '/');
   vid.src = `file:///${path}`;
   vid.load();
@@ -872,6 +874,7 @@ vid.addEventListener('pause', () => {
 
 // ── Claude AI Panel ───────────────────────────────────────────────────
 let aiOpen = false, aiHistory = [], aiCtxOn = false;
+let sceneFrame = null;
 const AI_CTX_LABEL_VID = 'اضافه کردن اطلاعات صحنه';
 
 function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
@@ -885,6 +888,7 @@ function toggleAI() {
   aiOpen = !aiOpen;
   document.getElementById('ai-panel').classList.toggle('open', aiOpen);
   if (aiOpen) {
+    updateSceneButton();
     if (!getAIKey()) document.getElementById('ai-key-box').style.display = '';
     setTimeout(() => document.getElementById('ai-textarea')?.focus(), 300);
   }
@@ -915,6 +919,43 @@ function getAIContext() {
   const info = currentMovieInfo ? `\nMovie: ${currentMovieInfo.title} (${currentMovieInfo.release_date?.slice(0,4)||''})\nOverview: ${(currentMovieInfo.overview||'').slice(0,300)}` : '';
   return `Video: "${name}"\nTimestamp: ${timeStr}${info}\nCurrent subtitle: "${curSub?.en || ''}"`;
 }
+function updateSceneButton() {
+  const button = document.getElementById('scene-attach');
+  if (!button) return;
+  button.disabled = !vid.paused || vid.readyState < 2 || !vid.videoWidth;
+}
+for (const event of ['pause', 'play', 'loadeddata', 'emptied', 'seeked']) vid.addEventListener(event, updateSceneButton);
+
+function clearSceneFrame() {
+  sceneFrame = null;
+  document.getElementById('scene-preview').hidden = true;
+  document.getElementById('scene-preview-image').removeAttribute('src');
+  document.getElementById('scene-status').textContent = 'برای افزودن تصویر، فیلم را مکث کن.';
+}
+
+function attachSceneFrame() {
+  if (!vid.paused || vid.readyState < 2 || !vid.videoWidth) return;
+  const status = document.getElementById('scene-status');
+  try {
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 960 / Math.max(vid.videoWidth, vid.videoHeight));
+    canvas.width = Math.round(vid.videoWidth * scale);
+    canvas.height = Math.round(vid.videoHeight * scale);
+    canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL('image/jpeg', 0.8);
+    const t = Math.floor(vid.currentTime);
+    const timestamp = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(n => String(n).padStart(2, '0')).join(':');
+    sceneFrame = { data: url.split(',')[1], context: getAIContext() };
+    document.getElementById('scene-preview-image').src = url;
+    document.getElementById('scene-frame-time').textContent = timestamp;
+    document.getElementById('scene-preview').hidden = false;
+    status.textContent = 'تصویر هنگام ارسال سؤال به سرویس هوش مصنوعی می‌رسد.';
+    document.getElementById('ai-textarea').focus();
+  } catch {
+    status.textContent = 'گرفتن تصویر از این ویدیو ممکن نبود.';
+  }
+}
+
 async function sendAI() {
   const ta = document.getElementById('ai-textarea');
   const text = ta.value.trim();
@@ -923,14 +964,18 @@ async function sendAI() {
   if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
   ta.value = '';
   appendAIMsg('user', text);
-  const content = aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
+  const frame = sceneFrame;
+  const content = frame ? '[Frame context]\n' + frame.context + '\n\n[Question]\n' + text : aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
   aiHistory.push({ role: 'user', content });
   if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
   const typingDiv = appendAIMsg('bot typing', '...');
   document.getElementById('ai-send-btn').disabled = true;
   try {
     const sys = `You are a helpful AI assistant in a video player app. Help the user understand the movie/show they are watching. Be concise. Match user's language (Persian or English).`;
-    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    const setting = localStorage.getItem('claude-api-provider');
+    const provider = setting && setting !== 'auto' ? setting : null;
+    const reply = await window.api.claudeChat(sys, aiHistory, key, provider, frame?.data);
+    if (frame && frame === sceneFrame) clearSceneFrame();
     typingDiv.classList.remove('typing'); typingDiv.textContent = reply;
     aiHistory.push({ role: 'assistant', content: reply });
     if (aiCtxOn) { aiCtxOn = false; document.getElementById('ai-ctx-btn').classList.remove('on'); document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_VID; }
@@ -1591,3 +1636,9 @@ if (window.api?.onOpenFile) {
     }
   });
 }
+
+window.asarCollectionSource = {
+  items: () => state.collections.flatMap(entry => entry.videos.map(video => ({ id: video.path, title: video.title || video.fileName }))),
+  open: id => { const coll = state.collections.find(entry => entry.videos.some(item => item.path === id)); if (coll) playVideo(coll.id, coll.videos.findIndex(item => item.path === id)); },
+  legacy: { list: () => state.collections, field: 'videos' }
+};

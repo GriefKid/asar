@@ -54,6 +54,7 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch {}
+  window.asarCollections?.refresh();
 }
 
 // ── Collections rendering ──────────────────────────────────────────────
@@ -1503,3 +1504,9 @@ function startWaveform() {
 
 // ── Firebase init ───────────────────────────────────────────────────────
 initFirebase();
+
+window.asarCollectionSource = {
+  items: () => state.collections.flatMap(entry => entry.songs.map(song => ({ id: song.path, title: song.title || song.fileName }))),
+  open: id => { const coll = state.collections.find(entry => entry.songs.some(item => item.path === id)); if (coll) playSong(coll.id, coll.songs.findIndex(item => item.path === id)); },
+  legacy: { list: () => state.collections, field: 'songs' }
+};

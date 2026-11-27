@@ -80,3 +80,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .planner-event-name span { display: block; overflow-wrap: anywhere; }
 .planner-event-name:disabled { cursor: default; opacity: 1; }
 .planner-mini { font-size: 11px; }
+.asar-scene-frame { direction: rtl; padding: 8px 12px; border-top: 1px solid var(--bd); display: grid; gap: 6px; justify-items: start; }
+.asar-scene-frame button { background: var(--bg3); color: var(--t1); border: 1px solid var(--bd2); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.asar-scene-frame button:disabled { opacity: .5; cursor: default; }
+.asar-scene-frame small { color: var(--t3); }
+#scene-preview:not([hidden]) { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#scene-preview img { max-height: 80px; max-width: 130px; border-radius: 5px; }
+.asar-collection-tree { margin: 8px; background: var(--bg2); border: 1px solid var(--bd2); border-radius: 9px; direction: rtl; padding: 7px; -webkit-app-region: no-drag; }
+.sidebar .asar-collection-tree { flex-shrink: 0; max-height: 45vh; overflow: auto; }
+.asar-collection-tree > summary, .asar-tree-group > summary { padding: 6px; cursor: pointer; }
+.asar-collection-tree .asar-drop { background: var(--accent-lo); outline: 1px solid var(--asar-gold); }
+.asar-collection-actions { display: flex; flex-wrap: wrap; margin: 4px 0; gap: 5px; }
+.asar-collection-tree button, .asar-collection-tree input, .asar-collection-tree select { background: var(--bg3); color: var(--t2); border: 1px solid var(--bd); border-radius: 6px; padding: 4px 7px; max-width: 100%; }
+.asar-collection-tree input { width: 110px; }
+.asar-collection-rows { max-height: min(34vh, 300px); overflow: auto; }
+.asar-tree-group { padding-inline-start: 7px; border-inline-start: 1px solid var(--bd2); }
+.asar-tree-item { display: flex; align-items: center; gap: 4px; padding: 3px 7px; }
+.asar-tree-item button:first-child { text-align: start; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.asar-collection-status { display: block; color: var(--asar-gold); }
