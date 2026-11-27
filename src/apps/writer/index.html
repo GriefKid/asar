@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>نویسنده — اثر</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0f0f13; --bg2: #15151c; --bg3: #1c1c26; --bg4: #232330;
@@ -260,7 +258,7 @@
   </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
 </head>
-<body>
+<body class="asar-media asar-writer">
 
 <!-- Titlebar -->
 <div class="titlebar">
@@ -284,8 +282,9 @@
 <!-- Editor -->
 <div class="editor-area" id="editor-area">
   <div class="no-doc" id="no-doc">
-    <div class="no-doc-icon">✍️</div>
-    <div class="no-doc-text">یه سند انتخاب کن یا یکی جدید بساز.</div>
+    <span class="asar-media-object asar-object-pen" aria-hidden="true"></span>
+    <h1 class="asar-empty-title">نوشته‌ای انتخاب نشده</h1>
+    <button type="button" class="asar-empty-action" onclick="newDoc()">نوشتهٔ جدید</button>
   </div>
   <div id="editor-wrapper" style="display:none;flex:1;flex-direction:column;overflow:hidden">
     <div class="editor-toolbar">

@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>اثر</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
 <style>
 :root {
   --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
@@ -706,18 +704,18 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 </style>
 <link rel="stylesheet" href="../shared/appearance.css">
 </head>
-<body>
+<body class="asar-main">
 <div class="app no-drag">
 
 <!-- SIDEBAR -->
 <div class="sidebar">
   <div class="app-brand">
     <div class="brand-icon" style="overflow:hidden;padding:0">
-      <img src="../../assets/logo.svg" alt="اثر" style="width:34px;height:34px;border-radius:10px;display:block" onerror="this.parentElement.textContent='اثر'">
+      <img src="../../assets/logo.svg" alt="اثر" style="border-radius:10px;display:block" onerror="this.parentElement.textContent='اثر'">
     </div>
     <div>
       <div class="brand-name">اثر</div>
-      <div class="brand-sub">تجربه‌های فرهنگی</div>
+      <div class="brand-sub">کتاب، فیلم و موسیقی</div>
     </div>
   </div>
 
@@ -726,73 +724,73 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
     <div style="flex:1;min-width:0"><div id="sidebar-user-name" style="font-weight:500;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">کاربر</div></div>
     <div class="firebase-badge" id="sidebar-sync-badge" style="display:none">✓ سینک</div>
   </div>
-  <div style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">منو</div>
+  <div class="nav-group-label" style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">منو</div>
 
-  <div class="nav-item active" onclick="showSection('home',this)">
+  <button type="button" class="nav-item active" data-section="home" aria-current="page" onclick="showSection('home',this)" aria-label="خانه">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg>
     <span class="nav-label">خانه</span>
-  </div>
+  </button>
 
-  <div class="nav-item" onclick="showSection('library',this)">
+  <button type="button" class="nav-item" data-section="library" onclick="showSection('library',this)" aria-label="کتابخانه">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5"/></svg>
     <span class="nav-label">کتابخانه</span>
-  </div>
+  </button>
 
-  <div class="nav-item" onclick="showSection('planner',this)">
+  <button type="button" class="nav-item" data-section="planner" onclick="showSection('planner',this)" aria-label="برنامه‌ریزی">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
     <span class="nav-label">برنامه‌ریزی</span>
-  </div>
+  </button>
 
   <div class="nav-divider"></div>
   <div style="padding:0 6px 6px;font-size:10.5px;color:var(--t3);letter-spacing:.4px;text-transform:uppercase;padding-right:16px;margin-bottom:4px">اپ‌ها</div>
 
-  <div class="nav-item subapp" onclick="window.api.openMusicPlayer()">
+  <button type="button" class="nav-item subapp" onclick="window.api.openMusicPlayer()" aria-label="موزیک پلیر">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg>
     <span class="nav-label">موزیک پلیر</span>
     <span class="nav-badge">↗</span>
-  </div>
+  </button>
 
-  <div class="nav-item subapp" onclick="window.api.openVideoPlayer()">
+  <button type="button" class="nav-item subapp" onclick="window.api.openVideoPlayer()" aria-label="ویدئو پلیر">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
     <span class="nav-label">ویدئو پلیر</span>
     <span class="nav-badge">↗</span>
-  </div>
+  </button>
 
-  <div class="nav-item subapp" onclick="window.api.openBookReader()">
+  <button type="button" class="nav-item subapp" onclick="window.api.openBookReader()" aria-label="بوک ریدر">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
     <span class="nav-label">بوک ریدر</span>
     <span class="nav-badge">↗</span>
-  </div>
+  </button>
 
-  <div class="nav-item subapp" onclick="window.api.openWriter()">
+  <button type="button" class="nav-item subapp" onclick="window.api.openWriter()" aria-label="نویسنده">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>
     <span class="nav-label">نویسنده</span>
     <span class="nav-badge">↗</span>
-  </div>
+  </button>
 
   <div class="nav-divider"></div>
 
-  <div class="nav-item" onclick="showSection('community',this)" id="nav-community">
+  <button type="button" class="nav-item" data-section="community" onclick="showSection('community',this)" id="nav-community" aria-label="برترین‌های اثر">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>
     <span class="nav-label">برترین‌های اثر</span>
-  </div>
+  </button>
 
-  <div class="nav-item" onclick="showSection('admin',this)" id="nav-admin" style="display:none">
+  <button type="button" class="nav-item" data-section="admin" onclick="showSection('admin',this)" id="nav-admin" style="display:none" aria-label="پنل مدیر">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
     <span class="nav-label">پنل مدیر</span>
     <span class="nav-badge">👑</span>
-  </div>
+  </button>
 
   <div class="nav-divider"></div>
 
-  <button type="button" class="nav-item asar-profile-nav" onclick="showSection('profile',this)"><span aria-hidden="true">◉</span><span class="nav-label">پروفایل</span></button>
-  <div class="nav-item" onclick="showSection('settings',this)">
+  <button type="button" class="nav-item asar-profile-nav" data-section="profile" onclick="showSection('profile',this)" aria-label="پروفایل"><span aria-hidden="true">◉</span><span class="nav-label">پروفایل</span></button>
+  <button type="button" class="nav-item" data-section="settings" onclick="showSection('settings',this)" aria-label="تنظیمات">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
     <span class="nav-label">تنظیمات</span>
-  </div>
+  </button>
 
   <!-- Sidebar footer credit -->
-  <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid var(--bd);direction:rtl">
+  <div class="asar-credits" style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid var(--bd);direction:rtl">
     <div style="font-size:10px;color:var(--t3);margin-bottom:5px;letter-spacing:.3px">ساخته شده توسط</div>
     <a href="https://t.me/BuildBestBuildFast" style="display:flex;align-items:center;gap:7px;text-decoration:none;cursor:pointer">
       <div style="width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#5B3FDF);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">⚡</div>
@@ -803,14 +801,29 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
 <!-- MAIN CONTENT -->
 <div class="main">
+  <header class="asar-command-bar">
+    <h1 id="asar-section-title">خانه</h1>
+    <div class="asar-command-actions">
+      <button class="asar-command" type="button" onclick="openCmdPal()"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4.1 4.1"/></svg><span>جست‌وجو</span><kbd>Ctrl K</kbd></button>
+      <div id="asar-layout-slot"></div>
+    </div>
+  </header>
+
 
   <!-- HOME -->
   <div class="section active" id="section-home">
     <div class="home-scroll">
       <div class="home-date-block asar-cover">
-        <img src="../../assets/wordmark.svg" alt="اثر">
-        <div class="shamsi-date" id="shamsi-date">...</div>
-        <div class="shamsi-day" id="shamsi-day">...</div>
+        <img class="asar-cover-mark" src="../../assets/logo.svg" width="42" height="42" alt="">
+        <h2 class="asar-cover-title">آرشیو من</h2>
+        <div class="asar-cover-date">
+          <span class="shamsi-day" id="shamsi-day"></span>
+          <span class="shamsi-date" id="shamsi-date"></span>
+        </div>
+        <div class="asar-cover-actions">
+          <button type="button" class="asar-hero-action primary" onclick="showSection('library')">کتابخانهٔ من <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7 7-7-7 7-7"/></svg></button>
+          <button type="button" class="asar-hero-action" onclick="openTodayPlan()">برنامهٔ امروز</button>
+        </div>
       </div>
 
       <div class="dsc" id="daily-score-card"></div>
@@ -828,7 +841,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
       <!-- AI Weekly Summary -->
       <button class="ai-sum-btn" onclick="getWeeklySummary(this)">
-        <span>✦</span> خلاصه هفته با Claude
+        <span>✦</span> خلاصهٔ هفته با هوش مصنوعی
       </button>
       <div class="ai-sum-box" id="ai-sum-box"></div>
 
@@ -1164,7 +1177,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
             <div class="settings-label" style="font-size:17px;font-weight:700;font-family:'Space Grotesk',sans-serif">اثر</div>
             <div class="settings-desc" style="margin-top:4px;line-height:1.6">
               اپلیکیشنی برای ثبت و مدیریت تجربه‌های فرهنگی — کتاب، فیلم و موسیقی<br>
-              نسخهٔ ۲.۰.۰ · اثر
+              نسخهٔ ۲.۱.۰ · اثر
             </div>
             <div style="margin-top:10px;padding:10px 12px;background:var(--bg3);border:1px solid var(--bd);border-radius:9px;direction:rtl">
               <div style="font-size:11px;color:var(--t3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">طراحی و توسعه</div>
@@ -1177,7 +1190,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
               </div>
             </div>
           </div>
-          <span class="settings-tag">v1.2.0</span>
+          <span class="settings-tag">v2.1.0</span>
         </div>
       </div>
     </div>

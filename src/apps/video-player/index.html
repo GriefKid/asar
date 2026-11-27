@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ویدئو پلیر — اثر</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
 <style>
 :root {
   --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
@@ -415,7 +413,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
 </head>
-<body>
+<body class="asar-media asar-video-player">
 <!-- OpenSubtitles key banner -->
 <div class="osub-banner" id="osub-banner">
   <span style="color:var(--t2);font-size:12.5px;white-space:nowrap">برای زیرنویس خودکار، subdl API key بده:</span>
@@ -437,7 +435,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 <!-- SIDEBAR -->
 <div class="sidebar">
   <div class="sb-top">
-    <span class="sb-title">مجموعه‌ها</span>
+    <span class="sb-title">ویدیو</span>
     <div class="sb-btns no-drag">
       <div class="icon-btn" onclick="importFiles()" title="افزودن فایل">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
@@ -459,8 +457,9 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 
   <!-- no track state -->
   <div class="no-track" id="no-track">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
-    <p>فیلمی انتخاب نشده<br><span style="font-size:12px">از مجموعه، روی یه فیلم بزن</span></p>
+      <span class="asar-media-object asar-object-film" aria-hidden="true"></span>
+      <h1 class="asar-empty-title">فیلمی انتخاب نشده</h1>
+      <button type="button" class="asar-empty-action" onclick="importFiles()">افزودن فیلم</button>
   </div>
 
   <!-- meta overlay -->

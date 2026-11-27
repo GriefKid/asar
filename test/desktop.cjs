@@ -61,12 +61,20 @@ function testPage(file) {
 app.whenReady().then(async () => {
   const main = code => runIn('main-app', code);
   assert.equal(await main('document.title'), 'اثر');
-  assert.equal(await main('Boolean(document.querySelector(".asar-cover img")?.complete)'), true);
+  assert.equal(await main('Boolean(document.querySelector(".asar-cover img")?.naturalWidth)'), true);
+  assert.equal(await main(`document.fonts.load('800 24px Vazirmatn', 'آرشیو').then(faces => faces.some(face => face.status === 'loaded'))`), true);
+  assert.equal(await main(`(() => {
+    document.querySelector('.asar-command').click();
+    const opened = document.getElementById('cmdpal').classList.contains('show');
+    closeCmdPal();
+    return opened;
+  })()`), true);
   assert.equal(await main('typeof AsarCalendar'), 'object');
   assert.equal(await main('typeof window.asarCollections?.show'), 'function');
   assert.equal(await main('typeof window.asarProfile?.render'), 'function');
   const planner = await main(`(() => {
-    showSection('planner');
+    document.querySelector('.asar-cover-actions button:not(.primary)').click();
+    if (document.querySelector('[data-section="planner"]').getAttribute('aria-current') !== 'page') throw Error('Planner navigation did not update');
     const today = { locked:document.getElementById('plan-add').disabled, rows:document.querySelectorAll('.planner-hour').length };
     const tomorrow = addJalaliDays(todayJalali(), 1);
     selectCalDay(tomorrow.y, tomorrow.m, tomorrow.d);
@@ -113,6 +121,7 @@ app.whenReady().then(async () => {
   })()`);
   assert.deepEqual(layout, { positioned: true, saved: true });
   await main('[...document.querySelectorAll(".asar-layout-menu button")].find(button => button.textContent === "بازنشانی چیدمان").click()');
+  await main('[...document.querySelectorAll(".asar-layout-menu button")].find(button => button.textContent === "قفل چیدمان").click()');
   if (process.env.ASAR_SMOKE_SCREENSHOT) {
     const snapshot = await windows.get('main-app').webContents.capturePage();
     fs.writeFileSync(process.env.ASAR_SMOKE_SCREENSHOT, snapshot.toPNG());

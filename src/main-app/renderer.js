@@ -141,10 +141,17 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 let activeSection = 'home';
 
 window.showSection = function(id, el) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('section-' + id).classList.add('active');
-  if (el) el.classList.add('active');
+  const section = document.getElementById('section-' + id);
+  if (!section) return;
+  document.querySelector('.section.active')?.classList.remove('active');
+  document.querySelector('.nav-item.active')?.classList.remove('active');
+  const tab = document.querySelector('.nav-item[data-section="' + id + '"]') || el;
+  document.querySelector('.nav-item[aria-current]')?.removeAttribute('aria-current');
+  tab?.classList.add('active');
+  tab?.setAttribute('aria-current', 'page');
+  section.classList.add('active');
+  const title = tab?.querySelector('.nav-label')?.textContent;
+  if (title) document.getElementById('asar-section-title').textContent = title;
   activeSection = id;
   if (id === 'home')      renderHome();
   if (id === 'library')   renderLibrary();
@@ -153,6 +160,12 @@ window.showSection = function(id, el) {
   if (id === 'profile') window.asarProfile?.render();
   if (id === 'community') loadCommunity(currentCommunityTab);
   if (id === 'admin')     loadAdminData();
+};
+
+window.openTodayPlan = function() {
+  const day = todayJalali();
+  showSection('planner');
+  selectCalDay(day.y, day.m, day.d);
 };
 
 // ── Command Palette ───────────────────────────────────────────────────────
@@ -266,19 +279,19 @@ function renderHome() {
   const todayKey = `${today.y}-${today.m}-${today.d}`;
   const evToday = (events[todayKey] || []).length;
 
-  document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num accent">${toFarsiNum(total)}</div><div class="stat-label">مجموع آثار</div>
-    </div>
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num" style="color:var(--accent)">${toFarsiNum(active)}</div><div class="stat-label">در حال بررسی</div>
-    </div>
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num ok">${toFarsiNum(done)}</div><div class="stat-label">تمام شده</div>
-    </div>
-    <div class="stat-card" onclick="showSection('planner',document.querySelector('[onclick*=planner]'))">
-      <div class="stat-num warn">${toFarsiNum(evToday)}</div><div class="stat-label">رویداد امروز</div>
-    </div>`;
+
+  const cards = [
+    { kind: 'library', value: total, title: 'مجموع آثار', icon: 'M5 5h4v14H5zM10 5h4v14h-4zM16 5l4 1-2 13-4-1z' },
+    { kind: 'active', value: active, title: 'در حال بررسی', icon: 'M8 5l11 7-11 7z' },
+    { kind: 'done', value: done, title: 'تمام‌شده', icon: 'm5 12 4 4 10-10' },
+    { kind: 'today', value: evToday, title: 'رویداد امروز', icon: 'M6 4v3m12-3v3M4 9h16m-14-3h12l2 2v11H4V8z' }
+  ];
+  document.getElementById('stats-row').innerHTML = cards.map(card => `
+    <button class="stat-card" data-stat="${card.kind}" type="button" onclick="${card.kind === 'today' ? 'openTodayPlan()' : "showSection('library')"}">
+      <span class="stat-num">${toFarsiNum(card.value)}</span>
+      <span class="stat-label">${card.title}</span>
+      <span class="asar-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${card.icon}"/></svg></span>
+    </button>`).join('');
 
   // Today events
   const todayEvs = events[todayKey] || [];
@@ -1309,8 +1322,9 @@ function renderDailyScore() {
     `<div class="dsc-dlbl${d.isToday?' today':''}">${d.lbl}</div>`).join('');
 
   card.innerHTML = `
+    <h2 class="dsc-title">نمرهٔ امروز</h2>
     <div class="dsc-top">
-      <div class="dsc-score">${td.pending ? "—" : toFarsiNum(td.score)}</div>
+      <div class="dsc-score ${td.pending ? 'pending' : ''}" style="--daily-progress:${td.score}%">${td.pending ? "—" : toFarsiNum(td.score)}</div>
       <div class="dsc-meta">
         <div class="dsc-label">${lbl}</div>
         <div class="dsc-delta ${dCls}">${dTxt} ${deltaLabel}</div>
@@ -1537,7 +1551,7 @@ ${activityLines.join('\n') || 'هیچ رویدادی ثبت نشده'}
   }
 
   btn.disabled = false;
-  btn.innerHTML = '<span>✦</span> خلاصه هفته با Claude';
+  btn.innerHTML = '<span>✦</span> خلاصهٔ هفته با هوش مصنوعی';
 };
 
 function getClaudeKey() {

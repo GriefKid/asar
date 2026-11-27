@@ -22,14 +22,14 @@
   }[page] || {};
   const controls = {
     scale: ['اندازهٔ رابط', 'range', 100, 75, 150],
-    text: ['رنگ متن رابط', 'color', '#f4e8de'],
+    text: ['رنگ متن رابط', 'color', '#f6f2ff'],
     subtitleSize: ['اندازهٔ زیرنویس', 'range', 21, 11, 54],
     subtitleColor: ['رنگ زیرنویس', 'color', '#ffffff'],
-    subtitleBg: ['پس‌زمینهٔ زیرنویس', 'color', '#120e18'],
+    subtitleBg: ['پس‌زمینهٔ زیرنویس', 'color', '#110d1e'],
     lyricsSize: ['اندازهٔ متن آهنگ', 'range', 16, 11, 36],
-    lyricsColor: ['رنگ متن آهنگ', 'color', '#f4e8de'],
+    lyricsColor: ['رنگ متن آهنگ', 'color', '#f6f2ff'],
     bookSize: ['اندازهٔ متن کتاب', 'range', 17, 11, 36],
-    bookColor: ['رنگ متن کتاب', 'color', '#f4e8de']
+    bookColor: ['رنگ متن کتاب', 'color', '#f6f2ff']
   };
 
   function read(key) {
@@ -86,7 +86,7 @@
       input.addEventListener('input', () => {
         appearance[name] = input.value;
         localStorage.setItem(appearanceKey, JSON.stringify(appearance));
-      window.dispatchEvent(new CustomEvent('asar-store', { detail: appearanceKey }));
+        window.dispatchEvent(new CustomEvent('asar-store', { detail: appearanceKey }));
         applyAppearance();
       });
       inputs[name] = input;
@@ -110,9 +110,11 @@
   const toolbar = element('div');
   const layer = element('div', '', 'asar-layout-layer');
   menu.append(toolbar);
-  document.body.append(menu, layer);
+  (document.getElementById('asar-layout-slot') || document.body).append(menu);
+  document.body.append(layer);
   const toggle = button('ویرایش چیدمان', () => {
     edit = !edit;
+    document.documentElement.toggleAttribute('data-asar-layout-editing', edit);
     toggle.textContent = edit ? 'قفل چیدمان' : 'ویرایش چیدمان';
     if (edit) menu.open = false;
     updateHandles();

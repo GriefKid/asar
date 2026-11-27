@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>موزیک پلیر — اثر</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
 <style>
 :root {
   --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
@@ -465,7 +463,7 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
 </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
 </head>
-<body>
+<body class="asar-media asar-music-player">
 <div class="bg-glow" id="bg-glow"></div>
 
 <div class="app">
@@ -473,7 +471,7 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
 <!-- SIDEBAR -->
 <div class="sidebar">
   <div class="sb-top">
-    <span class="sb-title">مجموعه‌ها</span>
+    <span class="sb-title">موسیقی</span>
     <div class="sb-btns no-drag">
       <div class="icon-btn" onclick="importFiles()" title="افزودن فایل">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
@@ -501,8 +499,9 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
   <canvas id="viz-canvas"></canvas>
   <div id="player-content">
     <div class="no-track">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"/></svg>
-      <p>آهنگی انتخاب نشده<br><span style="font-size:12px">از مجموعه، روی یه آهنگ بزن</span></p>
+      <span class="asar-media-object asar-object-record" aria-hidden="true"></span>
+      <h1 class="asar-empty-title">آهنگی انتخاب نشده</h1>
+      <button type="button" class="asar-empty-action" onclick="importFiles()">افزودن آهنگ</button>
     </div>
   </div>
 </div>
