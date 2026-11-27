@@ -8,7 +8,7 @@ const AsarBackup = (() => {
   const lists = new Set(['asar-library', 'asar-habits', 'asar-goals', 'asar-writer-docs']);
   const extraKeys = new Set(['asar-writer-docs', 'book-reader', 'music-player', 'video-player', 'asar-collections', 'asar-layouts', 'asar-appearance', 'asar-theme']);
   const includes = key => Object.values(rootKeys).includes(key) || extras(key);
-  const extras = key => extraKeys.has(key) || /^asar-pomo-\d+-\d+-\d+$/.test(key) || /^trans_[A-Za-z0-9+/=]+_\d+$/.test(key);
+  const extras = key => extraKeys.has(key) || /^asar-pomo-\d+-\d+-\d+$/.test(key) || /^trans_(?:u8_)?[A-Za-z0-9+/=]+_\d+$/.test(key);
 
   function parsed(key, stored) {
     const data = typeof stored === 'string' ? JSON.parse(stored) : stored;

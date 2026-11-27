@@ -6,11 +6,11 @@ let currentPage = 1;
 let totalPages = 0;
 let currentBookPath = null;
 let bookOpenRequest = 0;
+let pageRenderRequest = 0;
 let readMode = 'original';   // 'original' | 'both' | 'persian'
 let fontSize = 18;
 let activeTab = 0;
-let translating = false;
-let translationAborted = false;
+let translating = null;
 let pendingHighlight = null;  // {text, page, color}
 let pendingRectAnnot = null;
 let currentRectColor = 'y';
@@ -45,17 +45,21 @@ function saveState() {
   window.asarCollections?.refresh();
 }
 
-function getTransCache(path, page) {
-  try { return localStorage.getItem(`trans_${btoa(path)}_${page}`) || null; } catch { return null; }
+function translationKey(path, page) {
+  if (/^[\x00-\xff]+$/.test(path)) return `trans_${btoa(path)}_${page}`;
+  const bytes = new TextEncoder().encode(path);
+  const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+  return `trans_u8_${btoa(binary)}_${page}`;
 }
 
-function setTransCache(path, page, text) {
-  try { localStorage.setItem(`trans_${btoa(path)}_${page}`, text); } catch {}
+function getTransCache(path, page) {
+  const text = localStorage.getItem(translationKey(path, page));
+  return /[A-Za-z]/.test(text || '') && !/\p{Script=Arabic}/u.test(text) ? null : text;
 }
 
 function allPagesTranslated(path, total) {
   for (let i = 1; i <= total; i++) {
-    if (!getTransCache(path, i)) return false;
+    if (getTransCache(path, i) === null) return false;
   }
   return true;
 }
@@ -269,6 +273,8 @@ async function openBook(path) {
   }
 
   const request = ++bookOpenRequest;
+  translating = null;
+  document.getElementById('trans-progress').classList.remove('show');
   recordReadSpeed();
   const previousDoc = pdfDoc;
   pdfDoc = null;
@@ -276,6 +282,7 @@ async function openBook(path) {
   currentBookPath = path;
   currentPage = 1;
   totalPages = 0;
+  checkTranslateBtn();
   updateNav();
   renderLibrary();
 
@@ -403,15 +410,17 @@ async function tocGo(dest) {
 async function renderCurrentPage() {
   const documentPdf = pdfDoc;
   if (!documentPdf) return;
+  const request = ++pageRenderRequest;
+  const isCurrent = () => documentPdf === pdfDoc && request === pageRenderRequest;
   recordReadSpeed(); // record time on prev page before switching
   const container = document.getElementById('pdf-container');
 
   if (readMode === 'original') {
-    await renderPdfCanvas(container, documentPdf);
+    await renderPdfCanvas(container, documentPdf, isCurrent);
   } else {
-    await renderTextMode(container, documentPdf);
+    await renderTextMode(container, documentPdf, isCurrent);
   }
-  if (documentPdf !== pdfDoc) return;
+  if (!isCurrent()) return;
 
   updateNav();
   updateProgress();
@@ -423,9 +432,9 @@ async function renderCurrentPage() {
   if (book) { book.lastPage = currentPage; saveState(); }
 }
 
-async function renderSinglePageWrap(documentPdf, pageNum, availWidth) {
+async function renderSinglePageWrap(documentPdf, pageNum, availWidth, isCurrent) {
   const page = await documentPdf.getPage(pageNum);
-  const scale = ((availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
+  const scale = (Math.max(1, availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
   const viewport = page.getViewport({ scale });
   const wrap = document.createElement('div');
   wrap.className = 'pdf-page-wrap';
@@ -445,7 +454,7 @@ async function renderSinglePageWrap(documentPdf, pageNum, availWidth) {
   const textContent = await page.getTextContent();
   textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
   await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
-  if (documentPdf !== pdfDoc) return;
+  if (!isCurrent()) return;
   renderRectAnnotations(annotLayer, viewport);
   wrap.addEventListener('mouseup', onTextSelect);
   wrap.addEventListener('contextmenu', e => e.preventDefault());
@@ -457,16 +466,16 @@ async function renderSinglePageWrap(documentPdf, pageNum, availWidth) {
   return { wrap, viewport };
 }
 
-async function renderPdfCanvas(container, documentPdf) {
+async function renderPdfCanvas(container, documentPdf, isCurrent) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     if (dualPage && currentPage < totalPages) {
       const avail = (container.clientWidth - 60) / 2;
       const [r1, r2] = await Promise.all([
-        renderSinglePageWrap(documentPdf, currentPage, avail),
-        renderSinglePageWrap(documentPdf, currentPage + 1, avail),
+        renderSinglePageWrap(documentPdf, currentPage, avail, isCurrent),
+        renderSinglePageWrap(documentPdf, currentPage + 1, avail, isCurrent),
       ]);
-      if (documentPdf !== pdfDoc) return;
+      if (!isCurrent()) return;
       const dw = document.createElement('div');
       dw.className = 'dual-wrap';
       dw.appendChild(r1.wrap);
@@ -477,8 +486,8 @@ async function renderPdfCanvas(container, documentPdf) {
       return;
     }
     const page = await documentPdf.getPage(currentPage);
-    if (documentPdf !== pdfDoc) return;
-    const scale = ((container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
+    if (!isCurrent()) return;
+    const scale = (Math.max(1, container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
     const viewport = page.getViewport({ scale });
 
     const wrap = document.createElement('div');
@@ -514,7 +523,7 @@ async function renderPdfCanvas(container, documentPdf) {
     const textContent = await page.getTextContent();
     textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
     await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
-    if (documentPdf !== pdfDoc) return;
+    if (!isCurrent()) return;
 
     // render saved rect annotations
     renderRectAnnotations(annotLayer, viewport);
@@ -530,20 +539,20 @@ async function renderPdfCanvas(container, documentPdf) {
     });
 
   } catch (e) {
-    if (documentPdf !== pdfDoc) return;
+    if (!isCurrent()) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
 
-async function renderTextMode(container, documentPdf) {
+async function renderTextMode(container, documentPdf, isCurrent) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     const page = await documentPdf.getPage(currentPage);
     const textContent = await page.getTextContent();
-    if (documentPdf !== pdfDoc) return;
+    if (!isCurrent()) return;
     let rawText = textContent.items.map(i => i.str).join(' ').trim();
 
-    if (rawText.length < 30) {
+    if (!rawText) {
       container.innerHTML = `<div class="text-page" style="text-align:center;padding:60px 24px;direction:rtl">
         <div style="font-size:14px;color:var(--t3)">این صفحه متن قابل انتخاب ندارد</div>
       </div>`;
@@ -613,7 +622,7 @@ async function renderTextMode(container, documentPdf) {
     // text selection for highlights
     wrap.addEventListener('mouseup', onTextSelect);
   } catch (e) {
-    if (documentPdf !== pdfDoc) return;
+    if (!isCurrent()) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
@@ -953,60 +962,39 @@ function deleteRectAnnot(id) {
 // ── Translation ────────────────────────────────────────────────────────
 async function translateAllPages() {
   if (!pdfDoc || translating) return;
-
-  translating = true;
-  translationAborted = false;
-
-  const btn = document.getElementById('trans-all-btn');
-  btn.classList.add('busy');
-  btn.textContent = 'در حال ترجمه...';
-
+  const job = { doc: pdfDoc, path: currentBookPath, pages: totalPages };
+  translating = job;
+  checkTranslateBtn();
   const prog = document.getElementById('trans-progress');
   prog.classList.add('show');
-
   let done = 0;
-  for (let i = 1; i <= totalPages; i++) {
-    if (translationAborted) break;
-
-    // skip already cached
-    if (getTransCache(currentBookPath, i)) {
-      done++;
-      updateTransProgress(done, totalPages);
-      continue;
-    }
-
+  updateTransProgress(done, job.pages);
+  for (let i = 1; i <= job.pages && translating === job; i++) {
     try {
-      const page = await pdfDoc.getPage(i);
-      const textContent = await page.getTextContent();
-      const rawText = textContent.items.map(item => item.str).join(' ').trim();
-
-      if (!rawText || rawText.length < 30) {
-        done++; updateTransProgress(done, totalPages); continue;
+      if (getTransCache(job.path, i) === null) {
+        const page = await job.doc.getPage(i);
+        const textContent = await page.getTextContent();
+        if (translating !== job) return;
+        const text = textContent.items.map(item => item.str).join(' ').trim();
+        const parts = [];
+        for (const chunk of chunkText(text, 400)) {
+          const fa = await window.api.translate(chunk);
+          if (translating !== job) return;
+          if (!fa?.trim() || (/[A-Za-z]/.test(chunk) && !/\p{Script=Arabic}/u.test(fa))) throw new Error('Untranslated page');
+          parts.push(fa.trim());
+        }
+        localStorage.setItem(translationKey(job.path, i), parts.join(' '));
       }
-
-      // translate in chunks to avoid timeout
-      const chunks = chunkText(rawText, 1000);
-      const translatedParts = [];
-      for (const chunk of chunks) {
-        if (translationAborted) break;
-        const fa = await window.api.translate(chunk).catch(() => null);
-        translatedParts.push(fa || chunk);
-        await sleep(200);
-      }
-
-      setTransCache(currentBookPath, i, translatedParts.join(' '));
+      done++;
     } catch {}
-
-    done++;
-    updateTransProgress(done, totalPages);
-    await sleep(100);
+    if (translating !== job) return;
+    updateTransProgress(done, job.pages);
   }
-
-  translating = false;
-  btn.classList.remove('busy');
+  if (translating !== job) return;
+  translating = null;
   checkTranslateBtn();
-
-  // re-render if in a translated mode
+  const status = document.getElementById('trans-progress-text');
+  status.textContent = done === job.pages ? 'ترجمهٔ کتاب کامل شد.' : `${done} از ${job.pages} صفحه آماده است. برای صفحه‌های باقی‌مانده دوباره ترجمه را بزن.`;
   if (readMode !== 'original') renderCurrentPage();
 }
 
@@ -1016,35 +1004,26 @@ function updateTransProgress(done, total) {
   document.getElementById('trans-progress-pct').textContent = pct + '%';
   document.getElementById('trans-progress-text').textContent =
     `ترجمه ${done} از ${total} صفحه`;
-  if (done >= total) {
-    setTimeout(() => document.getElementById('trans-progress').classList.remove('show'), 2000);
-  }
 }
 
 function checkTranslateBtn() {
   const btn = document.getElementById('trans-all-btn');
-  if (!currentBookPath || !totalPages) return;
-  if (allPagesTranslated(currentBookPath, totalPages)) {
-    btn.innerHTML = `✓ ترجمه شده`;
-    btn.style.opacity = '.6';
-    btn.style.cursor = 'default';
-  }
+  const complete = Boolean(pdfDoc && allPagesTranslated(currentBookPath, totalPages));
+  btn.disabled = !pdfDoc || Boolean(translating) || complete;
+  btn.classList.toggle('busy', Boolean(translating));
+  btn.textContent = translating ? 'در حال ترجمه…' : complete ? '✓ ترجمه شد' : 'ترجمه';
 }
 
 function chunkText(text, maxLen) {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
   const chunks = [];
-  let current = '';
-  for (const s of sentences) {
-    if ((current + s).length > maxLen) {
-      if (current) chunks.push(current.trim());
-      current = s;
-    } else {
-      current += ' ' + s;
-    }
+  while (text.length > maxLen) {
+    const space = text.lastIndexOf(' ', maxLen);
+    const boundary = space > 0 ? space : maxLen;
+    chunks.push(text.slice(0, boundary));
+    text = text.slice(boundary).trimStart();
   }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks.length ? chunks : [text];
+  if (text) chunks.push(text);
+  return chunks;
 }
 
 // ── Read mode ──────────────────────────────────────────────────────────
@@ -1737,7 +1716,21 @@ async function suggestReadingMusic() {
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
+checkTranslateBtn();
 initFirebase();
+
+let lastPdfWidth = 0;
+let pdfResizeTimer;
+new ResizeObserver(([entry]) => {
+  const width = entry.target.clientWidth;
+  if (width === lastPdfWidth) return;
+  const resized = lastPdfWidth > 0;
+  lastPdfWidth = width;
+  clearTimeout(pdfResizeTimer);
+  if (resized && width > 40 && pdfDoc && readMode === 'original') {
+    pdfResizeTimer = setTimeout(renderCurrentPage, 120);
+  }
+}).observe(document.getElementById('pdf-container'));
 
 // Auto-clean titles and fetch missing covers for all existing books
 (async () => {

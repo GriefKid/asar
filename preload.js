@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
   openAudioFiles:  ()             => ipcRenderer.invoke('dialog:openAudioFiles'),
   openAudioFolder: ()             => ipcRenderer.invoke('dialog:openAudioFolder'),
   getMeta:         (p)            => ipcRenderer.invoke('audio:getMeta', p),
+  mediaFileUrl:    (p)            => ipcRenderer.invoke('file:media-url', p),
   fetchLyrics:     (artist, title)=> ipcRenderer.invoke('lyrics:fetch', artist, title),
   translate:       (text)         => ipcRenderer.invoke('translate:toFarsi', text),
   fetchInfo:       (artist, title)=> ipcRenderer.invoke('info:fetch', artist, title),
@@ -49,6 +50,10 @@ contextBridge.exposeInMainWorld('api', {
   // Open sub-apps with a specific file (second monitor)
   openBookReaderWithFile:  (path) => ipcRenderer.invoke('app:open-book-file', path),
   openVideoPlayerWithFile: (path) => ipcRenderer.invoke('app:open-video-file', path),
+  openMusicPlayerWithFile: (path) => ipcRenderer.invoke('app:open-music-file', path),
   // Sub-apps receive file open requests
-  onOpenFile: (cb) => ipcRenderer.on('open:file', (_, path) => cb(path)),
+  onOpenFile: (cb) => {
+    ipcRenderer.on('open:file', (_, path) => cb(path));
+    ipcRenderer.send('open:file-ready');
+  },
 });

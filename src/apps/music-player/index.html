@@ -89,14 +89,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .player{width:380px;flex-shrink:0;position:relative;z-index:1;
   background:rgba(6,6,18,.55);backdrop-filter:blur(30px);
   border-left:1px solid var(--bd);
-  display:flex;flex-direction:column;align-items:center;padding:24px 22px 18px;overflow:hidden}
+  display:flex;flex-direction:column;align-items:center;padding:24px 22px 18px;overflow-y:auto;overflow-x:hidden}
+#player-content{width:100%;min-width:0}
 
 /* Title bar drag */
 .no-drag{-webkit-app-region:no-drag}
 
 /* Art */
 .art-wrap{position:relative;margin-bottom:20px;flex-shrink:0}
-.art{width:210px;height:210px;border-radius:16px;
+.art{width:min(210px,100%);aspect-ratio:1;margin-inline:auto;border-radius:16px;
   box-shadow:0 16px 50px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.07),0 0 50px rgba(123,94,255,.18);
   display:flex;align-items:center;justify-content:center;font-size:64px;overflow:hidden;
   background:linear-gradient(135deg,#1a1035 0%,#2d1a55 40%,#4a2a7a 100%);
@@ -189,7 +190,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .no-track p{font-size:14px;line-height:1.6}
 
 /* ── Lyrics Panel ── */
-.lyr-panel{flex:1;position:relative;z-index:1;display:flex;flex-direction:column;
+.lyr-panel{flex:1;min-width:0;position:relative;z-index:1;display:flex;flex-direction:column;
   overflow:hidden;background:rgba(4,4,12,.35);backdrop-filter:blur(10px)}
 .lyr-hd{padding:14px 20px;border-bottom:1px solid var(--bd);
   display:flex;align-items:center;justify-content:space-between;direction:rtl;flex-shrink:0}
@@ -498,6 +499,7 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
 <!-- PLAYER -->
 <div class="player no-drag">
   <canvas id="viz-canvas"></canvas>
+  <p id="music-play-status" class="media-play-status" role="status" hidden></p>
   <div id="player-content">
     <div class="no-track">
       <span class="asar-media-object asar-object-record" aria-hidden="true"></span>

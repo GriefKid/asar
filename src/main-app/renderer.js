@@ -657,6 +657,7 @@ window.openInSubApp = function(id) {
   if (!item || !item.filePath) return;
   if (item.type === 'book') window.api.openBookReaderWithFile(item.filePath);
   else if (item.type === 'film') window.api.openVideoPlayerWithFile(item.filePath);
+  else if (item.type === 'music') window.api.openMusicPlayerWithFile(item.filePath);
 };
 
 window.openInSubAppFromReview = function() {
@@ -1902,7 +1903,9 @@ window.switchCommunityTab = function(el, type) {
   loadCommunity(type);
 };
 
+let communityRequest = 0;
 async function loadCommunity(type) {
+  const request = ++communityRequest;
   const sb = window._sb;
   const grid = document.getElementById('community-grid');
   if (!grid) return;
@@ -1913,6 +1916,7 @@ async function loadCommunity(type) {
   grid.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
   try {
     const { data, error } = await sb.from('community').select('*').eq('type', type).gt('count', 0).order('avg', { ascending: false }).limit(100);
+    if (request !== communityRequest) return;
     if (error) throw error;
     if (!data || !data.length) {
       grid.innerHTML = '<div class="community-loading">هنوز کسی امتیاز نداده...</div>';
@@ -1920,8 +1924,9 @@ async function loadCommunity(type) {
     }
     renderCommunityGrid(data);
   } catch(e) {
+    if (request !== communityRequest) return;
     console.error('loadCommunity error:', e);
-    grid.innerHTML = '<div class="community-loading">خطا در بارگذاری: ' + e.message + '</div>';
+    grid.innerHTML = '<div class="community-loading" role="status">برترین‌های اثر بارگیری نشد. اتصال را بررسی کن و دوباره تلاش کن. <button type="button" class="settings-save-btn" onclick="loadCommunity(currentCommunityTab)">تلاش دوباره</button></div>';
   }
 }
 
@@ -1930,19 +1935,24 @@ function renderCommunityGrid(items) {
   if (!grid) return;
   const typeEmoji = { film: '🎬', book: '📚', music: '🎵' };
   grid.innerHTML = items.map((item, i) => {
-    const stars = '★'.repeat(Math.round(item.avg)) + '☆'.repeat(5 - Math.round(item.avg));
-    const avg = item.avg ? item.avg.toFixed(1) : '0.0';
-    const coverHtml = item.cover
-      ? `<img src="${item.cover.replace(/"/g,'&quot;')}" alt="" loading="lazy" onerror="this.parentElement.textContent='${typeEmoji[item.type]||'★'}'">`
-      : (typeEmoji[item.type] || '★');
+    const rating = Math.max(0, Math.min(5, Number(item.avg) || 0));
+    const starCount = Math.round(rating);
+    const stars = '★'.repeat(starCount) + '☆'.repeat(5 - starCount);
+    const avg = rating.toFixed(1);
+    const icon = Object.hasOwn(typeEmoji, item.type) ? typeEmoji[item.type] : '★';
+    const cover = String(item.cover || '').trim();
+    const title = esc(item.title || 'بدون عنوان');
+    const coverHtml = /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(cover)
+      ? `<img src="${esc(cover)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${icon}'">`
+      : icon;
     return `<div class="community-card">
       <div class="community-rank">${i < 3 ? ['🥇','🥈','🥉'][i] : '#'+(i+1)}</div>
       <div class="community-cover">${coverHtml}</div>
       <div class="community-body">
-        <div class="community-title" title="${item.title.replace(/"/g,'&quot;')}">${item.title}</div>
-        ${item.artist ? `<div class="community-votes" style="margin-bottom:3px">${item.artist}</div>` : ''}
+        <div class="community-title" title="${title}">${title}</div>
+        ${item.artist ? `<div class="community-votes" style="margin-bottom:3px">${esc(item.artist)}</div>` : ''}
         <div class="community-stars" title="${avg}">${stars} <span style="font-size:11px;color:var(--warn)">${avg}</span></div>
-        <div class="community-votes">${item.count} رأی</div>
+        <div class="community-votes">${toFarsiNum(Math.max(0, Number.parseInt(item.count, 10) || 0))} رأی</div>
       </div>
     </div>`;
   }).join('');
@@ -1981,20 +1991,20 @@ async function loadAdminData() {
       const initials = name[0].toUpperCase();
       const date = u.created_at ? u.created_at.slice(0,10) : '';
       return `<div>
-        <div class="admin-user-row" onclick="toggleAdminUser('au-${i}','${u.id}')">
-          <div class="admin-user-avatar">${initials}</div>
+        <div class="admin-user-row" onclick="toggleAdminUser('au-${i}',${esc(JSON.stringify(u.id))})">
+          <div class="admin-user-avatar">${esc(initials)}</div>
           <div class="admin-user-info">
-            <div class="admin-user-name">${name}${u.is_admin ? ' 👑' : ''}</div>
-            <div class="admin-user-email">${u.email || ''}</div>
+            <div class="admin-user-name">${esc(name)}${u.is_admin ? ' 👑' : ''}</div>
+            <div class="admin-user-email">${esc(u.email)}</div>
           </div>
-          <div class="admin-user-meta">${date}</div>
+          <div class="admin-user-meta">${esc(date)}</div>
         </div>
         <div class="admin-user-lib" id="au-${i}">در حال بارگذاری...</div>
       </div>`;
     }).join('');
   } catch(e) {
     console.error('loadAdminData error:', e);
-    if (listEl) listEl.innerHTML = '<div class="community-loading">خطا: ' + e.message + '</div>';
+    if (listEl) listEl.textContent = 'اطلاعات کاربران بارگیری نشد.';
   }
 }
 
@@ -2017,9 +2027,9 @@ window.toggleAdminUser = async function(libId, uid) {
       (lib.length === 0 ? '<div style="font-size:12px;color:var(--t3)">خالیه</div>' :
         lib.slice(0,30).map(it => `<div class="admin-lib-item">
           <span>${typeEmoji[it.type]||'•'}</span>
-          <span style="flex:1">${it.title||'بدون عنوان'}</span>
-          <span style="color:var(--warn)">${it.rating ? '★'.repeat(it.rating) : ''}</span>
-          <span style="color:var(--t3);font-size:10px">${it.status||''}</span>
+          <span style="flex:1">${esc(it.title || 'بدون عنوان')}</span>
+          <span style="color:var(--warn)">${'★'.repeat(Math.max(0, Math.min(5, Number(it.rating) || 0)))}</span>
+          <span style="color:var(--t3);font-size:10px">${esc(it.status)}</span>
         </div>`).join('') +
         (lib.length > 30 ? `<div style="font-size:11px;color:var(--t3);padding-top:6px">... و ${lib.length-30} مورد دیگه</div>` : '')
       );

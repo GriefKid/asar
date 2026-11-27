@@ -10,6 +10,8 @@ let lyrMode = 'both';
 let lyrLines = [];
 let lyrFaLines = [];
 let lyrFetching = false;
+let trackLoadRequest = 0;
+let openMusicRequest = 0;
 let cmtTimestamp = 0;
 let isDraggingProg = false;
 let isDraggingVol = false;
@@ -37,6 +39,7 @@ const EQ_PRESETS = {
 };
 
 const audio = document.getElementById('audio-el');
+audio.volume = 0.8;
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
@@ -156,6 +159,11 @@ async function addSongsToColl(paths, destination) {
     const meta = await window.api.getMeta(p);
     if (!meta.cover) meta.cover = generateCover(meta.title || p.split(/[\\/]/).pop());
     coll.songs.push({ ...meta, duration: null });
+    window.api.addToLibrary({
+      id: 'music_' + crypto.randomUUID(), type: 'music', title: meta.title || meta.fileName,
+      creator: meta.artist === 'Unknown' ? '' : meta.artist, stage: 'queue', rating: 0,
+      cover: meta.cover, filePath: p, createdAt: Date.now()
+    });
   }
 
   coll.open = true;
@@ -175,13 +183,22 @@ async function loadDurations(coll) {
   renderColls();
 }
 
-function getSongDuration(path) {
+async function getSongDuration(path) {
+  const url = await window.api.mediaFileUrl(path).catch(() => null);
+  if (!url) return null;
   return new Promise(resolve => {
     const a = new Audio();
-    a.src = `file:///${path.replace(/\\/g, '/')}`;
-    a.addEventListener('loadedmetadata', () => resolve(Math.round(a.duration)));
-    a.addEventListener('error', () => resolve(null));
-    setTimeout(() => resolve(null), 5000);
+    a.preload = 'metadata';
+    const timeout = setTimeout(() => finish(null), 5000);
+    function finish(duration) {
+      clearTimeout(timeout);
+      a.removeAttribute('src');
+      a.load();
+      resolve(duration);
+    }
+    a.addEventListener('loadedmetadata', () => finish(Number.isFinite(a.duration) ? Math.round(a.duration) : null), { once: true });
+    a.addEventListener('error', () => finish(null), { once: true });
+    a.src = url;
   });
 }
 
@@ -214,7 +231,8 @@ function createCollWithName(name) {
 // ── Playback ───────────────────────────────────────────────────────────
 async function playSong(collId, idx) {
   const coll = state.collections.find(c => c.id === collId);
-  if (!coll) return;
+  if (!coll?.songs[idx]) return;
+  ++openMusicRequest;
   activeColl = collId;
   queue = [...coll.songs];
   queueIdx = idx;
@@ -223,6 +241,9 @@ async function playSong(collId, idx) {
 }
 
 async function loadTrack(song) {
+  if (!song) return;
+  const request = ++trackLoadRequest;
+  setPlaybackMessage('');
   if (audioCtx && gainNode && !audio.paused) {
     const now = audioCtx.currentTime;
     gainNode.gain.cancelScheduledValues(now);
@@ -230,13 +251,22 @@ async function loadTrack(song) {
     gainNode.gain.linearRampToValueAtTime(0, now + 0.26);
     await sleep(260);
   }
+  if (request !== trackLoadRequest) return;
+  const url = await window.api.mediaFileUrl(song.path).catch(() => null);
+  if (request !== trackLoadRequest) return;
+  renderPlayer(song);
+  if (!url) {
+    audio.removeAttribute('src');
+    audio.load();
+    setPlaybackMessage('مسیر این آهنگ معتبر نیست. فایل را دوباره اضافه کن.');
+    return;
+  }
 
   currentCoverUrl = null;
-  const path = song.path.replace(/\\/g, '/');
-  audio.src = `file:///${path}`;
+  audio.src = url;
   audio.load();
   audio.playbackRate = playbackSpeed;
-  audio.play().catch(() => {});
+  playAudio();
 
   if (!audioCtx) initAudioCtx();
   if (audioCtx && gainNode) {
@@ -252,11 +282,10 @@ async function loadTrack(song) {
   trackPlayStat(song);
   startListenTracking(song);
 
-  renderPlayer(song);
   updateBgGlow(null);
   updateFsInfo(song);
-  fetchCover(song);
-  fetchLyrics(song);
+  fetchCover(song, request);
+  fetchLyrics(song, request);
 }
 
 function renderPlayer(song) {
@@ -324,7 +353,7 @@ function renderPlayer(song) {
     </div>
     <div class="rating-row" id="rating-row" style="display:flex;align-items:center;justify-content:center;gap:3px;margin-top:8px">${renderRatingStars(song)}</div>`;
 
-  audio.volume = 0.8;
+  updateVolUI(audio.volume);
   setupProgDrag();
   setupVolDrag();
   renderMarkers();
@@ -340,12 +369,13 @@ function setupProgDrag() {
     isDraggingProg = true;
     seekTo(e, track);
   });
-  document.addEventListener('mousemove', e => {
-    if (!isDraggingProg) return;
-    seekTo(e, document.getElementById('prog-track'));
-  });
-  document.addEventListener('mouseup', () => { isDraggingProg = false; });
 }
+
+document.addEventListener('mousemove', e => {
+  if (isDraggingProg) seekTo(e, document.getElementById('prog-track'));
+  if (isDraggingVol) setVol(e, document.getElementById('vol-track'));
+});
+document.addEventListener('mouseup', () => { isDraggingProg = false; isDraggingVol = false; });
 
 function seekTo(e, track) {
   if (!track) return;
@@ -393,9 +423,27 @@ function updatePlayBtn() {
 }
 
 function togglePlay() {
-  if (audio.paused) audio.play();
+  if (audio.paused) playAudio();
   else audio.pause();
 }
+
+function setPlaybackMessage(message) {
+  const status = document.getElementById('music-play-status');
+  status.hidden = !message;
+  status.textContent = message;
+}
+
+function playAudio() {
+  const request = trackLoadRequest;
+  audio.play().catch(error => {
+    if (request === trackLoadRequest && error.name === 'NotAllowedError') setPlaybackMessage('برای شروع پخش، دکمهٔ پخش را بزن.');
+  });
+}
+
+audio.addEventListener('error', () => {
+  if (audio.getAttribute('src')) setPlaybackMessage('این آهنگ پخش نشد. وجود فایل و فرمت آن را بررسی کن.');
+});
+audio.addEventListener('playing', () => setPlaybackMessage(''));
 
 // ── Volume ─────────────────────────────────────────────────────────────
 function setupVolDrag() {
@@ -406,11 +454,6 @@ function setupVolDrag() {
     isDraggingVol = true;
     setVol(e, track);
   });
-  document.addEventListener('mousemove', e => {
-    if (!isDraggingVol) return;
-    setVol(e, document.getElementById('vol-track'));
-  });
-  document.addEventListener('mouseup', () => { isDraggingVol = false; });
 }
 
 function setVol(e, track) {
@@ -480,16 +523,17 @@ function toggleRepeat() {
 }
 
 // ── Cover ──────────────────────────────────────────────────────────────
-async function fetchCover(song) {
+async function fetchCover(song, request = trackLoadRequest) {
   try {
     const artist = (!song.artist || song.artist === 'Unknown') ? '' : song.artist;
     const url = await window.api.fetchCover(artist, song.title);
-    if (!url) return;
+    if (!url || request !== trackLoadRequest) return;
     const img = document.getElementById('art-img');
     const emoji = document.getElementById('art-emoji');
     const art = document.getElementById('art-playing');
     if (!img || !art) return;
     img.onload = () => {
+      if (request !== trackLoadRequest) return;
       img.style.display = 'block';
       if (emoji) emoji.style.display = 'none';
       art.classList.add('has-art');
@@ -502,7 +546,7 @@ async function fetchCover(song) {
       }
       const artBox = document.getElementById('fs-art-box');
       if (artBox && document.getElementById('fs-overlay')?.classList.contains('show')) {
-        artBox.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover">`;
+        artBox.innerHTML = `<img src="${esc(url)}" style="width:100%;height:100%;object-fit:cover">`;
       }
     };
     img.src = url;
@@ -520,7 +564,7 @@ function updateBgGlow(coverUrl) {
 }
 
 // ── Lyrics ─────────────────────────────────────────────────────────────
-async function fetchLyrics(song) {
+async function fetchLyrics(song, request = trackLoadRequest) {
   const body = document.getElementById('lyr-body');
   if (!body) return;
 
@@ -535,6 +579,7 @@ async function fetchLyrics(song) {
 
   try {
     const raw = await window.api.fetchLyrics(artist, title);
+    if (request !== trackLoadRequest) return;
     if (!raw) {
       body.innerHTML = `<div class="lyr-no-data">
         متن آهنگ پیدا نشد.
@@ -549,6 +594,7 @@ async function fetchLyrics(song) {
 
     translateLyricsChunked(lyrLines);
   } catch {
+    if (request !== trackLoadRequest) return;
     body.innerHTML = `<div class="lyr-no-data">خطا در بارگذاری متن آهنگ.</div>`;
   }
   lyrFetching = false;
@@ -557,6 +603,7 @@ async function fetchLyrics(song) {
 async function fetchLyricsWithAI() {
   const body = document.getElementById('lyr-body');
   const song = queue[queueIdx];
+  const request = trackLoadRequest;
   if (!body || !song) return;
   const key = getAIKey();
   if (!key) {
@@ -572,6 +619,7 @@ async function fetchLyricsWithAI() {
       [{ role: 'user', content: prompt }],
       key, getAIProvider()
     );
+    if (request !== trackLoadRequest) return;
     if (result && result.length > 30) {
       lyrLines = result.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       lyrFaLines = [];
@@ -581,27 +629,20 @@ async function fetchLyricsWithAI() {
       body.innerHTML = `<div class="lyr-no-data">هوش مصنوعی متن این آهنگ رو پیدا نکرد.</div>`;
     }
   } catch (e) {
-    body.innerHTML = `<div class="lyr-no-data">خطا: ${String(e.message).slice(0, 100)}</div>`;
+    if (request === trackLoadRequest) body.innerHTML = `<div class="lyr-no-data">خطا: ${esc(String(e.message).slice(0, 100))}</div>`;
   }
 }
 
 async function translateLyricsChunked(lines) {
   lyrFaLines = new Array(lines.length).fill('');
-  const chunkSize = 10;
+  const chunkSize = 12;
   for (let i = 0; i < lines.length; i += chunkSize) {
     const chunk = lines.slice(i, i + chunkSize);
-    const joined = chunk.join('\n');
-    try {
-      const translated = await window.api.translate(joined);
-      if (translated) {
-        const parts = translated.split('\n');
-        for (let j = 0; j < chunk.length; j++) {
-          lyrFaLines[i + j] = parts[j] || '';
-        }
-        renderLyrics();
-      }
-    } catch {}
-    await sleep(300);
+    const parts = await window.api.subtitleTranslate(chunk).catch(() => null);
+    if (lines !== lyrLines) return;
+    if (!parts || parts.length !== chunk.length) continue;
+    parts.forEach((part, index) => { lyrFaLines[i + index] = part || ''; });
+    renderLyrics();
   }
 }
 
@@ -611,7 +652,7 @@ function renderLyrics() {
 
   body.innerHTML = lyrLines.map((line, i) => {
     const fa = lyrFaLines[i] || '';
-    const showEn = lyrMode === 'en' || lyrMode === 'both';
+    const showEn = lyrMode !== 'fa' || !fa;
     const showFa = (lyrMode === 'fa' || lyrMode === 'both') && fa;
     return `<div class="lyr-line" id="lyr-${i}">
       ${showEn ? `<div class="lyr-en">${esc(line)}</div>` : ''}
@@ -1452,6 +1493,16 @@ function startWaveform() {
 
 // ── Firebase init ───────────────────────────────────────────────────────
 initFirebase();
+
+window.api.onOpenFile(async filePath => {
+  const request = ++openMusicRequest;
+  let coll = state.collections.find(entry => entry.songs.some(song => song.path === filePath));
+  if (!coll) {
+    await addSongsToColl([filePath]);
+    coll = state.collections.find(entry => entry.songs.some(song => song.path === filePath));
+  }
+  if (request === openMusicRequest && coll) playSong(coll.id, coll.songs.findIndex(song => song.path === filePath));
+});
 
 window.asarCollectionSource = {
   items: () => state.collections.flatMap(entry => entry.songs.map(song => ({ id: song.path, title: song.title || song.fileName }))),

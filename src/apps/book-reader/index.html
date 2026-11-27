@@ -104,8 +104,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 
 /* toolbar */
 .reader-toolbar{padding:14px 14px 10px;border-bottom:1px solid var(--bd);
-  display:flex;align-items:center;gap:8px;background:rgba(8,8,26,.92);backdrop-filter:blur(10px);flex-shrink:0}
-.tb-mid{flex:1;text-align:center;min-width:0}
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:rgba(8,8,26,.92);backdrop-filter:blur(10px);flex-shrink:0}
+.reader-toolbar > :not(.tb-mid){flex-shrink:0}
+.tb-mid{flex:1 0 125px;text-align:center;min-width:0}
 .book-name-tb{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chapter-tb{font-size:11px;color:var(--t2);margin-top:2px}
@@ -150,7 +151,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .trans-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),#a082ff);border-radius:2px;transition:width .3s}
 
 /* page content area */
-.page-area{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;align-items:flex-start;justify-content:center;
+.page-area{flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:safe center;
   padding:28px 20px;background:var(--bg0)}
 .page-area::-webkit-scrollbar{width:6px}
 .page-area::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:3px}
@@ -434,7 +435,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .hl-note-btn{width:26px;height:26px;border-radius:7px;background:var(--bg3);border:1px solid var(--bd2);
   color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .13s;font-size:14px}
 .hl-note-btn:hover{color:var(--t1);background:var(--bg4)}
-</style>
+  </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
 <script defer src="../../shared/window-controls.js"></script>
 </head>
@@ -579,7 +580,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <!-- Translation progress bar -->
   <div class="trans-progress" id="trans-progress">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802"/></svg>
-    <span id="trans-progress-text">در حال ترجمه...</span>
+    <span id="trans-progress-text" role="status">در حال ترجمه...</span>
     <div class="trans-bar-wrap"><div class="trans-bar-fill" id="trans-bar-fill" style="width:0%"></div></div>
     <span id="trans-progress-pct" style="font-size:11px;color:var(--t3);min-width:30px;text-align:left;direction:ltr">0%</span>
   </div>

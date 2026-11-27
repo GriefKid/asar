@@ -345,7 +345,7 @@
     }
   });
   refresh();
-  panel.open = page !== 'main-app';
+  panel.open = page !== 'main-app' && tree.folders.length > 0;
   source.redraw?.();
   function openRequestedFolder() {
     try {

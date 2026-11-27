@@ -94,6 +94,7 @@
     /* ── Editor ── */
     .editor-area {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -102,12 +103,14 @@
       padding: 10px 20px;
       border-bottom: 1px solid var(--bd);
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 8px;
       flex-shrink: 0;
     }
     .editor-title-inp {
-      flex: 1;
+      flex: 1 1 165px;
+      min-width: 0;
       background: transparent;
       border: none;
       outline: none;
@@ -142,6 +145,7 @@
       padding: 4px 10px; border-radius: 6px;
       background: rgba(245,166,35,.1); border: 1px solid rgba(245,166,35,.25);
       color: var(--warn); font-size: 11px; cursor: pointer;
+      max-width: 180px; overflow-wrap: anywhere;
     }
     .linked-badge:hover { background: rgba(245,166,35,.2); }
 
@@ -247,7 +251,7 @@
 <div class="sidebar">
   <div class="sidebar-header">
     <span class="sidebar-title">نوشته‌ها</span>
-    <div class="new-doc-btn" onclick="newDoc()">+ جدید</div>
+    <button type="button" class="new-doc-btn" onclick="newDoc()">+ جدید</button>
   </div>
   <div class="doc-list" id="doc-list">
     <div class="doc-empty">هنوز هیچ نوشته‌ای نیست.<br>روی «جدید» کلیک کن.</div>
@@ -263,9 +267,9 @@
   </div>
   <div id="editor-wrapper" style="display:none;flex:1;flex-direction:column;overflow:hidden">
     <div class="editor-toolbar">
-      <input class="editor-title-inp" id="doc-title" placeholder="عنوان سند..." onchange="markDirty()">
+      <input class="editor-title-inp" id="doc-title" aria-label="عنوان نوشته" placeholder="عنوان سند..." oninput="markDirty()">
       <div class="toolbar-sep"></div>
-      <select class="doc-type-sel" id="doc-type" onchange="onTypeChange()">
+      <select class="doc-type-sel" id="doc-type" aria-label="نوع نوشته" onchange="onTypeChange()">
         <option value="note">📝 یادداشت</option>
         <option value="critique">🎯 نقد</option>
         <option value="story">✍️ داستان</option>
@@ -281,7 +285,7 @@
     </div>
     <div class="editor-body">
       <textarea class="editor-content" id="editor-content"
-        placeholder="شروع کن به نوشتن..."
+        aria-label="متن نوشته" placeholder="شروع کن به نوشتن..."
         oninput="markDirty(); updateWordCount()"></textarea>
     </div>
     <div class="editor-footer">
@@ -367,7 +371,7 @@ function esc(s) {
 }
 
 function newDoc() {
-  saveCurrentDoc();
+  if (!saveCurrentDoc()) return;
   const doc = {
     id: uid(),
     title: '',
@@ -383,10 +387,9 @@ function newDoc() {
 }
 
 function openDoc(id) {
-  saveCurrentDoc();
-  currentDocId = id;
   const doc = docs.find(d => d.id === id);
-  if (!doc) return;
+  if (!doc || !saveCurrentDoc()) return;
+  currentDocId = id;
 
   document.getElementById('no-doc').style.display = 'none';
   const wrap = document.getElementById('editor-wrapper');
@@ -435,19 +438,36 @@ function markDirty() {
 }
 
 function saveCurrentDoc() {
-  if (!currentDocId || !isDirty) return;
+  clearTimeout(saveTimer);
+  if (!currentDocId || !isDirty) return true;
   const doc = docs.find(d => d.id === currentDocId);
-  if (!doc) return;
+  if (!doc) return true;
   doc.title    = document.getElementById('doc-title').value.trim();
   doc.type     = document.getElementById('doc-type').value;
   doc.content  = document.getElementById('editor-content').value;
   doc.updatedAt = Date.now();
-  saveDocs();
+  try {
+    saveDocs();
+  } catch {
+    document.getElementById('save-status').textContent = 'ذخیره نشد. فضای ذخیره را بررسی کن و دوباره ذخیره کن.';
+    return false;
+  }
   isDirty = false;
   document.getElementById('save-status').textContent = 'ذخیره شد ✓';
   setTimeout(() => { if (!isDirty) document.getElementById('save-status').textContent = ''; }, 2000);
   renderDocList();
+  return true;
 }
+
+window.addEventListener('beforeunload', event => {
+  if (!saveCurrentDoc()) event.returnValue = false;
+});
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    saveCurrentDoc();
+  }
+});
 
 function deleteDoc(id) {
   docs = docs.filter(d => d.id !== id);
@@ -490,7 +510,7 @@ function formatDoc(cmd) {
 let libPickCallback = null;
 
 function linkToLibrary() {
-  loadAll();
+  try { library = JSON.parse(localStorage.getItem(LIB_KEY)) || []; } catch { library = []; }
   renderLibPick('');
   document.getElementById('link-modal').classList.add('show');
   document.getElementById('link-search').value = '';

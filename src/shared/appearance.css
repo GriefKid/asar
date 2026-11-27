@@ -339,6 +339,11 @@ body:has(> .asar-windowbar) { --asar-windowbar-height: 36px; display: flex; flex
 }
 .asar-media .ai-panel { top: var(--asar-windowbar-height); height: calc(100% - var(--asar-windowbar-height)); }
 .asar-media :is(.lyr-panel,.ai-panel,.editor-toolbar) { box-shadow: var(--asar-shadow); }
+.media-play-status {
+  position: absolute; z-index: 7; inset: 12px auto auto 12px; max-width: min(340px, 75%);
+  margin: 0; padding: 6px 10px; border: 1px solid var(--bd2); border-radius: 8px;
+  background: var(--bg2); color: var(--t1); direction: rtl; font-size: 12px;
+}
 .asar-media :is(.icon-btn,.nav-btn,.tb-btn,.ltab) { border-radius: 9px; }
 .asar-media :is(.art,.book-cover,.movie-thumb,.pdf-page-wrap) {
   box-shadow: 0 15px 33px #0504109a, inset 0 1px #f1e1ff29;
@@ -355,6 +360,32 @@ body:has(> .asar-windowbar) { --asar-windowbar-height: 36px; display: flex; flex
 .asar-book-reader .asar-layout-menu { top: calc(70px + var(--asar-windowbar-height)); bottom: auto; }
 .asar-music-player .app:has(#player-content > .no-track) .player { flex: 1; width: auto; justify-content: center; }
 .asar-music-player .app:has(#player-content > .no-track) .lyr-panel:not([data-asar-positioned]) { display: none; }
+.community-grid > .community-loading { grid-column: 1 / -1; padding: 30px 18px; overflow-wrap: anywhere; }
+@media (max-width: 1120px) {
+  .asar-main .planner-layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(185px, .48fr);
+    grid-template-rows: auto minmax(0, 1fr); direction: rtl;
+  }
+  .asar-main .planner-day { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
+  .asar-main .planner-cal { grid-column: 2; grid-row: 1; width: auto; max-height: 48vh; border-inline-start: 1px solid var(--bd); }
+  .asar-main .habit-panel { grid-column: 2; grid-row: 2; width: auto; border-inline-start: 1px solid var(--bd); }
+  .asar-main .planner-day-header { flex-wrap: wrap; gap: 7px; padding: 14px 12px; }
+  .asar-book-reader .left-panel { width: clamp(118px, 18vw, 190px); }
+  .asar-book-reader .sidebar { width: clamp(154px, 22vw, 240px); }
+  .asar-book-reader .panel-tabs { flex-wrap: wrap; }
+  .asar-video-player .sidebar,.asar-music-player .sidebar,.asar-writer .sidebar { width: clamp(148px, 23vw, 230px); }
+  .asar-video-player .setup-banner { right: clamp(148px, 23vw, 230px); }
+  .asar-music-player .player { width: min(380px, 41vw); }
+  .asar-writer .editor-body { padding: 16px 22px; }
+}
+@media (max-width: 660px) {
+  .asar-main .planner-layout { display: flex; flex-direction: column; overflow-y: auto; }
+  .asar-main .planner-cal { order: -1; max-height: none; }
+  .asar-main .cal-grid { max-width: 320px; margin-inline: auto; }
+  .asar-main .planner-day { flex: 0 0 auto; }
+  .asar-main .planner-day .timeline { min-height: 250px; max-height: 52vh; }
+  .asar-main .habit-panel { min-height: 145px; max-height: 250px; }
+}
 .asar-empty-title { font: 840 clamp(18px, 2.4vw, 34px)/1.35 var(--asar-font); margin: 0; color: var(--t1); }
 .asar-empty-action { pointer-events: auto; margin-top: 3px; }
 .asar-media-object {

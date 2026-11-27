@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const { pathToFileURL } = require('node:url');
 const { selectProfilePath } = require('./src/shared/profile-path.cjs');
 const { createSubtitleTranslator } = require('./src/shared/subtitle-translation.cjs');
 
@@ -24,6 +25,8 @@ const WEB_PREFS = {
 };
 
 const APP_ICON = path.join(__dirname, 'assets', 'icon.ico');
+const fileReceivers = new WeakSet();
+const pendingFiles = new WeakMap();
 
 app.on('web-contents-created', (_, contents) => {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -48,6 +51,7 @@ function createAppWindow(file, width, height, display, backgroundColor = '#04040
   for (const [event, fullscreen] of [['enter-full-screen', true], ['leave-full-screen', false]]) {
     window.on(event, () => window.webContents.send('window:fullscreen-changed', fullscreen));
   }
+  window.webContents.on('did-start-loading', () => fileReceivers.delete(window.webContents));
   window.loadFile(file);
   window.once('ready-to-show', () => window.show());
   return window;
@@ -210,40 +214,47 @@ ipcMain.handle('lib:download', async (_, item) => {
 });
 
 // ── IPC: Open sub-apps with specific file (second monitor) ─────────────
-ipcMain.handle('app:open-book-file', async (_, filePath) => {
-  const displays = screen.getAllDisplays();
+function secondaryDisplay() {
   const primary = screen.getPrimaryDisplay();
-  const second = displays.find(d => d.id !== primary.id);
+  return screen.getAllDisplays().find(display => display.id !== primary.id);
+}
 
-  if (!bookWindow || bookWindow.isDestroyed()) {
-    createBookReader(second);
-    await new Promise(resolve => bookWindow.once('ready-to-show', resolve));
-  } else {
-    focusWindow(bookWindow);
-  }
-  setTimeout(() => {
-    if (bookWindow && !bookWindow.isDestroyed()) {
-      bookWindow.webContents.send('open:file', filePath);
-    }
-  }, 600);
+function openFileIn(window, filePath) {
+  if (typeof filePath !== 'string' || !filePath) return;
+  const contents = window.webContents;
+  if (fileReceivers.has(contents)) contents.send('open:file', filePath);
+  else pendingFiles.set(contents, filePath);
+}
+
+ipcMain.on('open:file-ready', ({ sender }) => {
+  fileReceivers.add(sender);
+  if (!pendingFiles.has(sender)) return;
+  const filePath = pendingFiles.get(sender);
+  pendingFiles.delete(sender);
+  sender.send('open:file', filePath);
 });
 
-ipcMain.handle('app:open-video-file', async (_, filePath) => {
-  const displays = screen.getAllDisplays();
-  const primary = screen.getPrimaryDisplay();
-  const second = displays.find(d => d.id !== primary.id);
+ipcMain.handle('app:open-book-file', (_, filePath) => {
+  if (bookWindow) focusWindow(bookWindow);
+  else createBookReader(secondaryDisplay());
+  openFileIn(bookWindow, filePath);
+});
 
-  if (!videoWindow || videoWindow.isDestroyed()) {
-    createVideoPlayer(second);
-    await new Promise(resolve => videoWindow.once('ready-to-show', resolve));
-  } else {
-    focusWindow(videoWindow);
-  }
-  setTimeout(() => {
-    if (videoWindow && !videoWindow.isDestroyed()) {
-      videoWindow.webContents.send('open:file', filePath);
-    }
-  }, 600);
+ipcMain.handle('app:open-video-file', (_, filePath) => {
+  if (videoWindow) focusWindow(videoWindow);
+  else createVideoPlayer(secondaryDisplay());
+  openFileIn(videoWindow, filePath);
+});
+
+ipcMain.handle('app:open-music-file', (_, filePath) => {
+  if (musicWindow) focusWindow(musicWindow);
+  else createMusicPlayer();
+  openFileIn(musicWindow, filePath);
+});
+
+ipcMain.handle('file:media-url', (_, filePath) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return null;
+  return pathToFileURL(filePath).href;
 });
 
 app.whenReady().then(() => {
@@ -628,7 +639,7 @@ ipcMain.handle('dialog:openPdfFiles', async () => {
 });
 
 ipcMain.handle('file:readBuffer', async (_, filePath) => {
-  const buf = fs.readFileSync(filePath);
+  const buf = await fs.promises.readFile(filePath);
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 

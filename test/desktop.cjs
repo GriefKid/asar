@@ -125,6 +125,25 @@ function testPage(file, label) {
   fs.writeFileSync(file, contents);
 }
 
+function testWave(file) {
+  const sampleRate = 8000;
+  const pcmLength = sampleRate * 2 * 6;
+  const wav = Buffer.alloc(44 + pcmLength);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(pcmLength, 40);
+  fs.writeFileSync(file, wav);
+}
+
 app.whenReady().then(async () => {
   const main = code => runIn('main-app', code);
   assert.equal(await main('document.title'), 'اثر');
@@ -151,6 +170,18 @@ app.whenReady().then(async () => {
     return { ...today, saved:JSON.parse(localStorage.getItem('asar-events'))[dateKey(tomorrow)][0].title };
   })()`);
   assert.deepEqual(planner, { locked: true, rows: 24, saved: 'Desktop fixture' });
+  const mainWindow = windows.get('main-app');
+  const mainSize = mainWindow.getSize();
+  mainWindow.setSize(930, 640);
+  await waitIn('main-app', 'innerWidth <= 930 && document.querySelector(".planner-day").clientWidth >= 400');
+  assert.equal(await main(`(() => {
+    const libraryTitle = 'اثر <نسخه ۲> & بازبینی';
+    renderCommunityGrid([{ title: libraryTitle, artist:'عنوان <تکمیلی>', type:'book', avg:9, count:4 }]);
+    return document.querySelector('.community-title').textContent === libraryTitle
+      && !document.querySelector('.community-title').children.length
+      && document.querySelector('.community-stars').textContent.includes('★★★★★');
+  })()`), true);
+  mainWindow.setSize(...mainSize);
 
   const nested = await main(`(() => {
     showSection('library');
@@ -292,7 +323,7 @@ app.whenReady().then(async () => {
   assert.equal(scene.cleared, true);
   assert.match(sceneRequest.text, /Describe this frame/);
   assert.match(sceneRequest.frame, /^\/9j\//);
-  const film = path.join(profile, 'Desktop fixture film.webm');
+  const film = path.join(profile, 'فیلم آزمایشی #1 100%.webm');
   fs.writeFileSync(film, Buffer.from(scene.bytes));
 
   const subtitleLines = ['Where is the library?', 'What did you see?'];
@@ -330,12 +361,13 @@ app.whenReady().then(async () => {
     loadVideo(${JSON.stringify({ path: film, fileName: path.basename(film), title: 'Desktop fixture film' })});
   })()`);
   await waitIn('video-player', 'vid.readyState >= 2 && vid.paused && !!document.getElementById("spitem-11")');
+  assert.equal(await runIn('video-player', 'new URL(vid.currentSrc).hash'), '');
   assert.deepEqual(searchKeys, ['']);
   assert.equal(await runIn('video-player', 'document.querySelector("#spitem-0 .sub-pick-name").textContent'), release);
   await clickIn('video-player', '#spitem-0');
   await waitIn('video-player', 'document.getElementById("spitem-0").classList.contains("selected")');
   assert.equal(await runIn('video-player', 'document.getElementById("sub-en-line").textContent'), 'An alternative English preview.');
-  assert.equal(await runIn('video-player', 'getComputedStyle(document.getElementById("sub-en-line")).display'), 'inline-block');
+  assert.notEqual(await runIn('video-player', 'getComputedStyle(document.getElementById("sub-en-line")).display'), 'none');
   await clickIn('video-player', '#spitem-11');
   await waitIn('video-player', 'document.getElementById("sub-auto-status").classList.contains("error")');
   assert.equal(await runIn('video-player', 'document.getElementById("spitem-0").classList.contains("selected")'), true);
@@ -377,6 +409,39 @@ app.whenReady().then(async () => {
   for (const cue of translated.persian) assert.match(cue, /[آ-ی]/);
   assert.equal(translated.displayed, translated.persian[0]);
 
+  const videoWindow = windows.get('video-player');
+  const videoSize = videoWindow.getSize();
+  videoWindow.setSize(930, 640);
+  await waitIn('video-player', `innerWidth <= 930 && (() => {
+    const controls = document.getElementById('controls');
+    return controls.scrollWidth <= controls.clientWidth && document.getElementById('sub-display').getBoundingClientRect().bottom <= controls.getBoundingClientRect().top;
+  })()`);
+  videoWindow.setSize(...videoSize);
+
+  const firstSong = path.join(profile, 'آهنگ اول #1 100%.wav');
+  const secondSong = path.join(profile, 'آهنگ دوم.wav');
+  testWave(firstSong);
+  fs.copyFileSync(firstSong, secondSong);
+  ipcMain.removeHandler('cover:fetch');
+  ipcMain.handle('cover:fetch', () => null);
+  ipcMain.removeHandler('lyrics:fetch');
+  let finishFirstLyrics;
+  ipcMain.handle('lyrics:fetch', (_, _artist, title) => title.includes('اول')
+    ? new Promise(resolve => { finishFirstLyrics = resolve; }) : 'Lyrics for the second fixture.');
+  await main(`library.push({ id:'audit-audio', type:'music', title:'آهنگ اول', stage:'queue', filePath:${JSON.stringify(firstSong)} });
+    saveLib(); openInSubApp('audit-audio')`);
+  await waitIn('music-player', 'audio.readyState >= 2 && audio.duration === 6');
+  assert.equal(await runIn('music-player', 'new URL(audio.currentSrc).hash'), '');
+  assert.equal(typeof finishFirstLyrics, 'function');
+  await runIn('music-player', `audio.volume = .37; addSongsToColl([${JSON.stringify(secondSong)}])`);
+  const secondSongId = await waitIn('main-app', `library.find(item => item.filePath === ${JSON.stringify(secondSong)})?.id`);
+  await main(`openInSubApp(${JSON.stringify(secondSongId)})`);
+  await waitIn('music-player', 'document.querySelector(".lyr-en")?.textContent === "Lyrics for the second fixture."');
+  finishFirstLyrics('Late lyrics for the first fixture.');
+  assert.equal(await runIn('music-player', 'audio.volume'), .37);
+  assert.equal(await runIn('music-player', 'document.querySelector(".lyr-en").textContent'), 'Lyrics for the second fixture.');
+  await runIn('music-player', 'audio.pause()');
+
   await main('window.api.openBookReader()');
   const file = path.join(profile, "Asar's offline & کتاب.pdf");
   const otherFile = path.join(profile, 'Another offline book.pdf');
@@ -396,6 +461,7 @@ app.whenReady().then(async () => {
   const filedBook = await runIn('book-reader', `(() => {
     const original = document.querySelector('#library-list .book-item');
     const panel = document.getElementById('asar-collection-tree');
+    panel.open = true;
     panel.querySelector('input').value = 'خواندنی‌ها';
     [...panel.querySelectorAll('button')].find(button => button.textContent === 'ساخت مجموعه').click();
     const source = document.querySelector('#library-list .book-item');
@@ -420,10 +486,28 @@ app.whenReady().then(async () => {
   await runIn('book-reader', 'document.getElementById("asar-collection-tree").open = true');
   await clickIn('book-reader', '#asar-collection-tree .asar-tree-item button');
   await readBook('First offline document');
+  ipcMain.removeHandler('translate:toFarsi');
+  let bookTranslationCalls = 0;
+  ipcMain.handle('translate:toFarsi', () => ++bookTranslationCalls === 1 ? null : 'ترجمهٔ آزمایشی کتاب');
+  await runIn('book-reader', 'translateAllPages()');
+  assert.equal(await runIn('book-reader', 'getTransCache(currentBookPath, 1)'), null);
+  assert.equal(await runIn('book-reader', 'document.getElementById("trans-all-btn").disabled'), false);
+  await runIn('book-reader', 'translateAllPages()');
+  assert.equal(await runIn('book-reader', 'getTransCache(currentBookPath, 1)'), 'ترجمهٔ آزمایشی کتاب');
+  assert.equal(await runIn('book-reader', 'document.getElementById("trans-all-btn").disabled'), true);
   const readerBounds = windows.get('book-reader').getBounds();
   await main('window.api.openBookReaderWithFile(' + JSON.stringify(otherFile) + ')');
   await readBook('Second offline document');
   assert.deepEqual(windows.get('book-reader').getBounds(), readerBounds);
+  const readerWindow = windows.get('book-reader');
+  const originalCanvasWidth = await runIn('book-reader', 'document.querySelector("#pdf-container canvas").width');
+  readerWindow.setSize(930, 640);
+  await waitIn('book-reader', `innerWidth <= 930 && (() => {
+    const toolbar = document.querySelector('.reader-toolbar');
+    const canvas = document.querySelector('#pdf-container canvas');
+    return toolbar.scrollWidth <= toolbar.clientWidth && canvas && canvas.width < ${originalCanvasWidth};
+  })()`);
+  readerWindow.setBounds(readerBounds);
 
   for (const [name, reopen] of [
     ['music-player', 'openMusicPlayer'], ['video-player', 'openVideoPlayer'],
@@ -457,8 +541,23 @@ app.whenReady().then(async () => {
     if (name === 'book-reader') await readBook('Second offline document');
 
     if (reopen) {
+      if (name === 'writer') {
+        await runIn(name, `(() => {
+          newDoc();
+          for (const [id, value] of [['doc-title','عنوان فوری'], ['editor-content','متن نوشته پیش از بستن پنجره']]) {
+            const input = document.getElementById(id);
+            input.value = value;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        })()`);
+      }
       await clickIn(name, '[data-window-action="close"]');
       await waitForWindowState(() => window.isDestroyed(), `${name} to close`);
+      if (name === 'writer') {
+        const saved = await main(`JSON.parse(localStorage.getItem('asar-writer-docs')).at(-1)`);
+        assert.equal(saved.title, 'عنوان فوری');
+        assert.equal(saved.content, 'متن نوشته پیش از بستن پنجره');
+      }
     } else {
       await main('openCmdPal()');
       await clickIn(name, '[data-window-action="close"]');

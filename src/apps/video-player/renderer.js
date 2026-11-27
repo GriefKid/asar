@@ -58,10 +58,14 @@ let currentMovieInfo = null;
 let abA = null, abB = null, abActive = false;
 let vidSpeed = 1.0;
 let resumeSaveTimer = null;
+let videoLoadRequest = 0;
 const VID_SPEED_OPTS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 const vid = document.getElementById('vid');
 const area = document.getElementById('video-area');
+new ResizeObserver(([entry]) => {
+  area.style.setProperty('--video-controls-height', `${entry.target.offsetHeight}px`);
+}).observe(document.getElementById('controls'));
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
@@ -588,17 +592,23 @@ async function playVideo(collId, idx) {
   renderColls();
 }
 
-function loadVideo(video) {
+async function loadVideo(video) {
+  if (!video) return;
+  const request = ++videoLoadRequest;
+  clearTimeout(resumeSaveTimer);
+  setPlaybackMessage('');
+  const url = await window.api.mediaFileUrl(video.path).catch(() => null);
+  if (request !== videoLoadRequest) return;
   clearSceneFrame();
-  const path = video.path.replace(/\\/g, '/');
-  vid.src = `file:///${path}`;
+  if (url) vid.src = url;
+  else vid.removeAttribute('src');
   vid.load();
 
   // restore resume position
   const savedPos = state.resume?.[video.path];
   if (savedPos && savedPos > 10) {
     vid.addEventListener('canplay', function restorePos() {
-      vid.removeEventListener('canplay', restorePos);
+      if (request !== videoLoadRequest) return;
       if (savedPos < (vid.duration || 0) - 15) {
         vid.currentTime = savedPos;
         showResumeToast(savedPos);
@@ -606,8 +616,12 @@ function loadVideo(video) {
     }, { once: true });
   }
 
-  vid.play();
-  addToHistory(video);
+  if (url) {
+    playVideoElement();
+    addToHistory(video);
+  } else {
+    setPlaybackMessage('مسیر این ویدیو معتبر نیست. فایل را دوباره اضافه کن.');
+  }
 
   // reset AB loop
   abA = null; abB = null; abActive = false;
@@ -675,7 +689,7 @@ async function fetchMovieDetails(video) {
     video.poster = video.poster || details.poster_path;
     saveState();
     renderColls();
-    renderMetaTags(video);
+    if (currentMovieInfo === video) renderMetaTags(video);
   } catch {}
 }
 
@@ -745,9 +759,27 @@ function updatePlayBtn() {
 }
 
 function togglePlay() {
-  if (vid.paused) vid.play();
+  if (vid.paused) playVideoElement();
   else vid.pause();
 }
+
+function setPlaybackMessage(message) {
+  const status = document.getElementById('video-play-status');
+  status.hidden = !message;
+  status.textContent = message;
+}
+
+function playVideoElement() {
+  const request = videoLoadRequest;
+  vid.play().catch(error => {
+    if (request === videoLoadRequest && error.name === 'NotAllowedError') setPlaybackMessage('برای شروع پخش، دکمهٔ پخش را بزن.');
+  });
+}
+
+vid.addEventListener('error', () => {
+  if (vid.getAttribute('src')) setPlaybackMessage('این ویدیو پخش نشد. وجود فایل و فرمت آن را بررسی کن.');
+});
+vid.addEventListener('playing', () => setPlaybackMessage(''));
 
 function prevVideo() {
   if (!queue.length) return;
