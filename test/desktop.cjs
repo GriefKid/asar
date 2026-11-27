@@ -501,8 +501,9 @@ app.whenReady().then(async () => {
   assert.deepEqual(windows.get('book-reader').getBounds(), readerBounds);
   const readerWindow = windows.get('book-reader');
   const originalCanvasWidth = await runIn('book-reader', 'document.querySelector("#pdf-container canvas").width');
-  readerWindow.setSize(930, 640);
-  await waitIn('book-reader', `innerWidth <= 930 && (() => {
+  const narrowerWidth = Math.min(930, readerBounds.width - 120);
+  readerWindow.setSize(narrowerWidth, 620);
+  await waitIn('book-reader', `innerWidth <= ${narrowerWidth} && (() => {
     const toolbar = document.querySelector('.reader-toolbar');
     const canvas = document.querySelector('#pdf-container canvas');
     return toolbar.scrollWidth <= toolbar.clientWidth && canvas && canvas.width < ${originalCanvasWidth};
