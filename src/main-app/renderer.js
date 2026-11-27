@@ -4,7 +4,7 @@
 const J_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const J_DAYS   = ['یک‌شنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه','شنبه'];
 
-const { todayJalali, jalaliMonthLen, jalaliWeekday, jalaliFirstWeekday, addJalaliDays, dateKey } = AsarCalendar;
+const { todayJalali, jalaliMonthLen, jalaliWeekday, jalaliFirstWeekday, addJalaliDays, dateKey, compareDays } = AsarCalendar;
 
 function toFarsiNum(n) {
   return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -13,6 +13,9 @@ function toFarsiNum(n) {
 // ── State & persistence ───────────────────────────────────────────────────
 const KEY_LIB    = 'asar-library';
 const KEY_EVENTS = 'asar-events';
+const KEY_ACTUAL = 'asar-actual-events';
+let actualEvents = {};
+let eventSide = 'plan';
 const KEY_SETTINGS = 'asar-settings';
 const KEY_HABITS = 'asar-habits';
 const KEY_GOALS  = 'asar-goals';
@@ -39,6 +42,7 @@ let selectedDay; // {y,m,d} jalali
 function load() {
   try { library  = JSON.parse(localStorage.getItem(KEY_LIB))  || []; } catch { library  = []; }
   try { events   = JSON.parse(localStorage.getItem(KEY_EVENTS)) || {}; } catch { events   = {}; }
+  try { actualEvents = JSON.parse(localStorage.getItem(KEY_ACTUAL)) || {}; } catch { actualEvents = {}; }
   try { settings = JSON.parse(localStorage.getItem(KEY_SETTINGS)) || {}; } catch { settings = {}; }
   try { habits   = JSON.parse(localStorage.getItem(KEY_HABITS)) || []; } catch { habits   = []; }
   try { goals    = JSON.parse(localStorage.getItem(KEY_GOALS))  || []; } catch { goals    = []; }
@@ -126,6 +130,7 @@ function syncSubAppsToLibrary() {
 
 function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
 function saveEvents()   { localStorage.setItem(KEY_EVENTS, JSON.stringify(events));  }
+function saveActualEvents() { localStorage.setItem(KEY_ACTUAL, JSON.stringify(actualEvents)); debouncedSync(); }
 function saveSettings() { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); }
 function saveHabits()   { localStorage.setItem(KEY_HABITS,  JSON.stringify(habits));  }
 function saveGoals()    { localStorage.setItem(KEY_GOALS,   JSON.stringify(goals));   }
@@ -737,7 +742,7 @@ function renderCalendar() {
     const key = `${calViewY}-${calViewM}-${d}`;
     const isToday    = calViewY===today.y && calViewM===today.m && d===today.d;
     const isSelected = selectedDay.y===calViewY && selectedDay.m===calViewM && selectedDay.d===d;
-    const hasEv      = (events[key]||[]).length > 0;
+    const hasEv      = !!(events[key]?.length || actualEvents[key]?.length);
     html += `<div class="cal-day ${isToday?'today':''} ${isSelected?'selected':''}"
                   onclick="selectCalDay(${calViewY},${calViewM},${d})">${toFarsiNum(d)}${hasEv?'<span class="has-event"></span>':''}</div>`;
   }
@@ -757,109 +762,170 @@ window.calNav = function(dir) {
   renderCalendar();
 };
 
+
+function dayForKey(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return { y, m, d };
+}
+
+function canEditPlan(day) {
+  return compareDays(day, todayJalali()) > 0;
+}
+
 function renderDayView() {
   const { y, m, d } = selectedDay;
   const dow = J_DAYS[jalaliWeekday(y, m, d)];
+  const key = dateKey(selectedDay);
+  const editable = canEditPlan(selectedDay);
   document.getElementById('day-title').textContent = `${toFarsiNum(d)} ${J_MONTHS[m-1]} ${toFarsiNum(y)}`;
-  document.getElementById('day-sub').textContent   = dow;
-
-  const key = `${y}-${m}-${d}`;
-  const dayEvs = events[key] || [];
-
-  let html = '';
-  for (let h = 5; h < 24; h++) {
-    const hStr = String(h).padStart(2,'0');
-    const slotEvs = dayEvs.filter(e => e.time && e.time.startsWith(hStr+':'));
-    html += `<div class="time-slot">
-      <div class="slot-label">${hStr}:۰۰</div>
-      <div class="slot-events">
-        ${slotEvs.map(ev => `
-          <div class="event-block event-type-${ev.type} ${ev.done?'done':''}"
-               onclick="openEditEvent('${key}','${ev.id}')">
-            <div class="event-title">${esc(ev.title)}</div>
-            <div class="event-meta">${ev.time}${ev.duration?' — '+toFarsiNum(ev.duration)+' دقیقه':''}</div>
-            <div class="event-del-btn" onclick="event.stopPropagation();deleteEvent('${key}','${ev.id}')" title="حذف">✕</div>
-          </div>`).join('')}
-        ${slotEvs.length === 0 ? `<div class="event-empty" onclick="quickAddEvent('${hStr}:00')"></div>` : ''}
-      </div>
-    </div>`;
+  document.getElementById('day-sub').textContent = dow;
+  document.getElementById('plan-add').disabled = !editable;
+  document.getElementById('plan-lock').textContent = editable ? 'تا نیمه‌شب قبل از این روز قابل ویرایش' : 'قفل شده';
+  document.getElementById('actual-add').disabled = compareDays(selectedDay, todayJalali()) > 0;
+  const actualAvailable = !document.getElementById('actual-add').disabled;
+  const perHour = (list, hour) => list.filter(event => event.time?.startsWith(hour + ':'));
+  const rows = [];
+  for (let h = 0; h < 24; h++) {
+    const hour = String(h).padStart(2, '0');
+    const plan = perHour(events[key] || [], hour);
+    const actual = perHour(actualEvents[key] || [], hour);
+    rows.push(`<div class="planner-hour"><span>${toFarsiNum(hour)}:۰۰</span>
+      <div class="planner-slot" data-side="plan">${renderSlot(plan, 'plan', key, hour, editable, actualAvailable)}</div>
+      <div class="planner-slot" data-side="actual">${renderSlot(actual, 'actual', key, hour, actualAvailable, false)}</div></div>`);
   }
-  document.getElementById('timeline').innerHTML = html;
+  document.getElementById('timeline').innerHTML = rows.join('');
 }
 
-window.quickAddEvent = function(time) {
-  openAddEvent(time);
-};
+function renderSlot(items, side, key, hour, editable, offerCopy) {
+  const time = hour + ':00';
+  if (!items.length) return editable ? `<button type="button" class="planner-empty-slot" aria-label="افزودن در ${time}" onclick="openAddEvent('${time}','${side}')">+</button>` : '';
+  return items.map(event => {
+    const id = encodeURIComponent(String(event.id)).replace(/'/g, '%27');
+    return `<div class="event-block event-type-${['task', 'habit', 'note', 'idle'].includes(event.type) ? event.type : 'task'}">
+      <button type="button" class="planner-event-name" ${editable ? `onclick="openEditEvent('${key}','${id}','${side}')"` : 'disabled'}>
+        <span class="event-title">${esc(event.title)}</span><span class="event-meta">${esc(event.time)} · ${toFarsiNum(Number(event.duration) || 60)} دقیقه</span></button>
+      ${offerCopy && event.type !== 'idle' && event.type !== 'note' ? `<button type="button" class="planner-mini" onclick="recordPlan('${key}','${id}')">ثبت در واقعیت</button>` : ''}
+      ${editable ? `<button type="button" class="planner-mini" aria-label="حذف" onclick="deleteEvent('${key}','${id}','${side}')">×</button>` : ''}</div>`;
+  }).join('');
+}
 
-window.openAddEvent = function(prefillTime) {
+function eventList(side, key) {
+  const source = side === 'actual' ? actualEvents : events;
+  return source[key] || [];
+}
+
+function validEdit(side, key) {
+  return side === 'actual' ? compareDays(dayForKey(key), todayJalali()) <= 0 : canEditPlan(dayForKey(key));
+}
+
+window.quickAddEvent = function(time) { openAddEvent(time, 'plan'); };
+
+window.openAddEvent = function(prefillTime, side = 'plan', prefill = null) {
+  const key = dateKey(selectedDay);
+  if (!validEdit(side, key)) return;
+  eventSide = side;
   editingEventId = null;
   selectedRecur = 'none';
-  document.getElementById('event-title').value = '';
-  document.getElementById('event-time').value  = prefillTime || '09:00';
-  document.getElementById('event-dur').value   = '60';
-  selectedEventType = 'task';
-  document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.toggle('on', o.dataset.ev === 'task'));
-  document.querySelectorAll('[data-r]').forEach(o => o.classList.toggle('on', o.dataset.r === 'none'));
-  document.getElementById('add-event-modal').classList.add('show');
-  setTimeout(() => document.getElementById('event-title').focus(), 100);
-};
-
-window.openEditEvent = function(key, id) {
-  const ev = (events[key]||[]).find(e => e.id === id);
-  if (!ev) return;
-  editingEventId = { key, id };
-  document.getElementById('event-title').value = ev.title;
-  document.getElementById('event-time').value  = ev.time || '09:00';
-  document.getElementById('event-dur').value   = ev.duration || 60;
-  selectedEventType = ev.type || 'task';
-  document.querySelectorAll('.type-opt[data-ev]').forEach(o => {
-    o.classList.toggle('on', o.dataset.ev === selectedEventType);
+  document.getElementById('event-title').value = prefill?.title || '';
+  document.getElementById('event-time').value = prefillTime || '09:00';
+  document.getElementById('event-dur').value = prefill?.duration || '60';
+  selectedEventType = prefill?.type || 'task';
+  document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.toggle('on', o.dataset.ev === selectedEventType));
+  document.querySelectorAll('[data-r]').forEach(o => {
+    o.classList.toggle('on', o.dataset.r === 'none');
+    o.hidden = side === 'actual';
   });
   document.getElementById('add-event-modal').classList.add('show');
+  document.getElementById('event-title').focus();
+};
+
+window.openEditEvent = function(key, rawId, side = 'plan') {
+  const id = decodeURIComponent(rawId);
+  const event = eventList(side, key).find(item => String(item.id) === id);
+  if (!event || !validEdit(side, key)) return;
+  openAddEvent(event.time, side, event);
+  editingEventId = { key, id };
+};
+
+window.recordPlan = function(key, rawId) {
+  const event = eventList('plan', key).find(item => String(item.id) === decodeURIComponent(rawId));
+  if (event) openAddEvent(event.time, 'actual', event);
 };
 
 window.closeAddEvent = function() {
   document.getElementById('add-event-modal').classList.remove('show');
 };
 
-window.selectEventType = function(el, t) {
+window.selectEventType = function(el, type) {
   document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.remove('on'));
   el.classList.add('on');
-  selectedEventType = t;
+  selectedEventType = type;
 };
 
-window.saveEvent = function() {
-  const title = document.getElementById('event-title').value.trim();
-  if (!title) { document.getElementById('event-title').focus(); return; }
-  const time = document.getElementById('event-time').value;
-  const dur  = parseInt(document.getElementById('event-dur').value) || 60;
-
-  if (editingEventId) {
-    const { key, id } = editingEventId;
-    const ev = (events[key]||[]).find(e => e.id === id);
-    if (ev) { ev.title = title; ev.time = time; ev.duration = dur; ev.type = selectedEventType; }
-  } else {
-    const { y, m, d } = selectedDay;
-    const key = `${y}-${m}-${d}`;
-    if (!events[key]) events[key] = [];
-    const newEv = { id: uid(), title, time, duration: dur, type: selectedEventType, done: false, recur: selectedRecur };
-    events[key].push(newEv);
-    if (selectedRecur !== 'none') generateRecurringEvents(newEv, { y, m, d });
-  }
-  saveEvents();
+function finishEventChange(side) {
+  if (side === 'actual') saveActualEvents();
+  else saveEvents();
   closeAddEvent();
   renderDayView();
   renderCalendar();
-  if (activeSection === 'home') renderHome();
+}
+
+window.saveEvent = function() {
+  const titleInput = document.getElementById('event-title');
+  const title = titleInput.value.trim();
+  if (!title) { titleInput.focus(); return; }
+  const durationInput = document.getElementById('event-dur');
+  const time = document.getElementById('event-time').value;
+  const duration = Number(durationInput.value);
+  const range = AsarPlanner.interval({ time, duration });
+  if (!range || range[1] - range[0] !== duration) {
+    durationInput.setCustomValidity('بازه باید در همین روز پایان پیدا کند.');
+    durationInput.reportValidity();
+    durationInput.setCustomValidity('');
+    return;
+  }
+  const side = eventSide;
+  const key = editingEventId?.key || dateKey(selectedDay);
+  if (!validEdit(side, key)) { closeAddEvent(); renderDayView(); return; }
+  const source = side === 'actual' ? actualEvents : events;
+  const list = source[key] ||= [];
+  const fields = { title, time, duration, type: selectedEventType };
+  if (editingEventId) {
+    const event = list.find(item => String(item.id) === editingEventId.id);
+    if (event) Object.assign(event, fields);
+  } else {
+    const event = { id: uid(), ...fields, done: side === 'actual', recur: side === 'plan' ? selectedRecur : 'none' };
+    list.push(event);
+    if (side === 'plan' && event.recur !== 'none') generateRecurringEvents(event, dayForKey(key));
+  }
+  finishEventChange(side);
 };
 
-window.deleteEvent = function(key, id) {
-  if (!events[key]) return;
-  events[key] = events[key].filter(e => e.id !== id);
-  saveEvents();
-  renderDayView();
+window.deleteEvent = function(key, rawId, side = 'plan') {
+  if (!validEdit(side, key)) return;
+  const source = side === 'actual' ? actualEvents : events;
+  source[key] = eventList(side, key).filter(event => String(event.id) !== decodeURIComponent(rawId));
+  finishEventChange(side);
+};
+
+window.copyPlanWeek = function() {
+  const start = addJalaliDays(selectedDay, -((jalaliWeekday(selectedDay.y, selectedDay.m, selectedDay.d) + 1) % 7));
+  let copied = 0;
+  for (let i = 0; i < 7; i++) {
+    const from = dateKey(addJalaliDays(start, i));
+    const day = addJalaliDays(start, i + 7);
+    if (!canEditPlan(day)) continue;
+    const to = dateKey(day);
+    const target = events[to] ||= [];
+    for (const event of events[from] || []) {
+      if (target.some(item => item.title === event.title && item.time === event.time && item.duration === event.duration)) continue;
+      target.push({ ...event, id: uid(), done: false, recur: 'none', recurId: null });
+      copied++;
+    }
+  }
+  if (copied) saveEvents();
   renderCalendar();
-  if (activeSection === 'home') renderHome();
+  alert(copied ? toFarsiNum(copied) + ' رویداد به هفتهٔ بعد اضافه شد.' : 'در روزهای آینده رویداد تازه‌ای برای کپی نبود.');
 };
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────
@@ -1149,20 +1215,14 @@ window.importData = function(input) {
 
 // ── Daily Performance Score ───────────────────────────────────────────────
 function calcDailyScore(jy, jm, jd) {
-  const key = `${jy}-${jm}-${jd}`;
-  const dayEvs   = events[key] || [];
-  const totalEvs = dayEvs.length;
-  const doneEvs  = dayEvs.filter(e => e.done).length;
+  const day = { y: jy, m: jm, d: jd };
+  const key = dateKey(day);
+  const doneHab = habits.filter(habit => habit.doneByDay?.[key]).length;
   const totalHab = habits.length;
-  const doneHab  = habits.filter(h => h.doneByDay?.[key]).length;
-
-  const evScore  = totalEvs  > 0 ? (doneEvs  / totalEvs)  * 50 : 0;
-  const habScore = totalHab > 0 ? (doneHab / totalHab) * 30 : 0;
-  const bonus    = (evScore + habScore) >= 65 ? 20
-                 : (evScore + habScore) >= 40 ? 10 : 0;
   return {
-    score: Math.round(evScore + habScore + bonus),
-    doneEvs, totalEvs, doneHab, totalHab
+    ...AsarPlanner.score(events[key] || [], actualEvents[key] || [], doneHab, totalHab, compareDays(day, todayJalali())),
+    doneHab,
+    totalHab
   };
 }
 
@@ -1183,8 +1243,9 @@ function renderDailyScore() {
   const td  = days7[6].data;
   const yd  = days7[5].data;
   const delta = td.score - yd.score;
+  const deltaLabel = td.pending ? "پس از ثبت هر دو" : (yd.pending ? "" : "نسبت به دیروز");
 
-  const lbl = td.score >= 90 ? '✦ فوق‌العاده'
+  const lbl = td.pending ? 'در انتظار ثبت' : td.score >= 90 ? '✦ فوق‌العاده'
             : td.score >= 75 ? 'خوب'
             : td.score >= 50 ? 'متوسط'
             : td.score >= 25 ? 'ضعیف'
@@ -1192,15 +1253,15 @@ function renderDailyScore() {
             : 'بدون فعالیت';
 
   const dCls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
-  const dTxt = delta > 0 ? `↑ ${toFarsiNum(delta)}` : delta < 0 ? `↓ ${toFarsiNum(-delta)}` : '= مساوی';
+  const dTxt = td.pending || yd.pending ? '' : delta > 0 ? `↑ ${toFarsiNum(delta)}` : delta < 0 ? `↓ ${toFarsiNum(-delta)}` : '= مساوی';
 
-  const evPct  = td.totalEvs  > 0 ? Math.round(td.doneEvs  / td.totalEvs  * 100) : 0;
+  const evPct = Math.round(td.adherence * 2);
   const habPct = td.totalHab > 0 ? Math.round(td.doneHab / td.totalHab * 100) : 0;
 
   const barsHTML = days7.map(d => {
     const h = Math.max(Math.round(d.data.score / 100 * 48), 2);
     return `<div class="dsc-bw">
-      <div class="dsc-bnum${d.isToday?' today':''}">${d.data.score > 0 ? toFarsiNum(d.data.score) : ''}</div>
+      <div class="dsc-bnum${d.isToday?' today':''}">${d.data.pending ? '—' : toFarsiNum(d.data.score)}</div>
       <div class="dsc-b ${d.isToday?'today':'past'}" style="height:${h}px"></div>
     </div>`;
   }).join('');
@@ -1210,15 +1271,15 @@ function renderDailyScore() {
 
   card.innerHTML = `
     <div class="dsc-top">
-      <div class="dsc-score">${toFarsiNum(td.score)}</div>
+      <div class="dsc-score">${td.pending ? "—" : toFarsiNum(td.score)}</div>
       <div class="dsc-meta">
         <div class="dsc-label">${lbl}</div>
-        <div class="dsc-delta ${dCls}">${dTxt} نسبت به دیروز</div>
+        <div class="dsc-delta ${dCls}">${dTxt} ${deltaLabel}</div>
       </div>
     </div>
     <div class="dsc-breakdown">
       <div class="dsc-mini">
-        <div class="dsc-mini-lbl">برنامه‌ریزی ${td.totalEvs>0 ? toFarsiNum(td.doneEvs)+' از '+toFarsiNum(td.totalEvs) : '—'}</div>
+        <div class="dsc-mini-lbl">پایبندی ${toFarsiNum(Math.round(td.adherence))} از ۵۰</div>
         <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${evPct}%;background:var(--accent)"></div></div>
       </div>
       <div class="dsc-mini">
@@ -1226,7 +1287,7 @@ function renderDailyScore() {
         <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${habPct}%;background:var(--ok)"></div></div>
       </div>
     </div>
-    <div class="dsc-chart-title">۷ روز گذشته</div>
+    <div class="dsc-chart-title">${toFarsiNum(td.onTime)} دقیقه سر وقت · ${toFarsiNum(td.anotherTime)} دقیقه در ساعت دیگر · ${toFarsiNum(td.bonus)} امتیاز پاداش</div><div class="dsc-chart-title">۷ روز گذشته</div>
     <div class="dsc-bars">${barsHTML}</div>
     <div class="dsc-dlbls">${lblsHTML}</div>`;
 }

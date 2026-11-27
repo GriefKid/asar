@@ -1011,12 +1011,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
             <div class="planner-day-title" id="day-title">...</div>
             <div class="planner-day-sub" id="day-sub"></div>
           </div>
-          <button class="add-event-btn no-drag" onclick="openAddEvent()">
-            <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-            رویداد جدید
-          </button>
+<div class="planner-actions"><button type="button" class="add-event-btn no-drag" onclick="copyPlanWeek()">الگو برای هفتهٔ بعد</button></div>
         </div>
-        <div class="timeline no-drag" id="timeline"></div>
+        <div class="planner-pair-heading"><section><strong>برنامه</strong><span id="plan-lock"></span><button class="add-event-btn" id="plan-add" onclick="openAddEvent(null,'plan')">+ برنامه</button></section><section><strong>واقعیت</strong><button class="add-event-btn" id="actual-add" onclick="openAddEvent(null,'actual')">+ ثبت فعالیت</button></section></div>
+<div class="timeline no-drag planner-pair" id="timeline"></div>
       </div>
       <!-- Habits Panel -->
       <div class="habit-panel no-drag">
@@ -1282,7 +1280,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       </div>
       <div class="form-group" style="flex:1">
         <label class="form-label">مدت (دقیقه)</label>
-        <input class="form-input" id="event-dur" type="number" value="60" min="5" max="480">
+        <input class="form-input" id="event-dur" type="number" value="60" min="1" max="1440">
       </div>
     </div>
     <div class="form-group">
@@ -1290,7 +1288,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
       <div class="type-selector">
         <div class="type-opt on" data-ev="task" onclick="selectEventType(this,'task')">وظیفه</div>
         <div class="type-opt" data-ev="habit" onclick="selectEventType(this,'habit')">عادت</div>
-        <div class="type-opt" data-ev="note" onclick="selectEventType(this,'note')">یادداشت</div>
+        <div class="type-opt" data-ev="note" onclick="selectEventType(this,'note')">یادداشت</div><div class="type-opt" data-ev="idle" onclick="selectEventType(this,'idle')">بازهٔ آزاد</div>
       </div>
     </div>
     <div class="form-group">
@@ -1426,6 +1424,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
 <script src="../shared/supabase-init.js"></script>
 <script src="../shared/calendar.js"></script>
+<script src="../shared/planner.js"></script>
 <script src="renderer.js"></script>
 <script src="../shared/appearance.js"></script>
 </body>

@@ -15,8 +15,8 @@
       '.planner-cal': 'تقویم', '.settings-scroll': 'تنظیمات', '#profile-content': 'پروفایل',
       '#community-grid': 'آثار اجتماعی', '#asar-collection-tree': 'مجموعه‌ها'
     },
-    'music-player': { '.sidebar': 'مجموعه‌ها', '#player-content': 'پخش موسیقی', '#lyrics-wrap': 'متن آهنگ', '#ai-panel': 'گفت‌وگو' },
-    'video-player': { '.sidebar': 'مجموعه‌ها', '#controls': 'کنترل پخش', '#ai-panel': 'گفت‌وگو', '#sub-overlay': 'زیرنویس' },
+    'music-player': { '.sidebar': 'مجموعه‌ها', '#player-content': 'پخش موسیقی', '.lyr-panel': 'متن آهنگ', '#ai-panel': 'گفت‌وگو' },
+    'video-player': { '.sidebar': 'مجموعه‌ها', '#controls': 'کنترل پخش', '#ai-panel': 'گفت‌وگو', '#sub-display': 'زیرنویس' },
     'book-reader': { '.sidebar': 'کتابخانه', '.reader-toolbar': 'نوار کتاب', '#pdf-container': 'صفحه کتاب', '#ai-panel': 'گفت‌وگو' },
     writer: { '.sidebar': 'نوشته‌ها', '#editor-area': 'ویرایشگر' }
   }[page] || {};
