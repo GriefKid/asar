@@ -30,9 +30,11 @@ const AsarCollections = (() => {
   function seed(tree, collections, field) {
     for (const collection of collections) {
       const id = 'legacy:' + collection.id;
-      if (tree.seeded.includes(id)) continue;
-      tree.seeded.push(id);
-      tree.folders.push({ id, title: collection.name || collection.title || 'مجموعه', parentId: null });
+      if (!tree.seeded.includes(id)) {
+        tree.seeded.push(id);
+        tree.folders.push({ id, title: collection.name || collection.title || 'مجموعه', parentId: null });
+      }
+      if (!tree.folders.some(folder => folder.id === id)) continue;
       for (const item of collection[field] || []) {
         const key = 'item:' + item.path;
         if (!Object.hasOwn(tree.items, key)) tree.items[key] = id;

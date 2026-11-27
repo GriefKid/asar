@@ -565,10 +565,16 @@ function pickLibItem(itemId) {
 loadAll();
 renderDocList();
 
-// Handle open-with request from book reader
+function handleWriterRequest() {
 try {
   const openWith = JSON.parse(localStorage.getItem('writer-open-with') || 'null');
-  if (openWith && openWith.action === 'new-critique') {
+  if (openWith?.action === 'new-doc') {
+    localStorage.removeItem('writer-open-with');
+    newDoc();
+  } else if (openWith?.action === 'open-doc') {
+    localStorage.removeItem('writer-open-with');
+    openDoc(openWith.id);
+  } else if (openWith?.action === 'new-critique') {
     localStorage.removeItem('writer-open-with');
     // Check if a critique for this book already exists
     const existing = docs.find(d => d.type === 'critique' && d.linkedItemId === openWith.linkId);
@@ -593,6 +599,9 @@ try {
     }
   }
 } catch {}
+}
+handleWriterRequest();
+window.addEventListener('storage', event => { if (event.key === 'writer-open-with' && event.newValue) handleWriterRequest(); });
 window.asarCollectionSource = {
   items: () => docs,
   open: id => openDoc(id)

@@ -32,6 +32,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .asar-cover p { color: #edcba9; font-size: 16px; margin: 8px 0 0; }
 .asar-cover .shamsi-date { color: #f4e8de; font-size: clamp(20px, 3vw, 33px); }
 .asar-cover .shamsi-day { color: #eaba83; }
+.home-scroll {
+  width: min(100%, 1520px); margin-inline: auto; direction: rtl; display: grid;
+  grid-template-columns: minmax(0, 1.48fr) minmax(260px, 1fr);
+  grid-auto-rows: min-content; align-items: stretch; gap: 14px;
+}
+.home-scroll > * { min-width: 0; margin: 0; }
+.home-scroll > :is(.asar-cover, .ai-sum-btn, .ai-sum-box, #home-activity-panel) { grid-column: 1 / -1; }
+.home-scroll .asar-cover { min-height: 270px; }
+.home-scroll .stats-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.home-scroll .stat-card { display: flex; flex-direction: column; justify-content: center; min-height: 84px; }
+.home-scroll .stat-num { font-size: 28px; }
+.home-scroll .xp-row { grid-column: 1 / -1; }
+.asar-dashboard-block { background: #1a1321; border: 1px solid var(--bd); border-radius: 13px; padding: 13px; }
+.asar-dashboard-block .home-section-title { padding: 0; margin: 4px 0 12px; }
+.asar-dashboard-block .heatmap-wrap { overflow-x: auto; }
+.nav-item .nav-label { font-size: 13px; }
+@media (max-width: 860px) {
+  .home-scroll { grid-template-columns: minmax(0, 1fr); }
+  .home-scroll .asar-cover { min-height: 215px; }
+}
 .asar-appearance, .asar-layout-menu {
   direction: rtl; color: var(--t1); background: var(--bg2); border: 1px solid var(--bd2); border-radius: 12px;
 }
@@ -98,3 +118,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .asar-tree-item { display: flex; align-items: center; gap: 4px; padding: 3px 7px; }
 .asar-tree-item button:first-child { text-align: start; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .asar-collection-status { display: block; color: var(--asar-gold); }
+.asar-profile-nav { background: transparent; border: 0; text-align: start; font: inherit; }
+#profile-content { direction: rtl; }
+.asar-profile-card { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 17px; margin-bottom: 18px; }
+.asar-profile-card h2 { flex-basis: 100%; margin: 0 0 5px; font-size: 17px; }
+.asar-profile-card p, .asar-profile-status { color: var(--t2); }
+.asar-profile-card label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.asar-profile-card input[type=checkbox] { width: 15px; height: 15px; }
+.asar-profile-card input[type=file] { max-width: 250px; }
+.asar-avatar { width: 100%; height: 100%; border-radius: 50%; display: inline-grid; object-fit: cover; place-items: center; color: var(--asar-gold); background: var(--bg3); }
+.asar-person { display: flex; gap: 8px; align-items: center; }
+.asar-person .asar-avatar { width: 45px; height: 45px; }
+.asar-follow-list, .asar-share-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
+.asar-share-list, .asar-follow-list, .asar-peer-view { flex-basis: 100%; }
+.asar-share-list { max-height: 310px; overflow: auto; }
+.asar-share-row { padding: 6px; border-bottom: 1px solid var(--bd); }
+.asar-profile-works { padding: 0; list-style: none; }
+.asar-profile-works li { padding: 8px; border-bottom: 1px solid var(--bd); }
+.asar-profile-works small { margin-inline-start: 8px; color: var(--t2); }

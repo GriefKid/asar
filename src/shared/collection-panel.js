@@ -48,6 +48,7 @@
     const all = readAll();
     all[page] = tree;
     localStorage.setItem(key, JSON.stringify(all));
+    window.dispatchEvent(new CustomEvent('asar-store', { detail: key }));
   }
 
   function button(text, cb, parent) {
@@ -230,4 +231,14 @@
     if (event.key === key && snapshot !== JSON.stringify(currentTree())) refresh();
   });
   refresh();
+  function openRequestedFolder() {
+    try {
+      const request = JSON.parse(localStorage.getItem('asar-folder-open'));
+      if (request?.scope !== page) return;
+      localStorage.removeItem('asar-folder-open');
+      window.asarCollections.show(request.id);
+    } catch {}
+  }
+  openRequestedFolder();
+  window.addEventListener('storage', event => { if (event.key === 'asar-folder-open' && event.newValue) openRequestedFolder(); });
 })();

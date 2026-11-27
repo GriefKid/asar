@@ -150,6 +150,7 @@ window.showSection = function(id, el) {
   if (id === 'library')   renderLibrary();
   if (id === 'planner')   renderPlanner();
   if (id === 'settings')  renderSettings();
+  if (id === 'profile') window.asarProfile?.render();
   if (id === 'community') loadCommunity(currentCommunityTab);
   if (id === 'admin')     loadAdminData();
 };
@@ -188,6 +189,10 @@ window.searchCmdPal = function(q) {
 
   // Actions
   const actions = [
+    { icon:'＋', title:'ثبت فعالیت واقعی', sub:'ثبت سریع فعالیت امروز', badge:'عمل', action:()=>{ const day=todayJalali(); showSection('planner'); selectCalDay(day.y,day.m,day.d); openAddEvent(null,'actual'); } },
+    { icon:'＋', title:'برنامهٔ فردا', sub:'افزودن رویداد آینده', badge:'عمل', action:()=>{ const day=addJalaliDays(todayJalali(),1); showSection('planner'); selectCalDay(day.y,day.m,day.d); openAddEvent(null,'plan'); } },
+    { icon:'＋', title:'نوشتهٔ جدید', sub:'بازکردن ویرایشگر', badge:'عمل', action:()=>{ localStorage.setItem('writer-open-with', JSON.stringify({action:'new-doc'})); window.api.openWriter(); } },
+    { icon:'◉', title:'پروفایل', sub:'حساب و کتابخانهٔ دوستان', badge:'بخش', action:()=>showSection('profile') },
     { icon:'🏠', title:'خانه', sub:'برو به بخش خانه', badge:'بخش', action:()=>showSection('home', document.querySelector('[onclick*="home"]')) },
     { icon:'📚', title:'کتابخانه', sub:'برو به کتابخانه', badge:'بخش', action:()=>showSection('library', document.querySelector('[onclick*="library"]')) },
     { icon:'📅', title:'برنامه‌ریزی', sub:'برو به تقویم', badge:'بخش', action:()=>showSection('planner', document.querySelector('[onclick*="planner"]')) },
@@ -200,18 +205,34 @@ window.searchCmdPal = function(q) {
   // Library items
   const libItems = library.filter(i => !q || (i.title||'').toLowerCase().includes(q) || (i.creator||'').toLowerCase().includes(q)).slice(0, 8).map(i => ({
     icon: typeEmoji(i.type), title: i.title, sub: i.creator || typeLabel(i.type),
-    badge: typeLabel(i.type), action: () => { showSection('library', document.querySelector('[onclick*="library"]')); }
+    badge: typeLabel(i.type), action: () => { showSection('library'); openReview(i.id); }
   }));
 
-  // Events (today)
-  const today = todayJalali();
-  const todayKey = `${today.y}-${today.m}-${today.d}`;
-  const evItems = (events[todayKey] || []).filter(e => !q || e.title.toLowerCase().includes(q)).slice(0, 4).map(e => ({
-    icon: e.type==='habit'?'🔁':e.type==='note'?'📝':'✅', title: e.title, sub: `امروز ${e.time||''}`, badge:'رویداد',
-    action: () => showSection('planner', document.querySelector('[onclick*="planner"]'))
+  const matches = (value) => !q || String(value || '').toLowerCase().includes(q);
+  const safeRead = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } };
+  const evItems = Object.entries({ ...events, ...Object.fromEntries(Object.keys(actualEvents).map(key => [key, events[key] || []])) }).flatMap(([key, list]) => {
+    const day = dayForKey(key);
+    return [...list.map(event => ({ event, side: 'plan' })), ...(actualEvents[key] || []).map(event => ({ event, side: 'actual' }))]
+      .filter(({ event }) => matches(event.title) && (q || key === getTodayKey()))
+      .map(({ event, side }) => ({
+        icon:'📅', title:event.title, sub:key + ' · ' + (event.time || '') + ' · ' + (side === 'plan' ? 'برنامه' : 'واقعیت'),
+        badge:'رویداد', action: () => { showSection('planner'); selectCalDay(day.y, day.m, day.d); }
+      }));
+  }).slice(0, 8);
+  const collections = safeRead('asar-collections', {});
+  const openings = { 'music-player':'openMusicPlayer', 'video-player':'openVideoPlayer', 'book-reader':'openBookReader', writer:'openWriter' };
+  const folders = Object.entries(collections).flatMap(([scope, tree]) => (tree.folders || []).filter(folder => matches(folder.title))
+    .map(folder => ({ icon:'▤', title:folder.title, sub:'مجموعه', badge:'مجموعه', action:() => {
+      if (scope === 'main-app') { showSection('library'); window.asarCollections?.show(folder.id); }
+      else if (openings[scope]) { localStorage.setItem('asar-folder-open', JSON.stringify({ scope, id: folder.id })); window.api[openings[scope]](); }
+    }}))).slice(0, q ? 8 : 3);
+  const docs = safeRead('asar-writer-docs', []).filter(doc => matches(doc.title)).slice(0, q ? 8 : 3).map(doc => ({
+    icon:'✎', title:doc.title, sub:'نویسنده', badge:'سند', action: () => {
+      localStorage.setItem('writer-open-with', JSON.stringify({ action:'open-doc', id:doc.id }));
+      window.api.openWriter();
+    }
   }));
-
-  cmdPalItems = [...actions, ...libItems, ...evItems];
+  cmdPalItems = [...actions, ...libItems, ...evItems, ...folders, ...docs];
   if (!cmdPalItems.length) { res.innerHTML = '<div class="cmdpal-empty">نتیجه‌ای پیدا نشد</div>'; return; }
 
   let html = '';
@@ -908,6 +929,21 @@ window.deleteEvent = function(key, rawId, side = 'plan') {
   finishEventChange(side);
 };
 
+window.copyPlanDay = function() {
+  const next = addJalaliDays(selectedDay, 1);
+  if (!canEditPlan(next)) { alert('تنها می‌توان برای روزهای آینده برنامه کپی کرد.'); return; }
+  const target = events[dateKey(next)] ||= [];
+  let copied = 0;
+  for (const event of events[dateKey(selectedDay)] || []) {
+    if (target.some(item => item.title === event.title && item.time === event.time && item.duration === event.duration)) continue;
+    target.push({ ...event, id: uid(), done: false, recur: 'none', recurId: null });
+    copied++;
+  }
+  if (copied) saveEvents();
+  renderCalendar();
+  alert(copied ? toFarsiNum(copied) + ' رویداد به روز بعد اضافه شد.' : 'رویداد تازه‌ای برای کپی نبود.');
+};
+
 window.copyPlanWeek = function() {
   const start = addJalaliDays(selectedDay, -((jalaliWeekday(selectedDay.y, selectedDay.m, selectedDay.d) + 1) % 7));
   let copied = 0;
@@ -1183,34 +1219,37 @@ function applyStoredTheme() {
 
 // ── Export / Import ───────────────────────────────────────────────────────
 window.exportData = function() {
-  const data = { library, events, habits, goals, settings, exportedAt: Date.now() };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `asar-backup-${Date.now()}.json`; a.click();
-  URL.revokeObjectURL(url);
+  const data = { schema: 'asar-backup', version: 2, storage: AsarBackup.collect(localStorage), exportedAt: new Date().toISOString() };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'asar-backup-' + dateKey(todayJalali()) + '.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-window.importDataClick = function() { document.getElementById('import-file-inp').click(); };
+window.importDataClick = () => document.getElementById('import-file-inp').click();
 
-window.importData = function(input) {
+window.importData = async function(input) {
   const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (data.library) { library = data.library; saveLib(); }
-      if (data.events)  { events  = data.events;  saveEvents(); }
-      if (data.habits)  { habits  = data.habits;  saveHabits(); }
-      if (data.goals)   { goals   = data.goals;   saveGoals(); }
-      renderHome(); renderHabits();
-      alert('داده‌ها با موفقیت وارد شدند ✓');
-    } catch { alert('فایل نامعتبر است'); }
-  };
-  reader.readAsText(file);
   input.value = '';
+  if (!file) return;
+  try {
+    const values = AsarBackup.parseBackup(JSON.parse(await file.text()));
+    if (!confirm('داده‌های موجود در نسخهٔ پشتیبان جایگزین شوند؟')) return;
+    AsarBackup.restore(localStorage, values);
+    load();
+    applyStoredTheme();
+    loadPomoSessions();
+    window.asarCollections?.refresh();
+    if (activeSection === 'library') renderLibrary();
+    if (activeSection === 'planner') renderPlanner();
+    renderHome();
+    debouncedSync();
+    alert('پشتیبان بازیابی شد. پنجره‌های پلیر و نویسنده را دوباره باز کن تا نسخهٔ بازیابی‌شده را ببینی.');
+  } catch {
+    alert('فایل پشتیبان خوانده نشد یا فضای ذخیره کافی نبود.');
+  }
 };
 
 // ── Daily Performance Score ───────────────────────────────────────────────
@@ -1541,11 +1580,35 @@ selectedDay = { y: today.y, m: today.m, d: today.d };
 loadPomoSessions();
 renderHome();
 initFirebaseApp();
+let displayedToday = dateKey(today);
+function refreshAtMidnight() {
+  const day = todayJalali();
+  const current = dateKey(day);
+  if (current === displayedToday) return;
+  if (dateKey(selectedDay) === displayedToday) {
+    selectedDay = day;
+    calViewY = day.y;
+    calViewM = day.m;
+  }
+  displayedToday = current;
+  loadPomoSessions();
+  renderHome();
+  if (activeSection === 'planner') renderPlanner();
+}
+setInterval(refreshAtMidnight, 5000);
+window.addEventListener('focus', refreshAtMidnight);
+
 
 // ── Supabase Integration ──────────────────────────────────────────────────
 
 let currentCommunityTab = 'film';
 let _syncTimer = null;
+let cloudOwner = null;
+let cloudStamp = null;
+let cloudReady = false;
+let cloudSyncing = false;
+let cloudDirty = false;
+let cloudLoading = null;
 let _authMode = 'login';
 
 function initFirebaseApp() {
@@ -1554,14 +1617,18 @@ function initFirebaseApp() {
 }
 
 window.onFirebaseAuthChange = function(user) {
+  setTimeout(() => window.asarProfile?.accountChanged(), 0);
   if (user) {
     document.getElementById('auth-overlay').classList.remove('show');
     updateFirebaseStatus(true, user);
     loadFromSupabase(user.id);
   } else {
+    cloudReady = false;
+    cloudOwner = null;
+    cloudLoading = null;
+    clearTimeout(_syncTimer);
     updateFirebaseStatus(false, null);
-    const cfg = getSupabaseConfig();
-    if (cfg && cfg.url) document.getElementById('auth-overlay').classList.add('show');
+    setSyncState('محلی');
   }
 };
 
@@ -1640,10 +1707,7 @@ window.submitAuth = async function() {
       const name = (document.getElementById('auth-name') || {}).value || '';
       const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name }, emailRedirectTo: 'https://github.com/GriefKid/asar' } });
       if (error) throw error;
-      // Create profile row
-      if (data.user) {
-        await window._sb.from('profiles').upsert({ id: data.user.id, email, display_name: name, is_admin: false }, { onConflict: 'id' });
-      }
+      if (!data.session) errEl.textContent = 'ثبت‌نام انجام شد. ایمیلت را تأیید کن و سپس وارد شو.';
     }
   } catch(e) {
     const msgs = {
@@ -1675,43 +1739,134 @@ window.fbLogout = async function() {
 
 // ── Supabase Sync ────────────────────────────────────────────────────────
 
+function setSyncState(text, color = '') {
+  const badge = document.getElementById('sidebar-sync-badge');
+  if (badge) { badge.textContent = text; badge.style.background = color; }
+  const detail = document.getElementById('asar-cloud-state');
+  if (detail) detail.textContent = text;
+}
+
+function cloudMarker(uid) { return 'asar-cloud-pending-' + uid; }
+
 function debouncedSync() {
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(syncToSupabase, 3000);
+  const uid = getUID();
+  if (!uid) { setSyncState('محلی'); return; }
+  cloudDirty = true;
+  localStorage.setItem(cloudMarker(uid), cloudStamp || 'new');
+  setSyncState('در انتظار ارسال', 'var(--bg4)');
+  if (cloudReady && cloudOwner === uid) _syncTimer = setTimeout(syncToSupabase, 1800);
+}
+
+function cloudPayload(uid) {
+  return {
+    id: uid, library, events, actual_events: actualEvents, habits, goals,
+    extra_data: AsarBackup.collect(localStorage, AsarBackup.extras),
+    updated_at: new Date().toISOString()
+  };
 }
 
 async function syncToSupabase() {
-  const sb = window._sb;
+  const client = window._sb;
   const uid = getUID();
-  if (!sb || !uid) return;
+  if (!client || !uid || !cloudReady || cloudOwner !== uid || cloudSyncing) return;
+  cloudSyncing = true;
+  cloudDirty = false;
+  setSyncState('در حال ارسال', 'var(--bg4)');
   try {
-    await sb.from('user_data').upsert({ id: uid, library, events, habits, goals, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-    const user = window._currentUser;
-    await sb.from('profiles').upsert({ id: uid, email: user?.email || '', display_name: user?.user_metadata?.display_name || '' }, { onConflict: 'id', ignoreDuplicates: false });
-    const badge = document.getElementById('sidebar-sync-badge');
-    if (badge) { badge.textContent = '✓ سینک'; badge.style.background = 'var(--ok)'; }
-  } catch(e) {
-    console.error('Supabase sync error:', e);
-    const badge = document.getElementById('sidebar-sync-badge');
-    if (badge) { badge.textContent = '⚠ خطا'; badge.style.background = 'var(--err)'; }
+    const table = client.from('user_data');
+    const payload = cloudPayload(uid);
+    const query = cloudStamp
+      ? table.update(payload).eq('id', uid).eq('updated_at', cloudStamp)
+      : table.insert(payload);
+    const { data, error } = await query.select('updated_at').maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      cloudReady = false;
+      setSyncState('تعارض با تغییر دستگاه دیگر', 'var(--warn)');
+      return;
+    }
+    if (uid !== getUID()) return;
+    cloudStamp = data.updated_at;
+    if (!cloudDirty) localStorage.removeItem(cloudMarker(uid));
+    else localStorage.setItem(cloudMarker(uid), cloudStamp);
+    setSyncState(cloudDirty ? 'در انتظار ارسال' : '✓ سینک', cloudDirty ? 'var(--bg4)' : 'var(--ok)');
+  } catch (error) {
+    if (uid === getUID()) {
+      const type = error.code === 'PGRST204' ? 'پایگاه داده نیاز به به‌روزرسانی دارد' : error.code === '23505' ? 'تعارض با تغییر دستگاه دیگر' : 'خطای همگام‌سازی';
+      if (error.code === '23505') cloudReady = false;
+      setSyncState(type, 'var(--err)');
+    }
+  } finally {
+    cloudSyncing = false;
+    if (cloudDirty && cloudReady && uid === getUID()) {
+      clearTimeout(_syncTimer);
+      _syncTimer = setTimeout(syncToSupabase, 1800);
+    }
   }
 }
 
-async function loadFromSupabase(uid) {
-  const sb = window._sb;
-  if (!sb || !uid) return;
+async function loadFromSupabase(uid, mode = null) {
+  const client = window._sb;
+  if (!client || !uid || cloudLoading === uid) return;
+  if (!mode && cloudOwner === uid && cloudReady) return;
+  cloudLoading = cloudOwner = uid;
+  cloudStamp = null;
+  cloudReady = false;
+  cloudDirty = false;
+  setSyncState('در حال دریافت', 'var(--bg4)');
   try {
-    const { data } = await sb.from('user_data').select('*').eq('id', uid).maybeSingle();
-    if (!data) { syncToSupabase(); return; }
-    if (data.library) { library = data.library; localStorage.setItem(KEY_LIB, JSON.stringify(library)); }
-    if (data.events)  { events  = data.events;  localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
-    if (data.habits)  { habits  = data.habits;  localStorage.setItem(KEY_HABITS, JSON.stringify(habits)); }
-    if (data.goals)   { goals   = data.goals;   localStorage.setItem(KEY_GOALS, JSON.stringify(goals)); }
+    const { data, error } = await client.from('user_data').select('*').eq('id', uid).maybeSingle();
+    if (error) throw error;
+    if (uid !== getUID()) return;
+    cloudStamp = data?.updated_at || null;
+    const pending = localStorage.getItem(cloudMarker(uid));
+    if (data && !mode && pending && pending !== cloudStamp) {
+      setSyncState('تعارض با تغییر دستگاه دیگر', 'var(--warn)');
+      return;
+    }
+    cloudReady = true;
+    if (mode === 'local' || (data && !mode && pending === cloudStamp)) { debouncedSync(); return; }
+    if (!data) { setSyncState('آمادهٔ ارسال'); return; }
+    const values = Object.fromEntries(Object.entries({
+      'asar-library': data.library, 'asar-events': data.events, 'asar-actual-events': data.actual_events,
+      'asar-habits': data.habits, 'asar-goals': data.goals
+    }).filter(([, value]) => value != null).map(([key, value]) => [key, JSON.stringify(value)]));
+    for (const [key, value] of Object.entries(data.extra_data || {})) {
+      if (AsarBackup.extras(key) && typeof value === 'string') values[key] = value;
+    }
+    if (Object.keys(values).length) AsarBackup.restore(localStorage, AsarBackup.parseBackup({ schema: 'asar-backup', version: 2, storage: values }));
+    localStorage.removeItem(cloudMarker(uid));
+    load();
+    window.asarCollections?.refresh();
     renderHome();
     if (activeSection === 'library') renderLibrary();
     if (activeSection === 'planner') renderPlanner();
-  } catch(e) { console.error('loadFromSupabase error:', e); }
+    setSyncState('✓ سینک', 'var(--ok)');
+  } catch {
+    if (uid === getUID()) setSyncState('خطای دریافت از سرور', 'var(--err)');
+  } finally {
+    if (cloudLoading === uid) cloudLoading = null;
+  }
 }
+
+window.asarCloudAction = function(mode) {
+  const uid = getUID();
+  if (!uid) { document.getElementById('auth-overlay').classList.add('show'); return; }
+  const warning = mode === 'local' ? 'نسخهٔ فعلی این دستگاه جایگزین نسخهٔ ابری شود؟' : 'داده‌های ابری روی این دستگاه بارگیری شوند؟';
+  if (confirm(warning)) loadFromSupabase(uid, mode);
+};
+
+window.addEventListener('storage', event => {
+  if (event.key && AsarBackup.extras(event.key)) debouncedSync();
+});
+window.addEventListener('asar-store', event => { if (AsarBackup.extras(event.detail)) debouncedSync(); });
+window.addEventListener('online', () => {
+  const uid = getUID();
+  if (!uid || !localStorage.getItem(cloudMarker(uid))) return;
+  if (cloudReady) syncToSupabase();
+  else loadFromSupabase(uid);
+});
 
 // Patch save functions to trigger sync
 const _origSaveLib    = saveLib;

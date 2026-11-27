@@ -1,19 +1,21 @@
 {
-  "name": "mylife",
-  "version": "1.0.0",
+  "name": "asar-desktop",
+  "version": "2.0.0",
   "description": "اثر — مدیریت تجربه‌های فرهنگی شخصی",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "test": "node --test test/*.test.cjs",
+    "test:desktop": "node test/run-desktop.cjs"
   },
   "keywords": [],
   "author": "GriefKid",
   "license": "ISC",
   "build": {
     "appId": "com.griefkid.mylife",
-    "productName": "Lifestyle",
+    "productName": "اثر",
     "win": {
       "target": [
         {
@@ -35,7 +37,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "اثر",
-      "artifactName": "asar-setup.exe"
+      "artifactName": "Asar-Setup-${version}.${ext}"
     },
     "files": [
       "main.js",
@@ -46,11 +48,14 @@
       "package.json"
     ],
     "directories": {
-      "output": "G:\\dist"
+      "output": "dist"
     },
-    "asar": true
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "executableName": "Asar"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.6.0",
     "electron": "^28.3.3",
     "electron-builder": "^26.18.0"
   },

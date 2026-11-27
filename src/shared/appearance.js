@@ -7,9 +7,9 @@
   const selectors = {
     'main-app': {
       '.sidebar': 'ناوبری', '.asar-cover': 'جلد', '#daily-score-card': 'نمره',
-      '#stats-row': 'آمار', '#xp-row': 'سطح', '.heatmap-wrap': 'نقشه فعالیت',
-      '#today-plan-list': 'برنامه امروز', '#active-cards': 'آثار در حال بررسی',
-      '#top-rated-scroll': 'آثار محبوب', '#goals-home-list': 'هدف‌ها',
+      '#stats-row': 'آمار', '#xp-row': 'سطح', '#home-activity-panel': 'نقشه فعالیت',
+      '#home-today-panel': 'برنامه امروز', '#home-active-panel': 'آثار در حال بررسی',
+      '#home-rated-panel': 'آثار محبوب', '#home-goal-panel': 'هدف‌ها',
       '.lib-header': 'فیلتر کتابخانه', '#lib-shelf-view': 'قفسه', '#kanban': 'تابلو',
       '.planner-day': 'برنامه و واقعیت', '.habit-panel': 'عادت‌ها',
       '.planner-cal': 'تقویم', '.settings-scroll': 'تنظیمات', '#profile-content': 'پروفایل',
@@ -86,6 +86,7 @@
       input.addEventListener('input', () => {
         appearance[name] = input.value;
         localStorage.setItem(appearanceKey, JSON.stringify(appearance));
+      window.dispatchEvent(new CustomEvent('asar-store', { detail: appearanceKey }));
         applyAppearance();
       });
       inputs[name] = input;
@@ -98,6 +99,7 @@
         input.value = controls[key][2];
       }
       localStorage.setItem(appearanceKey, JSON.stringify(appearance));
+      window.dispatchEvent(new CustomEvent('asar-store', { detail: appearanceKey }));
       applyAppearance();
     }, form);
     target.append(form);
@@ -165,6 +167,7 @@
 
   function persist() {
     localStorage.setItem(layoutKey, JSON.stringify(layouts));
+    window.dispatchEvent(new CustomEvent('asar-store', { detail: layoutKey }));
   }
 
   function refreshPresets(value = '') {

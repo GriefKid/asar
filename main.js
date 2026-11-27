@@ -3,6 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const { selectProfilePath } = require('./src/shared/profile-path.cjs');
+
+const profilePath = selectProfilePath(app.getPath('appData'), app.getPath('userData'));
+if (fs.existsSync(profilePath)) app.setPath('userData', profilePath);
+if (process.platform === 'win32') app.setAppUserModelId('com.griefkid.mylife');
 
 let mainWindow = null;
 let musicWindow = null;
@@ -18,6 +23,17 @@ const WEB_PREFS = {
 };
 
 const APP_ICON = path.join(__dirname, 'assets', 'icon.ico');
+
+app.on('web-contents-created', (_, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'https:' && ['t.me', 'github.com'].includes(target.hostname)) shell.openExternal(target.href);
+    } catch {}
+  });
+});
 
 function createMusicPlayer() {
   musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
