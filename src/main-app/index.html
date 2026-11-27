@@ -704,6 +704,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .user-row-fb{display:flex;align-items:center;gap:8px;padding:12px 18px;background:var(--bg3);
   border-bottom:1px solid var(--bd);direction:rtl;font-size:12px}
 </style>
+<link rel="stylesheet" href="../shared/appearance.css">
 </head>
 <body>
 <div class="app no-drag">
@@ -805,7 +806,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <!-- HOME -->
   <div class="section active" id="section-home">
     <div class="home-scroll">
-      <div class="home-date-block">
+      <div class="home-date-block asar-cover">
+        <img src="../../assets/wordmark.svg" alt="اثر">
         <div class="shamsi-date" id="shamsi-date">...</div>
         <div class="shamsi-day" id="shamsi-day">...</div>
       </div>
@@ -1050,6 +1052,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   <!-- SETTINGS -->
   <div class="section" id="section-settings">
     <div class="settings-scroll">
+      <div class="settings-section"><div class="settings-section-title">ظاهر و خوانایی</div><div id="asar-appearance-settings"></div></div>
       <div class="settings-section">
         <div class="settings-section-title">API ها</div>
         <div class="settings-row">
@@ -1424,5 +1427,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 <script src="../shared/supabase-init.js"></script>
 <script src="../shared/calendar.js"></script>
 <script src="renderer.js"></script>
+<script src="../shared/appearance.js"></script>
 </body>
 </html>

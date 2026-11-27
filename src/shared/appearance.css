@@ -1,0 +1,61 @@
+:root {
+  color-scheme: dark;
+  --bg: #110d17;
+  --bg1: #140f1b;
+  --bg2: #1b1423;
+  --bg3: #22182c;
+  --bg4: #2c2038;
+  --bd: #34273e;
+  --bd2: #4a3756;
+  --accent: #ad90ed;
+  --accent-lo: #ad90ed24;
+  --accent-mid: #ad90ed68;
+  --accent-dark: #7450b2;
+  --t1: #f4e8de;
+  --t2: #cbbbcb;
+  --t3: #a695ae;
+  --asar-gold: #eaba83;
+  --asar-base-scale: 1;
+}
+html { zoom: var(--asar-base-scale); }
+body { background-color: #110d17; background-image: radial-gradient(ellipse at 12% 0%, #271830 0, transparent 46%); }
+body, button, input, textarea, select { font-family: Tahoma, "Segoe UI", sans-serif; }
+button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--asar-gold); outline-offset: 2px; }
+.sidebar { background: #181121; }
+.asar-cover {
+  position: relative; min-height: 235px; border: 1px solid #62455d; border-radius: 18px;
+  padding: 32px clamp(20px, 4vw, 55px); overflow: hidden; display: grid; align-content: center;
+  background: linear-gradient(270deg, #160e1bec 0%, #160e1bb0 24%, transparent 65%), url("../../assets/cover.jpg") center 57% / cover;
+  direction: rtl; color: #f4e8de;
+}
+.asar-cover img { width: 152px; max-width: 100%; height: auto; margin-bottom: 19px; }
+.asar-cover p { color: #edcba9; font-size: 16px; margin: 8px 0 0; }
+.asar-cover .shamsi-date { color: #f4e8de; font-size: clamp(20px, 3vw, 33px); }
+.asar-cover .shamsi-day { color: #eaba83; }
+.asar-appearance, .asar-layout-menu {
+  direction: rtl; color: var(--t1); background: var(--bg2); border: 1px solid var(--bd2); border-radius: 12px;
+}
+.asar-appearance { padding: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.asar-appearance label { display: flex; align-items: center; gap: 7px; }
+.asar-appearance input[type=color] { width: 38px; height: 25px; padding: 0; background: transparent; border: 0; }
+.asar-appearance button, .asar-layout-menu button {
+  color: inherit; background: var(--bg3); border: 1px solid var(--bd2); border-radius: 7px; padding: 6px 10px; cursor: pointer;
+}
+.asar-layout-menu { position: fixed; z-index: 420; bottom: 10px; left: 10px; padding: 6px; -webkit-app-region: no-drag; }
+.asar-layout-menu summary { padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.asar-layout-menu > div { display: flex; flex-wrap: wrap; max-width: 620px; gap: 6px; align-items: center; padding: 7px; }
+.asar-layout-menu .asar-appearance { flex-basis: 100%; }
+[data-asar-positioned] { position: fixed !important; inset: auto !important; top: var(--asar-y) !important; left: var(--asar-x) !important;
+  width: var(--asar-w) !important; height: var(--asar-h) !important; min-width: 0 !important; max-width: none !important;
+  min-height: 0 !important; max-height: none !important; z-index: 35; overflow: auto; border: 1px solid var(--bd2);
+}
+.asar-layout-handle { position: fixed; touch-action: none; user-select: none; pointer-events: auto; -webkit-app-region: no-drag; }
+.asar-layout-handle.move { color: #160f1a; background: #eaba83; padding: 4px 10px; height: 26px; border: 0; border-radius: 0 0 8px 8px; cursor: grab; }
+.asar-layout-handle.resize-e { cursor: ew-resize; }
+.asar-layout-handle.resize-s { cursor: ns-resize; }
+.asar-layout-handle.resize-se { cursor: nwse-resize; background: #eaba83; border-radius: 8px 0 0 0; border: 0; }
+.asar-layout-handle.resize-e:hover, .asar-layout-handle.resize-s:hover { background-color: #eaba8377; }
+.asar-layout-layer { position: fixed; inset: 0; z-index: 410; pointer-events: none; }
+.sub-en, .sub-fa { font-size: var(--asar-subtitle-size, 21px) !important; color: var(--asar-subtitle-color, #fff) !important; background: var(--asar-subtitle-bg, #120e18c7) !important; }
+.para-en, .para-fa { font-size: var(--asar-book-size, 17px) !important; color: var(--asar-book-color, var(--t1)) !important; }
+#lyrics-wrap, #lyrics-wrap :is(.lyric-line,.lyric-trans,.lyrics-line,.lyrics-text,.plain-lyrics) { font-size: var(--asar-lyrics-size, 16px) !important; color: var(--asar-lyrics-color, var(--t1)); }
