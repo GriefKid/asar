@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 235 96" role="img" aria-label="اثر">
+  <g transform="translate(139)">
+    <rect x="2" y="2" width="92" height="92" rx="24" fill="#191121" stroke="#4a3555" stroke-width="2"/>
+    <path d="M22 69h52M30 60V29m16 31V40m20 20L57 34" fill="none" stroke="#ddc8ff" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="70" cy="24" r="4.5" fill="#eaba83"/>
+  </g>
+  <text x="111" y="65" text-anchor="end" lang="fa" fill="#f4e8de" font-family="Vazirmatn, Tahoma, sans-serif" font-size="59" font-weight="800">اثر</text>
+</svg>
