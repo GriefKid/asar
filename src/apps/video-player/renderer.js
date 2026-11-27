@@ -328,17 +328,20 @@ function renderColls() {
     return;
   }
 
-  el.innerHTML = state.collections.map(c => {
+  const rows = window.asarCollections?.nativeRows(state.collections) || state.collections.map(collection => ({ collection, depth: 0 }));
+  el.innerHTML = rows.map(({ collection: c, depth }) => {
     const isActive = c.id === activeColl;
     const videos = c.videos || [];
     const thumb = videos.find(v => v.poster)?.poster || null;
 
     return `<div class="coll ${isActive ? 'active' : ''} ${c.open ? 'open' : ''}" id="coll-${c.id}"
+         style="margin-inline-start: ${Math.min(depth, 7) * 10}px"
          draggable="true"
-         ondragstart="collHeaderDragStart(event,'${c.id}')"
-         ondragend="collHeaderDragEnd(event)"
-         ondragover="collHeaderDragOverReorder(event,'${c.id}')"
-         ondrop="collHeaderDropReorder(event,'${c.id}')">
+         ondragstart="dragNativeFolder(event,'${c.id}')"
+         ondragend="endNativeDrag(event)"
+         ondragover="window.asarCollections?.dragOverNative(event)"
+         ondragleave="window.asarCollections?.dragLeaveNative(event)"
+         ondrop="window.asarCollections?.dropNative(event,'${c.id}')">
       <div class="coll-hd" onclick="toggleColl('${c.id}')">
         <div class="coll-thumb">
           ${thumb ? `<img src="${esc(thumb)}" alt="">` : '🎬'}
@@ -347,13 +350,10 @@ function renderColls() {
           <div class="coll-name">${esc(c.name)}</div>
           <div class="coll-cnt">${videos.length} فیلم</div>
         </div>
-        <div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>
+        ${c.id === 'asar-unfiled' ? '' : `<div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>`}
         <span class="coll-chev">›</span>
       </div>
-      <div class="coll-items" id="coll-items-${c.id}"
-           ondragover="collDragOver(event,'${c.id}')"
-           ondrop="collDrop(event,'${c.id}')"
-           ondragleave="collDragLeave(event,'${c.id}')">
+      <div class="coll-items" id="coll-items-${c.id}">
         ${videos.map((v, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === v.path && activeColl === c.id;
           const wd = state.watchData?.[v.path];
@@ -363,10 +363,10 @@ function renderColls() {
           return `<div class="movie-row ${playing ? 'playing' : ''}"
               draggable="true"
               ondragstart="movieDragStart(event,'${c.id}',${i})"
-              ondragend="movieDragEnd(event)"
+              ondragend="endNativeDrag(event)"
               onclick="playVideo('${c.id}',${i})">
             <div class="movie-thumb-sm">
-              ${v.poster ? `<img src="${esc(v.poster)}" alt="">` : '🎥'}
+              ${v.poster ? `<img src="${esc(v.poster)}" alt="" draggable="false">` : '🎥'}
             </div>
             <div class="movie-info">
               <div class="movie-name">${esc(v.title || v.fileName)}</div>
@@ -403,90 +403,30 @@ function removeVideoFromColl(collId, idx) {
 }
 
 function deleteColl(id) {
+  if (window.asarCollections?.removeNativeFolder(id)) return;
   state.collections = state.collections.filter(c => c.id !== id);
   if (activeColl === id) activeColl = state.collections[0]?.id || null;
   saveState();
   renderColls();
 }
 
-// ── Drag & drop: reorder collections ─────────────────────────────────
-let dragCollId = null;
-
-function collHeaderDragStart(e, id) {
-  dragCollId = id;
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.5';
+// Drag from the visible collection or media row.
+function dragNativeFolder(event, id) {
+  if (event.target !== event.currentTarget && event.target.closest(".movie-row")) return;
+  window.asarCollections?.startNativeFolderDrag(event, id);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collHeaderDragEnd(e) {
-  dragCollId = null;
-  e.currentTarget.style.opacity = '';
+function movieDragStart(event, collId, index) {
+  const item = state.collections.find(collection => collection.id === collId)?.videos[index];
+  if (!item) return;
+  event.stopPropagation();
+  window.asarCollections?.startDrag(event, "item", item.path, collId);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collHeaderDragOverReorder(e, id) {
-  if (!dragCollId || dragCollId === id) return;
-  e.preventDefault();
-  e.stopPropagation();
-  e.dataTransfer.dropEffect = 'move';
-}
-
-function collHeaderDropReorder(e, targetId) {
-  if (!dragCollId || dragCollId === targetId) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const fromIdx = state.collections.findIndex(c => c.id === dragCollId);
-  const toIdx = state.collections.findIndex(c => c.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) return;
-  const [moved] = state.collections.splice(fromIdx, 1);
-  state.collections.splice(toIdx, 0, moved);
-  dragCollId = null;
-  saveState();
-  renderColls();
-}
-
-// ── Drag & drop videos between collections ────────────────────────────
-let dragMovie = null; // { collId, idx }
-
-function movieDragStart(e, collId, idx) {
-  dragMovie = { collId, idx };
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.4';
-}
-
-function movieDragEnd(e) {
-  e.currentTarget.style.opacity = '';
-  dragMovie = null;
-}
-
-function collDragOver(e, collId) {
-  if (!dragMovie || dragMovie.collId === collId) return;
-  e.preventDefault();
-  const el = document.getElementById('coll-items-' + collId);
-  if (el) el.style.background = 'rgba(123,94,255,.08)';
-}
-
-function collDragLeave(e, collId) {
-  const el = document.getElementById('coll-items-' + collId);
-  if (el) el.style.background = '';
-}
-
-function collDrop(e, targetCollId) {
-  e.preventDefault();
-  const el = document.getElementById('coll-items-' + targetCollId);
-  if (el) el.style.background = '';
-  if (!dragMovie || dragMovie.collId === targetCollId) return;
-
-  const srcColl = state.collections.find(c => c.id === dragMovie.collId);
-  const dstColl = state.collections.find(c => c.id === targetCollId);
-  if (!srcColl || !dstColl) return;
-
-  const [video] = srcColl.videos.splice(dragMovie.idx, 1);
-  if (!dstColl.videos.find(v => v.path === video.path)) {
-    dstColl.videos.push(video);
-  }
-  dragMovie = null;
-  saveState();
-  renderColls();
+function endNativeDrag(event) {
+  event.currentTarget.classList.remove("asar-dragging");
 }
 
 // ── Import ─────────────────────────────────────────────────────────────
@@ -496,8 +436,8 @@ async function importFiles() {
   await addVideosToColl(paths);
 }
 
-async function addVideosToColl(paths) {
-  let coll = state.collections.find(c => c.id === activeColl);
+async function addVideosToColl(paths, destination) {
+  let coll = destination || state.collections.find(c => c.id === activeColl);
   if (!coll) {
     if (!state.collections.length) {
       createCollWithName('فیلم‌ها');
@@ -1640,5 +1580,13 @@ if (window.api?.onOpenFile) {
 window.asarCollectionSource = {
   items: () => state.collections.flatMap(entry => entry.videos.map(video => ({ id: video.path, title: video.title || video.fileName }))),
   open: id => { const coll = state.collections.find(entry => entry.videos.some(item => item.path === id)); if (coll) playVideo(coll.id, coll.videos.findIndex(item => item.path === id)); },
+  fileType: /\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv|ts|mpg|mpeg)$/i,
+  importFiles: (paths, folder) => addVideosToColl(paths, AsarCollections.ensureNative(state.collections, 'videos', folder)),
+  changed() {
+    if (!state.collections.some(collection => collection.id === activeColl)) activeColl = state.collections[0]?.id || null;
+    saveState();
+    renderColls();
+  },
+  redraw: renderColls,
   legacy: { list: () => state.collections, field: 'videos' }
 };

@@ -70,30 +70,30 @@ function renderColls() {
     return;
   }
 
-  el.innerHTML = state.collections.map((c, ci) => {
+  const rows = window.asarCollections?.nativeRows(state.collections) || state.collections.map(collection => ({ collection, depth: 0 }));
+  el.innerHTML = rows.map(({ collection: c, depth }) => {
     const isActive = c.id === activeColl;
     const isOpen = c.open;
     const songs = c.songs || [];
     return `
     <div class="coll ${isActive ? 'active' : ''} ${isOpen ? 'open' : ''}" id="coll-${c.id}"
+         style="margin-inline-start: ${Math.min(depth, 7) * 10}px"
          draggable="true"
-         ondragstart="collDragStart(event,'${c.id}')"
-         ondragend="collDragEnd(event)"
-         ondragover="collHeaderDragOver(event,'${c.id}')"
-         ondrop="collHeaderDrop(event,'${c.id}')">
+         ondragstart="dragNativeFolder(event,'${c.id}')"
+         ondragend="endNativeDrag(event)"
+         ondragover="window.asarCollections?.dragOverNative(event)"
+         ondragleave="window.asarCollections?.dragLeaveNative(event)"
+         ondrop="window.asarCollections?.dropNative(event,'${c.id}')">
       <div class="coll-hd" onclick="toggleColl('${c.id}')">
         <div class="coll-icon">🎵</div>
         <div class="coll-meta">
           <div class="coll-name">${esc(c.name)}</div>
           <div class="coll-cnt">${songs.length} آهنگ</div>
         </div>
-        <div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>
+        ${c.id === 'asar-unfiled' ? '' : `<div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>`}
         <span class="coll-chev">›</span>
       </div>
-      <div class="coll-songs" id="csongs-${c.id}"
-           ondragover="songColDragOver(event,'${c.id}')"
-           ondrop="songColDrop(event,'${c.id}')"
-           ondragleave="document.getElementById('csongs-${c.id}').style.background=''">
+      <div class="coll-songs" id="csongs-${c.id}">
         ${songs.map((s, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === s.path && activeColl === c.id;
           const songRating = getSongRating(s.path);
@@ -101,7 +101,7 @@ function renderColls() {
           return `<div class="song ${playing ? 'playing' : ''}"
               draggable="true"
               ondragstart="songDragStart(event,'${c.id}',${i})"
-              ondragend="songDragEnd(event)"
+              ondragend="endNativeDrag(event)"
               onclick="playSong('${c.id}',${i})">
             <span class="song-n">${i + 1}</span>
             <div class="eq"><span></span><span></span><span></span></div>
@@ -140,8 +140,8 @@ async function importFolder() {
   await addSongsToColl(paths);
 }
 
-async function addSongsToColl(paths) {
-  let coll = state.collections.find(c => c.id === activeColl);
+async function addSongsToColl(paths, destination) {
+  let coll = destination || state.collections.find(c => c.id === activeColl);
   if (!coll) {
     if (!state.collections.length) {
       createCollWithName('پیش‌فرض');
@@ -854,6 +854,7 @@ document.addEventListener('keydown', e => {
 
 // ── Delete helpers ─────────────────────────────────────────────────────
 function deleteColl(id) {
+  if (window.asarCollections?.removeNativeFolder(id)) return;
   state.collections = state.collections.filter(c => c.id !== id);
   if (activeColl === id) activeColl = state.collections[0]?.id || null;
   saveState();
@@ -868,76 +869,23 @@ function removeSongFromColl(collId, idx) {
   renderColls();
 }
 
-// ── Drag & Drop ────────────────────────────────────────────────────────
-let dragCollId = null;
-let dragSong = null; // { collId, idx }
-
-function collDragStart(e, id) {
-  dragCollId = id;
-  dragSong = null;
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.5';
+// Drag from the visible collection or media row.
+function dragNativeFolder(event, id) {
+  if (event.target !== event.currentTarget && event.target.closest(".song")) return;
+  window.asarCollections?.startNativeFolderDrag(event, id);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collDragEnd(e) {
-  dragCollId = null;
-  e.currentTarget.style.opacity = '';
+function songDragStart(event, collId, index) {
+  const item = state.collections.find(collection => collection.id === collId)?.songs[index];
+  if (!item) return;
+  event.stopPropagation();
+  window.asarCollections?.startDrag(event, "item", item.path, collId);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collHeaderDragOver(e, id) {
-  if (!dragCollId || dragCollId === id) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-}
-
-function collHeaderDrop(e, targetId) {
-  if (!dragCollId || dragCollId === targetId) return;
-  e.preventDefault();
-  const fromIdx = state.collections.findIndex(c => c.id === dragCollId);
-  const toIdx = state.collections.findIndex(c => c.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) return;
-  const [moved] = state.collections.splice(fromIdx, 1);
-  state.collections.splice(toIdx, 0, moved);
-  dragCollId = null;
-  saveState();
-  renderColls();
-}
-
-function songDragStart(e, collId, idx) {
-  dragSong = { collId, idx };
-  dragCollId = null;
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.5';
-  e.stopPropagation();
-}
-
-function songDragEnd(e) {
-  dragSong = null;
-  e.currentTarget.style.opacity = '';
-}
-
-function songColDragOver(e, collId) {
-  if (!dragSong) return;
-  e.preventDefault();
-  e.stopPropagation();
-  e.dataTransfer.dropEffect = 'move';
-  document.getElementById('csongs-' + collId).style.background = 'rgba(123,94,255,.1)';
-}
-
-function songColDrop(e, targetCollId) {
-  if (!dragSong) return;
-  e.preventDefault();
-  e.stopPropagation();
-  document.getElementById('csongs-' + targetCollId).style.background = '';
-  const { collId: srcCollId, idx: srcIdx } = dragSong;
-  const srcColl = state.collections.find(c => c.id === srcCollId);
-  const dstColl = state.collections.find(c => c.id === targetCollId);
-  if (!srcColl || !dstColl) return;
-  const [song] = srcColl.songs.splice(srcIdx, 1);
-  dstColl.songs.push(song);
-  dragSong = null;
-  saveState();
-  renderColls();
+function endNativeDrag(event) {
+  event.currentTarget.classList.remove("asar-dragging");
 }
 
 // ── Generated cover fallback ───────────────────────────────────────────
@@ -1508,5 +1456,13 @@ initFirebase();
 window.asarCollectionSource = {
   items: () => state.collections.flatMap(entry => entry.songs.map(song => ({ id: song.path, title: song.title || song.fileName }))),
   open: id => { const coll = state.collections.find(entry => entry.songs.some(item => item.path === id)); if (coll) playSong(coll.id, coll.songs.findIndex(item => item.path === id)); },
+  fileType: /\.(mp3|flac|wav|m4a|aac|ogg|wma|opus|ape|alac)$/i,
+  importFiles: (paths, folder) => addSongsToColl(paths, AsarCollections.ensureNative(state.collections, 'songs', folder)),
+  changed() {
+    if (!state.collections.some(collection => collection.id === activeColl)) activeColl = state.collections[0]?.id || null;
+    saveState();
+    renderColls();
+  },
+  redraw: renderColls,
   legacy: { list: () => state.collections, field: 'songs' }
 };

@@ -72,7 +72,9 @@ function renderLibrary() {
     return;
   }
 
-  el.innerHTML = state.books.map((b, bi) => {
+  const visible = state.books.map((book, index) => ({ book, index })).filter(({ book }) => !window.asarCollections?.itemFolder(book.path));
+  if (!visible.length) { el.innerHTML = '<div class="empty-lib">کتاب‌ها در مجموعه‌ها هستند.</div>'; return; }
+  el.innerHTML = visible.map(({ book: b, index: bi }) => {
     const isActive = b.path === currentBookPath;
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
     const rating = (state.ratings || {})[b.path] || 0;
@@ -86,7 +88,7 @@ function renderLibrary() {
         ondragover="bookDragOver(event)"
         ondrop="bookDrop(event,${bi})"
         onclick="openBook(${esc(JSON.stringify(b.path))})">
-      <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
+      <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="" draggable="false">` : '📖'}</div>
       <div class="book-meta">
         <div class="book-title">${esc(b.title)}</div>
         ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
@@ -109,12 +111,12 @@ let dragBookIdx = null;
 
 function bookDragStart(e, idx) {
   dragBookIdx = idx;
-  e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => e.currentTarget.style.opacity = '0.4', 0);
+  window.asarCollections?.startDrag(e, 'item', state.books[idx]?.path);
+  e.currentTarget.classList.add('asar-dragging');
 }
 
 function bookDragEnd(e) {
-  e.currentTarget.style.opacity = '';
+  e.currentTarget.classList.remove('asar-dragging');
   dragBookIdx = null;
 }
 
@@ -201,6 +203,10 @@ function cleanBookTitle(raw) {
 
 async function importPdf() {
   const paths = await window.api.openPdfFiles();
+  return addBooks(paths);
+}
+
+function addBooks(paths, openSingle = true) {
   if (!paths.length) return;
   const newPaths = [];
   for (const p of paths) {
@@ -212,7 +218,7 @@ async function importPdf() {
   }
   saveState();
   renderLibrary();
-  if (paths.length === 1) openBook(paths[0]);
+  if (openSingle && paths.length === 1) openBook(paths[0]);
   // sync to main library
   for (const p of newPaths) {
     const book = state.books.find(b => b.path === p);
@@ -1342,6 +1348,11 @@ let dragCounter = 0;
 
 document.addEventListener('dragenter', e => {
   e.preventDefault();
+  if (e.target.closest?.('#asar-collection-tree')) {
+    dragCounter = 0;
+    dropOverlay.classList.remove('show');
+    return;
+  }
   const hasPdf = [...(e.dataTransfer?.items || [])].some(i => i.type === 'application/pdf' || i.kind === 'file');
   if (!hasPdf) return;
   dragCounter++;
@@ -1364,20 +1375,7 @@ document.addEventListener('drop', async e => {
   );
   if (!files.length) return;
 
-  const newPaths = [];
-  for (const f of files) {
-    const p = f.path;
-    if (!p) continue;
-    if (state.books.find(b => b.path === p)) continue;
-    const fileName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
-    state.books.push({ path: p, title: fileName, author: '', totalPages: 0, lastPage: 1, cover: null });
-    newPaths.push(p);
-  }
-  if (!newPaths.length) return;
-  saveState();
-  renderLibrary();
-  if (newPaths.length === 1) openBook(newPaths[0]);
-  for (const p of newPaths) fetchAndSaveBookMeta(p);
+  addBooks(files.map(file => file.path).filter(Boolean));
 });
 
 // ── Dual page ─────────────────────────────────────────────────────────
@@ -1735,5 +1733,9 @@ if (window.api?.onOpenFile) {
 
 window.asarCollectionSource = {
   items: () => state.books.map(book => ({ id: book.path, title: book.title })),
-  open: id => openBook(id)
+  open: id => openBook(id),
+  fileType: /\.pdf$/i,
+  importFiles: paths => addBooks(paths, false),
+  changed: renderLibrary,
+  redraw: renderLibrary
 };

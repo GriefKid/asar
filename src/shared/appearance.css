@@ -262,6 +262,8 @@ button, summary { -webkit-app-region: no-drag; }
 .sidebar .asar-collection-tree { flex-shrink: 0; max-height: 45vh; overflow: auto; }
 .asar-collection-tree > summary, .asar-tree-group > summary { padding: 6px; cursor: pointer; }
 .asar-collection-tree .asar-drop { background: var(--accent-lo); outline: 1px solid var(--asar-focus); }
+.asar-media .coll.asar-drop { background: var(--accent-lo); outline: 2px solid var(--asar-focus); outline-offset: -2px; }
+.asar-dragging { opacity: .5; }
 .asar-collection-actions { display: flex; flex-wrap: wrap; margin: 4px 0; gap: 5px; }
 .asar-collection-tree button, .asar-collection-tree input, .asar-collection-tree select { background: var(--bg3); color: var(--t2); border: 1px solid var(--bd); border-radius: 6px; padding: 4px 7px; max-width: 100%; }
 .asar-collection-tree input { width: 110px; }

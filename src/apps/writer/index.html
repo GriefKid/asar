@@ -375,7 +375,8 @@ function renderDocList() {
   }
   el.innerHTML = docs.slice().reverse().map(doc => {
     const linked = doc.linkedItemId ? library.find(i => i.id === doc.linkedItemId) : null;
-    return `<div class="doc-item ${doc.id === currentDocId ? 'active' : ''}" onclick="openDoc('${doc.id}')">
+    return `<div class="doc-item ${doc.id === currentDocId ? 'active' : ''}" draggable="true"
+      ondragstart="window.asarCollections?.startDrag(event,'item',${esc(JSON.stringify(doc.id))})" onclick="openDoc('${doc.id}')">
       <span class="doc-item-del" onclick="event.stopPropagation();deleteDoc('${doc.id}')">🗑</span>
       <div class="doc-item-title">${esc(doc.title || 'بدون عنوان')}</div>
       <div class="doc-item-meta">

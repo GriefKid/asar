@@ -532,21 +532,25 @@ function renderKanban() {
 // ── Shelf drag & drop (reorder within row) ────────────────────────────────
 window.shelfDragStart = function(e, id) {
   dragItemId = id;
+  window.asarCollections?.startDrag(e, 'item', id);
   setTimeout(() => { const el = document.getElementById('mcard-'+id); if (el) el.classList.add('dragging'); }, 0);
   e.dataTransfer.effectAllowed = 'move';
 };
 window.shelfDragEnd = function(e) {
   if (dragItemId) { const el = document.getElementById('mcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+  dragItemId = null;
 };
 
 // ── Kanban drag & drop (move between columns) ─────────────────────────────
 window.kcardDragStart = function(e, id) {
   dragItemId = id;
+  window.asarCollections?.startDrag(e, 'item', id);
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => { const el = document.getElementById('kcard-'+id); if (el) el.classList.add('dragging'); }, 0);
 };
 window.kcardDragEnd = function(e) {
   if (dragItemId) { const el = document.getElementById('kcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+  dragItemId = null;
 };
 window.kcardDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
 window.kcardDrop = function(e, targetId) {
