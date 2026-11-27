@@ -4,62 +4,7 @@
 const J_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const J_DAYS   = ['یک‌شنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه','شنبه'];
 
-function toJalali(gy, gm, gd) {
-  const g_d_no = [0,31,59+Math.floor(gy/4)-Math.floor(gy/100)+Math.floor(gy/400)-Math.floor((gy-1)/4)+Math.floor((gy-1)/100)-Math.floor((gy-1)/400),
-    91,120,151,181,212,243,273,304,334];
-  let jy = gy <= 1600 ? 0 : 979;
-  gy = gy <= 1600 ? gy - 621 : gy - 1600;
-  const gy2 = gm > 2 ? gy + 1 : gy;
-  let g_days = 365*gy + Math.floor((gy2+3)/4) - Math.floor((gy2+99)/100) + Math.floor((gy2+399)/400) - 80 + gd + g_d_no[gm-1];
-  jy += 33*Math.floor(g_days/12053);
-  g_days %= 12053;
-  jy += 4*Math.floor(g_days/1461);
-  g_days %= 1461;
-  if (g_days > 365) { jy += Math.floor((g_days-1)/365); g_days = (g_days-1) % 365; }
-  const jm = g_days < 186 ? 1+Math.floor(g_days/31) : 7+Math.floor((g_days-186)/30);
-  const jd = g_days < 186 ? (g_days % 31)+1 : ((g_days-186) % 30)+1;
-  return { y: jy, m: jm, d: jd };
-}
-
-function fromJalali(jy, jm, jd) {
-  let epbase = jy - (jy >= 0 ? 474 : 473);
-  const epyear = 474 + (((epbase % 2820) + 2820) % 2820);
-  return jd + (jm <= 6 ? (jm-1)*31 : (jm-1)*30+6) +
-    Math.floor((epyear*682 - 110) / 2816) + (epyear-1)*365 +
-    Math.floor(epbase/2820)*1029983 + 1948319.5 - 2440587.5;
-}
-
-function jalaliToGregorian(jy, jm, jd) {
-  const jdn = fromJalali(jy, jm, jd);
-  const a = jdn + 0.5, z = Math.floor(a), f = a - z;
-  let b = z >= 2299161 ? ((() => { const alpha = Math.floor((z-1867216.25)/36524.25); return z+1+alpha-Math.floor(alpha/4); })()) : z;
-  const c = b + 1524, d = Math.floor((c-122.1)/365.25), e = Math.floor(365.25*d), g = Math.floor((c-e)/30.6001);
-  const gd = c - e + f - Math.floor(30.6001*g);
-  const gm = g < 14 ? g-1 : g-13;
-  const gy = gm > 2 ? d-4716 : d-4715;
-  return { y: gy, m: gm, d: Math.floor(gd) };
-}
-
-function todayJalali() {
-  const now = new Date();
-  return toJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
-}
-
-function jalaliMonthLen(y, m) {
-  if (m <= 6) return 31;
-  if (m <= 11) return 30;
-  // Esfand: leap check
-  const g = jalaliToGregorian(y, 12, 1);
-  const isLeap = (g.y%4===0 && g.y%100!==0) || g.y%400===0;
-  return isLeap ? 30 : 29;
-}
-
-function jalaliFirstWeekday(y, m) {
-  const g = jalaliToGregorian(y, m, 1);
-  const dow = new Date(g.y, g.m-1, g.d).getDay(); // 0=Sun
-  // Jalali week starts Sat(6): convert Sun=0→1, Mon=1→2 ... Sat=6→0
-  return (dow + 1) % 7;
-}
+const { todayJalali, jalaliMonthLen, jalaliWeekday, jalaliFirstWeekday, addJalaliDays, dateKey } = AsarCalendar;
 
 function toFarsiNum(n) {
   return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -286,9 +231,7 @@ function renderHome() {
   document.getElementById('shamsi-date').textContent =
     toFarsiNum(today.d) + ' ' + J_MONTHS[today.m-1] + ' ' + toFarsiNum(today.y);
 
-  const g = new Date();
-  document.getElementById('shamsi-day').textContent =
-    J_DAYS[g.getDay()] + ' — ' + g.toLocaleDateString('fa-IR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('shamsi-day').textContent = J_DAYS[jalaliWeekday(today.y, today.m, today.d)];
 
   // Stats
   const total  = library.length;
@@ -816,8 +759,7 @@ window.calNav = function(dir) {
 
 function renderDayView() {
   const { y, m, d } = selectedDay;
-  const g = jalaliToGregorian(y, m, d);
-  const dow = J_DAYS[new Date(g.y, g.m-1, g.d).getDay()];
+  const dow = J_DAYS[jalaliWeekday(y, m, d)];
   document.getElementById('day-title').textContent = `${toFarsiNum(d)} ${J_MONTHS[m-1]} ${toFarsiNum(y)}`;
   document.getElementById('day-sub').textContent   = dow;
 
@@ -1066,13 +1008,11 @@ function getTodayKey() { const t = todayJalali(); return `${t.y}-${t.m}-${t.d}`;
 
 function habitStreak(habit) {
   let streak = 0;
-  const g = new Date();
+  const today = todayJalali();
   for (let i = 0; i < 365; i++) {
-    const j = toJalali(g.getFullYear(), g.getMonth()+1, g.getDate());
-    const key = `${j.y}-${j.m}-${j.d}`;
-    if (habit.doneByDay[key]) streak++;
+    const key = dateKey(addJalaliDays(today, -i));
+    if (habit.doneByDay?.[key]) streak++;
     else if (i > 0) break;
-    g.setDate(g.getDate() - 1);
   }
   return streak;
 }
@@ -1086,9 +1026,7 @@ function renderHabits() {
     const done = !!h.doneByDay[todayKey];
     const streak = habitStreak(h);
     const last7 = Array.from({length:7}, (_, i) => {
-      const g2 = new Date(); g2.setDate(g2.getDate()-6+i);
-      const j2 = toJalali(g2.getFullYear(), g2.getMonth()+1, g2.getDate());
-      const k2 = `${j2.y}-${j2.m}-${j2.d}`;
+      const k2 = dateKey(addJalaliDays(todayJalali(), i - 6));
       return h.doneByDay[k2] ? 'var(--ok)' : 'var(--bg4)';
     });
     return `<div class="habit-item ${done?'done-today':''}" onclick="toggleHabit('${h.id}')">
@@ -1130,15 +1068,9 @@ function generateRecurringEvents(ev, { y, m, d }) {
   for (let i = 1; i <= daysToGen; i++) {
     let nextG;
     if (ev.recur === 'daily') {
-      const g = jalaliToGregorian(y, m, d);
-      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i);
-      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
-      nextG = { y: j2.y, m: j2.m, d: j2.d };
+      nextG = addJalaliDays({ y, m, d }, i);
     } else if (ev.recur === 'weekly') {
-      const g = jalaliToGregorian(y, m, d);
-      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i*7);
-      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
-      nextG = { y: j2.y, m: j2.m, d: j2.d };
+      nextG = addJalaliDays({ y, m, d }, i * 7);
     } else { // monthly
       let nm = m + i, ny = y;
       while (nm > 12) { nm -= 12; ny++; }
@@ -1244,9 +1176,8 @@ function renderDailyScore() {
   const dnames = ['ی','د','س','چ','پ','ج','ش']; // Sun→Sat
   const days7 = [];
   for (let i = 6; i >= 0; i--) {
-    const g = new Date(); g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
-    days7.push({ j, data: calcDailyScore(j.y, j.m, j.d), isToday: i === 0, lbl: dnames[g.getDay()] });
+    const j = addJalaliDays(today, -i);
+    days7.push({ j, data: calcDailyScore(j.y, j.m, j.d), isToday: i === 0, lbl: dnames[jalaliWeekday(j.y, j.m, j.d)] });
   }
 
   const td  = days7[6].data;
@@ -1346,11 +1277,9 @@ function renderHeatmap() {
   // Build 365 days going back from today in weeks
   const days = [];
   for (let i = 364; i >= 0; i--) {
-    const g = new Date();
-    g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
-    const dow = (g.getDay() + 1) % 7; // 0=Sat in Jalali week
-    days.push({ j, dow, g });
+    const j = addJalaliDays(today, -i);
+    const dow = (jalaliWeekday(j.y, j.m, j.d) + 1) % 7;
+    days.push({ j, dow });
   }
 
   // Group into weeks (columns of 7)
@@ -1474,9 +1403,7 @@ window.getWeeklySummary = async function(btn) {
   const today = todayJalali();
   const activityLines = [];
   for (let i = 6; i >= 0; i--) {
-    const g = new Date();
-    g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
+    const j = addJalaliDays(today, -i);
     const key2 = `${j.y}-${j.m}-${j.d}`;
     const dayEvs = events[key2] || [];
     const done = dayEvs.filter(e => e.done);
