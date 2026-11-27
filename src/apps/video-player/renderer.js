@@ -959,7 +959,7 @@ document.addEventListener('keydown', e => {
     window.api.closeWindow();
     return;
   }
-  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'Space' && !e.target.closest('.asar-window-actions')) { e.preventDefault(); togglePlay(); }
   if (e.code === 'KeyF') toggleFullscreen();
   if (e.code === 'ArrowRight') vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 10);
   if (e.code === 'ArrowLeft') vid.currentTime = Math.max(0, vid.currentTime - 10);

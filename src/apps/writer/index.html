@@ -24,30 +24,6 @@
       direction: rtl;
     }
 
-    /* ── Titlebar ── */
-    .titlebar {
-      height: 36px; flex-shrink: 0;
-      -webkit-app-region: drag;
-      background: var(--bg2);
-      border-bottom: 1px solid var(--bd);
-      display: flex; align-items: center;
-      padding: 0 12px;
-    }
-    .titlebar-title {
-      font-size: 12px; color: var(--t3);
-      font-family: 'Space Grotesk', sans-serif;
-      flex: 1; text-align: center;
-    }
-    .titlebar-close {
-      -webkit-app-region: no-drag;
-      width: 24px; height: 24px; border-radius: 50%;
-      background: rgba(255,95,126,.15); border: none;
-      color: var(--err); font-size: 14px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: background .12s;
-    }
-    .titlebar-close:hover { background: var(--err); color: #fff; }
-
     .app-body {
       flex: 1; display: flex; overflow: hidden;
     }
@@ -257,14 +233,13 @@
     .modal-btn.primary:hover { background: var(--accent); color: #fff; }
   </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
+<script defer src="../../shared/window-controls.js"></script>
 </head>
 <body class="asar-media asar-writer">
 
-<!-- Titlebar -->
-<div class="titlebar">
-  <button class="titlebar-close" onclick="window.api && window.api.quitApp ? window.close() : window.close()">×</button>
-  <span class="titlebar-title">نویسنده — اثر</span>
-</div>
+<header class="asar-windowbar">
+  <span class="asar-window-title">نویسنده — اثر</span>
+</header>
 
 <div class="app-body">
 

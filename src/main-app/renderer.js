@@ -1576,14 +1576,11 @@ document.getElementById('exit-confirm-btn').onclick = () => window.api.quitApp()
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmdPal(); return; }
   if (e.key === 'Escape') {
+    if (exitModal.classList.contains('show')) { exitModal.classList.remove('show'); return; }
     if (document.getElementById('cmdpal').classList.contains('show')) { closeCmdPal(); return; }
     if (document.getElementById('review-modal').classList.contains('show')) { closeReview(); return; }
     if (document.getElementById('add-goal-modal').classList.contains('show')) { closeAddGoal(); return; }
-    if (exitModal.classList.contains('show')) {
-      exitModal.classList.remove('show');
-    } else {
-      exitModal.classList.add('show');
-    }
+    exitModal.classList.add('show');
   }
 });
 

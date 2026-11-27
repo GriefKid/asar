@@ -17,7 +17,6 @@
 html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);
   font-family:'Inter',system-ui,sans-serif;font-size:13px}
 .app{display:flex;flex-direction:row-reverse;height:100%;position:relative}
-.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
 .no-drag{-webkit-app-region:no-drag}
 
 /* ── Sidebar ── */
@@ -222,7 +221,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .info-loading{color:var(--t3);font-size:13px;text-align:center;padding:20px 0}
 
 /* ── TMDB key setup ── */
-.osub-banner{position:fixed;top:72px;right:270px;left:0;z-index:10;
+.osub-banner{position:fixed;top:calc(72px + var(--asar-windowbar-height));right:270px;left:0;z-index:10;
   background:rgba(14,14,36,.96);border-bottom:1px solid rgba(47,214,168,.18);
   padding:6px 16px;display:none;align-items:center;gap:10px;direction:rtl;
   backdrop-filter:blur(10px);flex-wrap:wrap}
@@ -240,7 +239,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .sub-auto-status.hidden{display:none}
 .sub-auto-status.done{color:var(--ok)}
 .sub-auto-status.error{color:var(--err)}
-.setup-banner{position:fixed;top:40px;right:270px;left:0;z-index:10;
+.setup-banner{position:fixed;top:calc(40px + var(--asar-windowbar-height));right:270px;left:0;z-index:10;
   background:var(--bg2);border-bottom:1px solid var(--bd2);padding:10px 18px;
   display:flex;align-items:center;gap:10px;direction:rtl;display:none}
 .setup-banner.show{display:flex}
@@ -413,8 +412,10 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .hist-date{font-size:11px;color:var(--t3);margin-top:2px}
 </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
+<script defer src="../../shared/window-controls.js"></script>
 </head>
 <body class="asar-media asar-video-player">
+<header class="asar-windowbar"></header>
 <!-- OpenSubtitles key banner -->
 <div class="osub-banner" id="osub-banner">
   <span style="color:var(--t2);font-size:12.5px;white-space:nowrap">برای زیرنویس خودکار، subdl API key بده:</span>

@@ -11,6 +11,7 @@ const errors = [];
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 app.setPath('userData', profile);
 app.setAppPath(appPath);
+const showWindow = BrowserWindow.prototype.show;
 BrowserWindow.prototype.show = function () {};
 
 app.on('browser-window-created', (_, window) => {
@@ -44,6 +45,14 @@ async function waitIn(name, code) {
     await delay(100);
   }
   throw new Error(`Timed out in ${name}: ${code}`);
+}
+
+async function waitForWindowState(condition, description) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (condition()) return;
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for ${description}`);
 }
 
 async function clickIn(name, selector) {
@@ -333,6 +342,40 @@ app.whenReady().then(async () => {
   await readBook('First offline document');
   await main('window.api.openBookReaderWithFile(' + JSON.stringify(otherFile) + ')');
   await readBook('Second offline document');
+
+  for (const [name, reopen] of [
+    ['music-player', 'openMusicPlayer'], ['video-player', 'openVideoPlayer'],
+    ['book-reader', 'openBookReader'], ['writer', 'openWriter'], ['main-app', null]
+  ]) {
+    const window = windows.get(name);
+    showWindow.call(window);
+    const fullscreen = window.isFullScreen();
+    await runIn(name, 'document.body.dataset.windowState = "preserved"');
+    await clickIn(name, '[data-window-action="minimize"]');
+    await waitForWindowState(() => !window.isDestroyed() && window.isMinimized(), `${name} to minimize`);
+    assert.equal(window.isDestroyed(), false, name);
+
+    if (reopen) await main(`window.api.${reopen}()`);
+    else window.restore();
+    await waitForWindowState(() => !window.isDestroyed() && !window.isMinimized(), `${name} to restore`);
+    assert.equal(windows.get(name), window, name);
+    assert.equal(window.isFullScreen(), fullscreen, name);
+    assert.equal(await runIn(name, 'document.body.dataset.windowState'), 'preserved', name);
+    if (name === 'book-reader') await readBook('Second offline document');
+
+    if (reopen) {
+      await clickIn(name, '[data-window-action="close"]');
+      await waitForWindowState(() => window.isDestroyed(), `${name} to close`);
+    } else {
+      await main('openCmdPal()');
+      await clickIn(name, '[data-window-action="close"]');
+      assert.equal(await main('document.getElementById("exit-modal").classList.contains("show")'), true);
+      await clickIn(name, '#exit-cancel-btn');
+      assert.equal(window.isDestroyed(), false, name);
+      assert.equal(await main('document.getElementById("cmdpal").classList.contains("show")'), true);
+      await main('closeCmdPal()');
+    }
+  }
   assert.deepEqual(errors, []);
   console.log('Desktop smoke test passed');
   app.exit(0);

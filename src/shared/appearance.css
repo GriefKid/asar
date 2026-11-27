@@ -46,6 +46,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   outline: 2px solid var(--asar-focus); outline-offset: 3px;
 }
 button, summary { -webkit-app-region: no-drag; }
+.asar-windowbar {
+  position: relative; z-index: 1000; display: flex; justify-content: flex-end; align-items: center;
+  direction: ltr; flex: 0 0 var(--asar-windowbar-height); padding-inline: 7px;
+  background: #17142b; border-bottom: 1px solid var(--bd2); -webkit-app-region: drag;
+}
+body:has(> .asar-windowbar) { --asar-windowbar-height: 36px; display: flex; flex-direction: column; }
+.asar-windowbar ~ .app { flex: 1; min-height: 0; }
+.asar-window-title {
+  position: absolute; inset-inline-start: 50%; transform: translateX(-50%);
+  color: var(--t2); font-size: 12px; direction: rtl; pointer-events: none;
+}
+.asar-window-actions { display: flex; align-items: center; gap: 4px; -webkit-app-region: no-drag; }
+.asar-window-actions button {
+  display: grid; place-items: center; width: 36px; height: 27px; padding: 0;
+  border: 1px solid transparent; border-radius: 6px; background: transparent;
+  color: var(--t1); font: 19px/1 system-ui, sans-serif; cursor: pointer;
+}
+.asar-window-actions button:hover { background: var(--bg3); border-color: var(--bd2); }
+.asar-window-actions [data-window-action="close"]:hover { color: white; background: #a73356; border-color: #c34d71; }
+.asar-window-actions button:focus-visible { outline-offset: -2px; }
 ::selection { color: #141020; background-color: var(--accent); }
 .sidebar {
   background: linear-gradient(151deg, #18152b, #10101d 50%, #0c0b16);
@@ -71,7 +91,6 @@ button, summary { -webkit-app-region: no-drag; }
 .asar-main .nav-label { font: 620 13px var(--asar-font); }
 .asar-main .main { min-width: 0; }
 .asar-main .section { flex: 1; min-height: 0; }
-.asar-main .drag-area { height: 8px; }
 
 .asar-command-bar {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex-shrink: 0;
@@ -312,10 +331,11 @@ button, summary { -webkit-app-region: no-drag; }
 .asar-video-player { --media-glow: #6941da; }
 .asar-book-reader { --media-glow: #9a62c4; }
 .asar-writer { --media-glow: #a25dba; }
-.asar-media :is(.sb-title,.sidebar-title,.lyr-hd-title,.titlebar-title,.now-title,.meta-title) { font-family: var(--asar-font); }
-.asar-media :is(.controls,.lyr-panel,.ai-panel,.reader-toolbar,.editor-toolbar,.titlebar) {
+.asar-media :is(.sb-title,.sidebar-title,.lyr-hd-title,.now-title,.meta-title) { font-family: var(--asar-font); }
+.asar-media :is(.controls,.lyr-panel,.ai-panel,.reader-toolbar,.editor-toolbar) {
   border-color: var(--bd2); background-color: #17142be8;
 }
+.asar-media .ai-panel { top: var(--asar-windowbar-height); height: calc(100% - var(--asar-windowbar-height)); }
 .asar-media :is(.lyr-panel,.ai-panel,.editor-toolbar) { box-shadow: var(--asar-shadow); }
 .asar-media :is(.icon-btn,.nav-btn,.tb-btn,.ltab) { border-radius: 9px; }
 .asar-media :is(.art,.book-cover,.movie-thumb,.pdf-page-wrap) {
@@ -329,8 +349,8 @@ button, summary { -webkit-app-region: no-drag; }
 .asar-video-player .no-track { pointer-events: auto; }
 .asar-video-player .meta-overlay:not(.has-video) { visibility: hidden; }
 .asar-video-player .video-area:has(.no-track:not(.hidden)) .controls { visibility: hidden; }
-.asar-video-player .asar-layout-menu { top: 42px; bottom: auto; }
-.asar-book-reader .asar-layout-menu { top: 70px; bottom: auto; }
+.asar-video-player .asar-layout-menu { top: calc(42px + var(--asar-windowbar-height)); bottom: auto; }
+.asar-book-reader .asar-layout-menu { top: calc(70px + var(--asar-windowbar-height)); bottom: auto; }
 .asar-music-player .app:has(#player-content > .no-track) .player { flex: 1; width: auto; justify-content: center; }
 .asar-music-player .app:has(#player-content > .no-track) .lyr-panel:not([data-asar-positioned]) { display: none; }
 .asar-empty-title { font: 840 clamp(18px, 2.4vw, 34px)/1.35 var(--asar-font); margin: 0; color: var(--t1); }

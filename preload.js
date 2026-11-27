@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   claudeChat: (sys, msgs, key, provider, frame) => ipcRenderer.invoke('claude:chat', sys, msgs, key, provider, frame),
   saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
   // Window controls
+  minimizeWindow:  () => ipcRenderer.invoke('window:minimize'),
   closeWindow:     () => ipcRenderer.invoke('window:close'),
   quitApp:         () => ipcRenderer.invoke('app:quit'),
   // Main app — open sub-apps

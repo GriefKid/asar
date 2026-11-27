@@ -72,20 +72,25 @@ function createWriter() {
 }
 
 // ── IPC: Open sub-apps ─────────────────────────────────────────────────
+function focusWindow(window) {
+  if (window.isMinimized()) window.restore();
+  window.focus();
+}
+
 ipcMain.handle('app:open-music', () => {
-  if (musicWindow) { musicWindow.focus(); return; }
+  if (musicWindow) { focusWindow(musicWindow); return; }
   createMusicPlayer();
 });
 ipcMain.handle('app:open-video', () => {
-  if (videoWindow) { videoWindow.focus(); return; }
+  if (videoWindow) { focusWindow(videoWindow); return; }
   createVideoPlayer();
 });
 ipcMain.handle('app:open-book', () => {
-  if (bookWindow) { bookWindow.focus(); return; }
+  if (bookWindow) { focusWindow(bookWindow); return; }
   createBookReader();
 });
 ipcMain.handle('app:open-writer', () => {
-  if (writerWindow) { writerWindow.focus(); return; }
+  if (writerWindow) { focusWindow(writerWindow); return; }
   createWriter();
 });
 
@@ -207,7 +212,7 @@ ipcMain.handle('app:open-book-file', async (_, filePath) => {
     createBookReader();
     await new Promise(resolve => bookWindow.once('ready-to-show', resolve));
   } else {
-    bookWindow.focus();
+    focusWindow(bookWindow);
   }
   if (second) bookWindow.setBounds(second.workArea);
 
@@ -227,7 +232,7 @@ ipcMain.handle('app:open-video-file', async (_, filePath) => {
     createVideoPlayer();
     await new Promise(resolve => videoWindow.once('ready-to-show', resolve));
   } else {
-    videoWindow.focus();
+    focusWindow(videoWindow);
   }
   if (second) videoWindow.setBounds(second.workArea);
 
@@ -251,6 +256,9 @@ app.on('window-all-closed', () => {
 });
 
 // ── IPC: Window controls ───────────────────────────────────────────────
+ipcMain.handle('window:minimize', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.minimize();
+});
 ipcMain.handle('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();
 });

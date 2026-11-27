@@ -17,7 +17,6 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font-family:'Inter',system-ui,sans-serif;font-size:13px}
 .app{display:flex;height:100%}
-.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
 .no-drag{-webkit-app-region:no-drag}
 
 /* ── Library sidebar ── */
@@ -437,8 +436,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .hl-note-btn:hover{color:var(--t1);background:var(--bg4)}
 </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
+<script defer src="../../shared/window-controls.js"></script>
 </head>
 <body class="asar-media asar-book-reader">
+<header class="asar-windowbar"></header>
 <div class="drop-overlay" id="drop-overlay">
   <div class="drop-msg">📄 PDF رو اینجا بنداز</div>
 </div>

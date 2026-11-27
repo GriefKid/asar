@@ -92,7 +92,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
   display:flex;flex-direction:column;align-items:center;padding:24px 22px 18px;overflow:hidden}
 
 /* Title bar drag */
-.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
 .no-drag{-webkit-app-region:no-drag}
 
 /* Art */
@@ -346,7 +345,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);font
 .ex-btn.on{background:var(--accent-lo);border-color:var(--accent-mid);color:var(--accent)}
 
 /* ── Fullscreen overlay ── */
-.fs-overlay{position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;
+.fs-overlay{position:fixed;inset:var(--asar-windowbar-height) 0 0;z-index:200;display:flex;flex-direction:column;align-items:center;
   justify-content:center;padding:40px 20px;opacity:0;pointer-events:none;transition:opacity .35s}
 .fs-overlay.show{opacity:1;pointer-events:all}
 .fs-bg{position:absolute;inset:0;background:var(--bg0)}
@@ -462,8 +461,10 @@ input.eq-slider{writing-mode:vertical-lr;direction:rtl;width:28px;height:120px;
 #wave-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:6px;opacity:.5}
 </style>
 <link rel="stylesheet" href="../../shared/appearance.css">
+<script defer src="../../shared/window-controls.js"></script>
 </head>
 <body class="asar-media asar-music-player">
+<header class="asar-windowbar"></header>
 <div class="bg-glow" id="bg-glow"></div>
 
 <div class="app">
