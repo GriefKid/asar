@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, session } = require('electron');
 
 const appPath = process.env.ASAR_SMOKE_APP || path.resolve(__dirname, '..');
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'asar-desktop-test-'));
@@ -73,6 +73,34 @@ async function clickIn(name, selector) {
     }
   } finally {
     debuggerClient.detach();
+  }
+}
+
+async function dragWindowFromContent(window) {
+  const bounds = window.getBounds();
+  const originalCursor = screen.getCursorScreenPoint;
+  const cursor = { x: bounds.x + 20, y: bounds.y + 120 };
+  screen.getCursorScreenPoint = () => ({ ...cursor });
+  await window.webContents.executeJavaScript(`(() => {
+    const surface = document.createElement('div');
+    surface.id = 'window-drag-fixture';
+    surface.style.cssText = 'position:fixed;left:0;top:100px;width:110px;height:90px;z-index:9999';
+    document.body.append(surface);
+  })()`);
+  const client = window.webContents.debugger;
+  client.attach();
+  try {
+    await client.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', x: 20, y: 120, button: 'left', buttons: 1, clickCount: 1 });
+    await delay(100);
+    cursor.x += 45;
+    cursor.y += 35;
+    await client.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 65, y: 155, button: 'left', buttons: 1 });
+    await waitForWindowState(() => window.getBounds().x === bounds.x + 45 && window.getBounds().y === bounds.y + 35, 'window to move from content');
+    await client.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 20, y: 120, button: 'left', buttons: 0, clickCount: 1 });
+  } finally {
+    client.detach();
+    screen.getCursorScreenPoint = originalCursor;
+    await window.webContents.executeJavaScript('document.getElementById("window-drag-fixture").remove()');
   }
 }
 
@@ -392,8 +420,10 @@ app.whenReady().then(async () => {
   await runIn('book-reader', 'document.getElementById("asar-collection-tree").open = true');
   await clickIn('book-reader', '#asar-collection-tree .asar-tree-item button');
   await readBook('First offline document');
+  const readerBounds = windows.get('book-reader').getBounds();
   await main('window.api.openBookReaderWithFile(' + JSON.stringify(otherFile) + ')');
   await readBook('Second offline document');
+  assert.deepEqual(windows.get('book-reader').getBounds(), readerBounds);
 
   for (const [name, reopen] of [
     ['music-player', 'openMusicPlayer'], ['video-player', 'openVideoPlayer'],
@@ -401,8 +431,18 @@ app.whenReady().then(async () => {
   ]) {
     const window = windows.get(name);
     showWindow.call(window);
-    const fullscreen = window.isFullScreen();
+    assert.equal(window.isNormal(), true, name);
+    const normal = window.getBounds();
     await runIn(name, 'document.body.dataset.windowState = "preserved"');
+    const fullscreenSelector = '[data-window-action="fullscreen"]';
+    await clickIn(name, fullscreenSelector);
+    await waitForWindowState(() => window.isFullScreen(), `${name} to enter fullscreen`);
+    await waitIn(name, `document.querySelector('${fullscreenSelector}').getAttribute('aria-pressed') === 'true'`);
+    await clickIn(name, fullscreenSelector);
+    await waitForWindowState(() => window.isNormal(), `${name} to leave fullscreen`);
+    await waitIn(name, `document.querySelector('${fullscreenSelector}').getAttribute('aria-pressed') === 'false'`);
+    assert.deepEqual(window.getBounds(), normal, name);
+    if (name === 'main-app') await dragWindowFromContent(window);
     await clickIn(name, '[data-window-action="minimize"]');
     await waitForWindowState(() => !window.isDestroyed() && window.isMinimized(), `${name} to minimize`);
     assert.equal(window.isDestroyed(), false, name);
@@ -411,7 +451,7 @@ app.whenReady().then(async () => {
     else window.restore();
     await waitForWindowState(() => !window.isDestroyed() && !window.isMinimized(), `${name} to restore`);
     assert.equal(windows.get(name), window, name);
-    assert.equal(window.isFullScreen(), fullscreen, name);
+    assert.equal(window.isNormal(), true, name);
     assert.equal(await runIn(name, 'document.body.dataset.windowState'), 'preserved', name);
     if (name === 'book-reader') await readBook('Second offline document');
 

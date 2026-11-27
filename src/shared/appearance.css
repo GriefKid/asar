@@ -51,6 +51,8 @@ button, summary { -webkit-app-region: no-drag; }
   direction: ltr; flex: 0 0 var(--asar-windowbar-height); padding-inline: 7px;
   background: #17142b; border-bottom: 1px solid var(--bd2); -webkit-app-region: drag;
 }
+.asar-windowbar[data-fullscreen="true"] { -webkit-app-region: no-drag; }
+.asar-window-moving, .asar-window-moving * { cursor: grabbing !important; user-select: none !important; }
 body:has(> .asar-windowbar) { --asar-windowbar-height: 36px; display: flex; flex-direction: column; }
 .asar-windowbar ~ .app { flex: 1; min-height: 0; }
 .asar-window-title {

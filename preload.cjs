@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld('api', {
   saveTextFile: (content, name) => ipcRenderer.invoke('save:textFile', content, name),
   // Window controls
   minimizeWindow:  () => ipcRenderer.invoke('window:minimize'),
+  toggleWindowFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
+  onWindowFullscreen: (cb) => ipcRenderer.on('window:fullscreen-changed', (_, fullscreen) => cb(fullscreen)),
+  beginWindowDrag: () => ipcRenderer.send('window:drag-start'),
+  moveWindowDrag:  () => ipcRenderer.send('window:drag-move'),
+  endWindowDrag:   () => ipcRenderer.send('window:drag-end'),
   closeWindow:     () => ipcRenderer.invoke('window:close'),
   quitApp:         () => ipcRenderer.invoke('app:quit'),
   // Main app — open sub-apps

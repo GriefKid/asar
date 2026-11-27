@@ -36,38 +36,45 @@ app.on('web-contents-created', (_, contents) => {
   });
 });
 
+function createAppWindow(file, width, height, display, backgroundColor = '#04040C') {
+  const currentDisplay = mainWindow ? screen.getDisplayMatching(mainWindow.getBounds()) : screen.getPrimaryDisplay();
+  const area = (display || currentDisplay).workArea;
+  width = Math.min(width, Math.floor(area.width * 0.9));
+  height = Math.min(height, Math.floor(area.height * 0.9));
+  const window = new BrowserWindow({
+    width, height, x: area.x + Math.floor((area.width - width) / 2), y: area.y + Math.floor((area.height - height) / 2),
+    frame: false, backgroundColor, icon: APP_ICON, webPreferences: WEB_PREFS, show: false
+  });
+  for (const [event, fullscreen] of [['enter-full-screen', true], ['leave-full-screen', false]]) {
+    window.on(event, () => window.webContents.send('window:fullscreen-changed', fullscreen));
+  }
+  window.loadFile(file);
+  window.once('ready-to-show', () => window.show());
+  return window;
+}
+
 function createMusicPlayer() {
-  musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  musicWindow.loadFile('src/apps/music-player/index.html');
-  musicWindow.once('ready-to-show', () => musicWindow.show());
+  musicWindow = createAppWindow('src/apps/music-player/index.html', 1320, 850);
   musicWindow.on('closed', () => { musicWindow = null; });
 }
 
-function createVideoPlayer() {
-  videoWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  videoWindow.loadFile('src/apps/video-player/index.html');
-  videoWindow.once('ready-to-show', () => videoWindow.show());
+function createVideoPlayer(display) {
+  videoWindow = createAppWindow('src/apps/video-player/index.html', 1400, 885, display);
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
 function createMainApp() {
-  mainWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  mainWindow.loadFile('src/main-app/index.html');
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow = createAppWindow('src/main-app/index.html', 1420, 920);
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-function createBookReader() {
-  bookWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  bookWindow.loadFile('src/apps/book-reader/index.html');
-  bookWindow.once('ready-to-show', () => bookWindow.show());
+function createBookReader(display) {
+  bookWindow = createAppWindow('src/apps/book-reader/index.html', 1320, 900, display);
   bookWindow.on('closed', () => { bookWindow = null; });
 }
 
 function createWriter() {
-  writerWindow = new BrowserWindow({ width: 1100, height: 740, frame: false, backgroundColor: '#0f0f13', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  writerWindow.loadFile('src/apps/writer/index.html');
-  writerWindow.once('ready-to-show', () => writerWindow.show());
+  writerWindow = createAppWindow('src/apps/writer/index.html', 1100, 740, undefined, '#0f0f13');
   writerWindow.on('closed', () => { writerWindow = null; });
 }
 
@@ -209,13 +216,11 @@ ipcMain.handle('app:open-book-file', async (_, filePath) => {
   const second = displays.find(d => d.id !== primary.id);
 
   if (!bookWindow || bookWindow.isDestroyed()) {
-    createBookReader();
+    createBookReader(second);
     await new Promise(resolve => bookWindow.once('ready-to-show', resolve));
   } else {
     focusWindow(bookWindow);
   }
-  if (second) bookWindow.setBounds(second.workArea);
-
   setTimeout(() => {
     if (bookWindow && !bookWindow.isDestroyed()) {
       bookWindow.webContents.send('open:file', filePath);
@@ -229,13 +234,11 @@ ipcMain.handle('app:open-video-file', async (_, filePath) => {
   const second = displays.find(d => d.id !== primary.id);
 
   if (!videoWindow || videoWindow.isDestroyed()) {
-    createVideoPlayer();
+    createVideoPlayer(second);
     await new Promise(resolve => videoWindow.once('ready-to-show', resolve));
   } else {
     focusWindow(videoWindow);
   }
-  if (second) videoWindow.setBounds(second.workArea);
-
   setTimeout(() => {
     if (videoWindow && !videoWindow.isDestroyed()) {
       videoWindow.webContents.send('open:file', filePath);
@@ -259,11 +262,47 @@ app.on('window-all-closed', () => {
 ipcMain.handle('window:minimize', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();
 });
+ipcMain.handle('window:toggle-fullscreen', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) window.setFullScreen(!window.isFullScreen());
+});
 ipcMain.handle('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();
 });
 ipcMain.handle('app:quit', () => {
   app.quit();
+});
+
+const windowDrags = new WeakMap();
+ipcMain.on('window:drag-start', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isMinimized()) return;
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = window.getBounds();
+  const restore = window.isFullScreen() || window.isMaximized();
+  const normal = window.getNormalBounds();
+  windowDrags.set(window, {
+    restore,
+    x: restore ? Math.round(Math.max(0, Math.min(1, (cursor.x - bounds.x) / bounds.width)) * normal.width) : cursor.x - bounds.x,
+    y: restore ? Math.max(0, Math.min(24, cursor.y - bounds.y)) : cursor.y - bounds.y
+  });
+});
+ipcMain.on('window:drag-move', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const drag = windowDrags.get(window);
+  if (!drag || window.isMinimized()) return;
+  if (drag.restore) {
+    if (window.isFullScreen()) window.setFullScreen(false);
+    else if (window.isMaximized()) window.unmaximize();
+    drag.restore = false;
+  }
+  if (window.isFullScreen() || window.isMaximized()) return;
+  const cursor = screen.getCursorScreenPoint();
+  window.setPosition(cursor.x - drag.x, cursor.y - drag.y);
+});
+ipcMain.on('window:drag-end', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) windowDrags.delete(window);
 });
 
 // ── IPC: File dialogs ──────────────────────────────────────────────
