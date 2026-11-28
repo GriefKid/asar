@@ -22,12 +22,12 @@ test('social access requires approval, blocks revoke it, and an account cannot c
       grant execute on function auth.uid() to authenticated;
     `);
     await db.exec(fs.readFileSync('supabase-setup.sql', 'utf8'));
-    await db.exec('grant all on public.profiles, public.user_data to authenticated');
     const legacy = '00000000-0000-4000-8000-000000000004';
     await db.query('insert into auth.users values ($1, $2, $3)', [legacy, 'legacy@example.invalid', {}]);
     await db.exec(fs.readFileSync('supabase/migrations/202611270001_profiles_and_sharing.sql', 'utf8'));
     await db.exec(fs.readFileSync('supabase/migrations/202611280001_auto_social_profiles.sql', 'utf8'));
     await db.exec(fs.readFileSync('supabase/migrations/202611280002_discoverable_profiles_directory.sql', 'utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations/202611280003_user_data_sync_grants.sql', 'utf8'));
     assert.equal((await db.query('select discoverable from public.asar_profiles where id = $1', [legacy])).rows[0].discoverable, false);
     for (const [id, name] of [[owner, 'owner'], [reader, 'reader'], [stranger, 'stranger']]) {
       await db.query('insert into auth.users values ($1, $2, $3)', [id, name + '@example.invalid', { display_name: name, asar_discoverable: name === 'owner' }]);
@@ -44,6 +44,7 @@ test('social access requires approval, blocks revoke it, and an account cannot c
     await switchTo(owner);
     await db.query("insert into public.asar_shared_works (owner,work_id,title,kind,stage) values ($1,'work','Shared book','book','done')", [owner]);
     await db.query('insert into public.user_data (id) values ($1)', [owner]);
+    assert.equal((await db.query('select id from public.user_data where id = $1', [owner])).rows.length, 1);
     await switchTo(reader);
     assert.deepEqual((await db.query('select username from public.asar_discover_profiles()')).rows.map(row => row.username), ['owner']);
     assert.equal((await db.query('select username from public.asar_discover_profiles($1)', ['missing'])).rows.length, 0);
