@@ -1,7 +1,3 @@
-// ── pdf.js setup ───────────────────────────────────────────────────────
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 // ── State ──────────────────────────────────────────────────────────────
 const DATA_KEY = 'book-reader';
 let state = loadState();
@@ -9,11 +5,12 @@ let pdfDoc = null;
 let currentPage = 1;
 let totalPages = 0;
 let currentBookPath = null;
+let bookOpenRequest = 0;
+let pageRenderRequest = 0;
 let readMode = 'original';   // 'original' | 'both' | 'persian'
 let fontSize = 18;
 let activeTab = 0;
-let translating = false;
-let translationAborted = false;
+let translating = null;
 let pendingHighlight = null;  // {text, page, color}
 let pendingRectAnnot = null;
 let currentRectColor = 'y';
@@ -45,19 +42,24 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch {}
+  window.asarCollections?.refresh();
+}
+
+function translationKey(path, page) {
+  if (/^[\x00-\xff]+$/.test(path)) return `trans_${btoa(path)}_${page}`;
+  const bytes = new TextEncoder().encode(path);
+  const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+  return `trans_u8_${btoa(binary)}_${page}`;
 }
 
 function getTransCache(path, page) {
-  try { return localStorage.getItem(`trans_${btoa(path)}_${page}`) || null; } catch { return null; }
-}
-
-function setTransCache(path, page, text) {
-  try { localStorage.setItem(`trans_${btoa(path)}_${page}`, text); } catch {}
+  const text = localStorage.getItem(translationKey(path, page));
+  return /[A-Za-z]/.test(text || '') && !/\p{Script=Arabic}/u.test(text) ? null : text;
 }
 
 function allPagesTranslated(path, total) {
   for (let i = 1; i <= total; i++) {
-    if (!getTransCache(path, i)) return false;
+    if (getTransCache(path, i) === null) return false;
   }
   return true;
 }
@@ -75,30 +77,34 @@ function renderLibrary() {
     return;
   }
 
-  el.innerHTML = state.books.map((b, bi) => {
+  const visible = state.books.map((book, index) => ({ book, index })).filter(({ book }) => !window.asarCollections?.itemFolder(book.path));
+  if (!visible.length) { el.innerHTML = '<div class="empty-lib">کتاب‌ها در مجموعه‌ها هستند.</div>'; return; }
+  el.innerHTML = visible.map(({ book: b, index: bi }) => {
     const isActive = b.path === currentBookPath;
     const pct = b.totalPages ? Math.round(((b.lastPage || 1) / b.totalPages) * 100) : 0;
     const rating = (state.ratings || {})[b.path] || 0;
     const stars = [1,2,3,4,5].map(n =>
-      `<span onclick="event.stopPropagation();setBookRating(${JSON.stringify(b.path)},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
+      `<span onclick="event.stopPropagation();setBookRating(${esc(JSON.stringify(b.path))},${n})" style="cursor:pointer;color:${rating >= n ? '#F5A623' : 'var(--t3)'};font-size:11px">★</span>`
     ).join('');
     return `<div class="book-item ${isActive ? 'active' : ''}"
         draggable="true"
         ondragstart="bookDragStart(event,${bi})"
         ondragend="bookDragEnd(event)"
         ondragover="bookDragOver(event)"
-        ondrop="bookDrop(event,${bi})"
-        onclick="openBook(${JSON.stringify(b.path)})">
-      <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="">` : '📖'}</div>
+        ondrop="bookDrop(event,${bi})">
+      <div class="book-cover">${b.cover ? `<img src="${esc(b.cover)}" alt="" draggable="false">` : '📖'}</div>
       <div class="book-meta">
-        <div class="book-title">${esc(b.title)}</div>
+        <button type="button" class="book-title" title="${esc(b.title)}">${esc(b.title)}</button>
         ${b.author ? `<div class="book-author">${esc(b.author)}</div>` : ''}
         <div class="book-prog"><div class="book-prog-fill" style="width:${pct}%"></div></div>
         <div style="display:flex;gap:1px;margin-top:3px">${stars}</div>
       </div>
-      <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${JSON.stringify(b.path)})" title="حذف">🗑</div>
+      <div class="book-del-btn" onclick="event.stopPropagation();deleteBook(${esc(JSON.stringify(b.path))})" title="حذف">🗑</div>
     </div>`;
   }).join('');
+  el.querySelectorAll('.book-item').forEach((card, index) => {
+    card.onclick = () => openBook(visible[index].book.path);
+  });
 }
 
 function deleteBook(path) {
@@ -112,12 +118,12 @@ let dragBookIdx = null;
 
 function bookDragStart(e, idx) {
   dragBookIdx = idx;
-  e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => e.currentTarget.style.opacity = '0.4', 0);
+  window.asarCollections?.startDrag(e, 'item', state.books[idx]?.path);
+  e.currentTarget.classList.add('asar-dragging');
 }
 
 function bookDragEnd(e) {
-  e.currentTarget.style.opacity = '';
+  e.currentTarget.classList.remove('asar-dragging');
   dragBookIdx = null;
 }
 
@@ -204,6 +210,10 @@ function cleanBookTitle(raw) {
 
 async function importPdf() {
   const paths = await window.api.openPdfFiles();
+  return addBooks(paths);
+}
+
+function addBooks(paths, openSingle = true) {
   if (!paths.length) return;
   const newPaths = [];
   for (const p of paths) {
@@ -215,7 +225,7 @@ async function importPdf() {
   }
   saveState();
   renderLibrary();
-  if (paths.length === 1) openBook(paths[0]);
+  if (openSingle && paths.length === 1) openBook(paths[0]);
   // sync to main library
   for (const p of newPaths) {
     const book = state.books.find(b => b.path === p);
@@ -255,10 +265,25 @@ async function fetchAndSaveBookMeta(path) {
 }
 
 async function openBook(path) {
-  const book = state.books.find(b => b.path === path);
-  if (!book) return;
+  let book = state.books.find(b => b.path === path);
+  if (!book) {
+    if (typeof path !== 'string' || !/\.pdf$/i.test(path)) return;
+    book = { path, title: cleanBookTitle(path.split(/[\\/]/).pop().slice(0, -4)), author: '', lastPage: 1, totalPages: 0 };
+    state.books.push(book);
+  }
 
+  const request = ++bookOpenRequest;
+  translating = null;
+  document.getElementById('trans-progress').classList.remove('show');
+  recordReadSpeed();
+  const previousDoc = pdfDoc;
+  pdfDoc = null;
+  if (previousDoc) previousDoc.destroy().catch(() => {});
   currentBookPath = path;
+  currentPage = 1;
+  totalPages = 0;
+  checkTranslateBtn();
+  updateNav();
   renderLibrary();
 
   // load PDF
@@ -268,7 +293,18 @@ async function openBook(path) {
 
   try {
     const buf = await window.api.readFileBuffer(path);
-    pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    if (request !== bookOpenRequest) return;
+    const resources = new URL('../../../node_modules/pdfjs-dist/', document.baseURI);
+    const documentPdf = await pdfjsLib.getDocument({
+      data: new Uint8Array(buf), isEvalSupported: false,
+      cMapUrl: new URL('cmaps/', resources).href, cMapPacked: true,
+      standardFontDataUrl: new URL('standard_fonts/', resources).href
+    }).promise;
+    if (request !== bookOpenRequest) {
+      await documentPdf.destroy();
+      return;
+    }
+    pdfDoc = documentPdf;
     totalPages = pdfDoc.numPages;
 
     book.totalPages = totalPages;
@@ -279,24 +315,27 @@ async function openBook(path) {
     document.getElementById('btn-next').disabled = false;
 
     // restore last page
-    currentPage = book.lastPage || 1;
+    currentPage = Math.min(totalPages, Math.max(1, Number(book.lastPage) || 1));
     document.getElementById('book-name-tb').textContent = book.title;
 
     // load TOC
     loadToc();
 
     await renderCurrentPage();
+    if (request !== bookOpenRequest) return;
     updateNav();
     checkTranslateBtn();
   } catch (e) {
+    if (request !== bookOpenRequest) return;
     const msg = String(e.message || e);
     const notFound = msg.includes('ENOENT') || msg.includes('no such file') || msg.includes('cannot find');
     document.getElementById('pdf-container').innerHTML =
       `<div style="color:var(--err);text-align:center;padding:40px;direction:rtl;line-height:2">
         ${notFound ? '📂 فایل پیدا نشد' : '❌ خطا در بارگذاری'}
         <br><span style="font-size:11px;color:var(--t3);direction:ltr;display:block;word-break:break-all">${esc(path)}</span>
-        ${notFound ? `<button onclick="relocateBook(${JSON.stringify(path)})" style="margin-top:12px;padding:7px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px">انتخاب مجدد فایل</button>` : ''}
+        ${notFound ? `<button type="button" class="relocate-book" style="margin-top:12px;padding:7px 16px;border-radius:10px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:12px">انتخاب مجدد فایل</button>` : ''}
       </div>`;
+    if (notFound) document.querySelector('#pdf-container .relocate-book').onclick = () => relocateBook(path);
   }
 }
 
@@ -316,9 +355,11 @@ async function relocateBook(oldPath) {
 
 // ── TOC ────────────────────────────────────────────────────────────────
 async function loadToc() {
-  if (!pdfDoc) return;
+  const documentPdf = pdfDoc;
+  if (!documentPdf) return;
   try {
-    const outline = await pdfDoc.getOutline();
+    const outline = await documentPdf.getOutline();
+    if (documentPdf !== pdfDoc) return;
     if (!outline || !outline.length) {
       if (activeTab === 0) renderTocPanel([]);
       return;
@@ -367,15 +408,19 @@ async function tocGo(dest) {
 
 // ── Rendering ──────────────────────────────────────────────────────────
 async function renderCurrentPage() {
-  if (!pdfDoc) return;
+  const documentPdf = pdfDoc;
+  if (!documentPdf) return;
+  const request = ++pageRenderRequest;
+  const isCurrent = () => documentPdf === pdfDoc && request === pageRenderRequest;
   recordReadSpeed(); // record time on prev page before switching
   const container = document.getElementById('pdf-container');
 
   if (readMode === 'original') {
-    await renderPdfCanvas(container);
+    await renderPdfCanvas(container, documentPdf, isCurrent);
   } else {
-    await renderTextMode(container);
+    await renderTextMode(container, documentPdf, isCurrent);
   }
+  if (!isCurrent()) return;
 
   updateNav();
   updateProgress();
@@ -387,9 +432,9 @@ async function renderCurrentPage() {
   if (book) { book.lastPage = currentPage; saveState(); }
 }
 
-async function renderSinglePageWrap(pageNum, availWidth) {
-  const page = await pdfDoc.getPage(pageNum);
-  const scale = ((availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
+async function renderSinglePageWrap(documentPdf, pageNum, availWidth, isCurrent) {
+  const page = await documentPdf.getPage(pageNum);
+  const scale = (Math.max(1, availWidth - 20) / page.getViewport({ scale: 1 }).width) * zoomLevel;
   const viewport = page.getViewport({ scale });
   const wrap = document.createElement('div');
   wrap.className = 'pdf-page-wrap';
@@ -407,7 +452,9 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   wrap.appendChild(annotLayer);
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
   const textContent = await page.getTextContent();
-  await pdfjsLib.renderTextLayer({ textContent, container: textLayerDiv, viewport, textDivs: [] }).promise;
+  textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
+  await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
+  if (!isCurrent()) return;
   renderRectAnnotations(annotLayer, viewport);
   wrap.addEventListener('mouseup', onTextSelect);
   wrap.addEventListener('contextmenu', e => e.preventDefault());
@@ -419,15 +466,16 @@ async function renderSinglePageWrap(pageNum, availWidth) {
   return { wrap, viewport };
 }
 
-async function renderPdfCanvas(container) {
+async function renderPdfCanvas(container, documentPdf, isCurrent) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
     if (dualPage && currentPage < totalPages) {
       const avail = (container.clientWidth - 60) / 2;
       const [r1, r2] = await Promise.all([
-        renderSinglePageWrap(currentPage, avail),
-        renderSinglePageWrap(currentPage + 1, avail),
+        renderSinglePageWrap(documentPdf, currentPage, avail, isCurrent),
+        renderSinglePageWrap(documentPdf, currentPage + 1, avail, isCurrent),
       ]);
+      if (!isCurrent()) return;
       const dw = document.createElement('div');
       dw.className = 'dual-wrap';
       dw.appendChild(r1.wrap);
@@ -437,8 +485,9 @@ async function renderPdfCanvas(container) {
       container.appendChild(makePageNum());
       return;
     }
-    const page = await pdfDoc.getPage(currentPage);
-    const scale = ((container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
+    const page = await documentPdf.getPage(currentPage);
+    if (!isCurrent()) return;
+    const scale = (Math.max(1, container.clientWidth - 40) / page.getViewport({ scale: 1 }).width) * zoomLevel;
     const viewport = page.getViewport({ scale });
 
     const wrap = document.createElement('div');
@@ -472,12 +521,9 @@ async function renderPdfCanvas(container) {
 
     // render text layer
     const textContent = await page.getTextContent();
-    await pdfjsLib.renderTextLayer({
-      textContent,
-      container: textLayerDiv,
-      viewport,
-      textDivs: []
-    }).promise;
+    textLayerDiv.style.setProperty('--scale-factor', viewport.scale);
+    await new pdfjsLib.TextLayer({ textContentSource: textContent, container: textLayerDiv, viewport }).render();
+    if (!isCurrent()) return;
 
     // render saved rect annotations
     renderRectAnnotations(annotLayer, viewport);
@@ -493,18 +539,20 @@ async function renderPdfCanvas(container) {
     });
 
   } catch (e) {
+    if (!isCurrent()) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
 
-async function renderTextMode(container) {
+async function renderTextMode(container, documentPdf, isCurrent) {
   container.innerHTML = `<div class="spinner"></div>`;
   try {
-    const page = await pdfDoc.getPage(currentPage);
+    const page = await documentPdf.getPage(currentPage);
     const textContent = await page.getTextContent();
+    if (!isCurrent()) return;
     let rawText = textContent.items.map(i => i.str).join(' ').trim();
 
-    if (rawText.length < 30) {
+    if (!rawText) {
       container.innerHTML = `<div class="text-page" style="text-align:center;padding:60px 24px;direction:rtl">
         <div style="font-size:14px;color:var(--t3)">این صفحه متن قابل انتخاب ندارد</div>
       </div>`;
@@ -574,6 +622,7 @@ async function renderTextMode(container) {
     // text selection for highlights
     wrap.addEventListener('mouseup', onTextSelect);
   } catch (e) {
+    if (!isCurrent()) return;
     container.innerHTML = `<div style="color:var(--err);padding:20px;text-align:center">خطا: ${esc(String(e.message))}</div>`;
   }
 }
@@ -913,60 +962,39 @@ function deleteRectAnnot(id) {
 // ── Translation ────────────────────────────────────────────────────────
 async function translateAllPages() {
   if (!pdfDoc || translating) return;
-
-  translating = true;
-  translationAborted = false;
-
-  const btn = document.getElementById('trans-all-btn');
-  btn.classList.add('busy');
-  btn.textContent = 'در حال ترجمه...';
-
+  const job = { doc: pdfDoc, path: currentBookPath, pages: totalPages };
+  translating = job;
+  checkTranslateBtn();
   const prog = document.getElementById('trans-progress');
   prog.classList.add('show');
-
   let done = 0;
-  for (let i = 1; i <= totalPages; i++) {
-    if (translationAborted) break;
-
-    // skip already cached
-    if (getTransCache(currentBookPath, i)) {
-      done++;
-      updateTransProgress(done, totalPages);
-      continue;
-    }
-
+  updateTransProgress(done, job.pages);
+  for (let i = 1; i <= job.pages && translating === job; i++) {
     try {
-      const page = await pdfDoc.getPage(i);
-      const textContent = await page.getTextContent();
-      const rawText = textContent.items.map(item => item.str).join(' ').trim();
-
-      if (!rawText || rawText.length < 30) {
-        done++; updateTransProgress(done, totalPages); continue;
+      if (getTransCache(job.path, i) === null) {
+        const page = await job.doc.getPage(i);
+        const textContent = await page.getTextContent();
+        if (translating !== job) return;
+        const text = textContent.items.map(item => item.str).join(' ').trim();
+        const parts = [];
+        for (const chunk of chunkText(text, 400)) {
+          const fa = await window.api.translate(chunk);
+          if (translating !== job) return;
+          if (!fa?.trim() || (/[A-Za-z]/.test(chunk) && !/\p{Script=Arabic}/u.test(fa))) throw new Error('Untranslated page');
+          parts.push(fa.trim());
+        }
+        localStorage.setItem(translationKey(job.path, i), parts.join(' '));
       }
-
-      // translate in chunks to avoid timeout
-      const chunks = chunkText(rawText, 1000);
-      const translatedParts = [];
-      for (const chunk of chunks) {
-        if (translationAborted) break;
-        const fa = await window.api.translate(chunk).catch(() => null);
-        translatedParts.push(fa || chunk);
-        await sleep(200);
-      }
-
-      setTransCache(currentBookPath, i, translatedParts.join(' '));
+      done++;
     } catch {}
-
-    done++;
-    updateTransProgress(done, totalPages);
-    await sleep(100);
+    if (translating !== job) return;
+    updateTransProgress(done, job.pages);
   }
-
-  translating = false;
-  btn.classList.remove('busy');
+  if (translating !== job) return;
+  translating = null;
   checkTranslateBtn();
-
-  // re-render if in a translated mode
+  const status = document.getElementById('trans-progress-text');
+  status.textContent = done === job.pages ? 'ترجمهٔ کتاب کامل شد.' : `${done} از ${job.pages} صفحه آماده است. برای صفحه‌های باقی‌مانده دوباره ترجمه را بزن.`;
   if (readMode !== 'original') renderCurrentPage();
 }
 
@@ -976,35 +1004,26 @@ function updateTransProgress(done, total) {
   document.getElementById('trans-progress-pct').textContent = pct + '%';
   document.getElementById('trans-progress-text').textContent =
     `ترجمه ${done} از ${total} صفحه`;
-  if (done >= total) {
-    setTimeout(() => document.getElementById('trans-progress').classList.remove('show'), 2000);
-  }
 }
 
 function checkTranslateBtn() {
   const btn = document.getElementById('trans-all-btn');
-  if (!currentBookPath || !totalPages) return;
-  if (allPagesTranslated(currentBookPath, totalPages)) {
-    btn.innerHTML = `✓ ترجمه شده`;
-    btn.style.opacity = '.6';
-    btn.style.cursor = 'default';
-  }
+  const complete = Boolean(pdfDoc && allPagesTranslated(currentBookPath, totalPages));
+  btn.disabled = !pdfDoc || Boolean(translating) || complete;
+  btn.classList.toggle('busy', Boolean(translating));
+  btn.textContent = translating ? 'در حال ترجمه…' : complete ? '✓ ترجمه شد' : 'ترجمه';
 }
 
 function chunkText(text, maxLen) {
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
   const chunks = [];
-  let current = '';
-  for (const s of sentences) {
-    if ((current + s).length > maxLen) {
-      if (current) chunks.push(current.trim());
-      current = s;
-    } else {
-      current += ' ' + s;
-    }
+  while (text.length > maxLen) {
+    const space = text.lastIndexOf(' ', maxLen);
+    const boundary = space > 0 ? space : maxLen;
+    chunks.push(text.slice(0, boundary));
+    text = text.slice(boundary).trimStart();
   }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks.length ? chunks : [text];
+  if (text) chunks.push(text);
+  return chunks;
 }
 
 // ── Read mode ──────────────────────────────────────────────────────────
@@ -1339,6 +1358,11 @@ let dragCounter = 0;
 
 document.addEventListener('dragenter', e => {
   e.preventDefault();
+  if (e.target.closest?.('#asar-collection-tree')) {
+    dragCounter = 0;
+    dropOverlay.classList.remove('show');
+    return;
+  }
   const hasPdf = [...(e.dataTransfer?.items || [])].some(i => i.type === 'application/pdf' || i.kind === 'file');
   if (!hasPdf) return;
   dragCounter++;
@@ -1361,20 +1385,7 @@ document.addEventListener('drop', async e => {
   );
   if (!files.length) return;
 
-  const newPaths = [];
-  for (const f of files) {
-    const p = f.path;
-    if (!p) continue;
-    if (state.books.find(b => b.path === p)) continue;
-    const fileName = p.split(/[\\/]/).pop().replace(/\.pdf$/i, '');
-    state.books.push({ path: p, title: fileName, author: '', totalPages: 0, lastPage: 1, cover: null });
-    newPaths.push(p);
-  }
-  if (!newPaths.length) return;
-  saveState();
-  renderLibrary();
-  if (newPaths.length === 1) openBook(newPaths[0]);
-  for (const p of newPaths) fetchAndSaveBookMeta(p);
+  addBooks(files.map(file => file.path).filter(Boolean));
 });
 
 // ── Dual page ─────────────────────────────────────────────────────────
@@ -1705,7 +1716,21 @@ async function suggestReadingMusic() {
 
 // ── Init ───────────────────────────────────────────────────────────────
 renderLibrary();
+checkTranslateBtn();
 initFirebase();
+
+let lastPdfWidth = 0;
+let pdfResizeTimer;
+new ResizeObserver(([entry]) => {
+  const width = entry.target.clientWidth;
+  if (width === lastPdfWidth) return;
+  const resized = lastPdfWidth > 0;
+  lastPdfWidth = width;
+  clearTimeout(pdfResizeTimer);
+  if (resized && width > 40 && pdfDoc && readMode === 'original') {
+    pdfResizeTimer = setTimeout(renderCurrentPage, 120);
+  }
+}).observe(document.getElementById('pdf-container'));
 
 // Auto-clean titles and fetch missing covers for all existing books
 (async () => {
@@ -1729,3 +1754,13 @@ initFirebase();
 if (window.api?.onOpenFile) {
   window.api.onOpenFile(function(path) { openBook(path); });
 }
+
+window.asarCollectionSource = {
+  items: () => state.books.map(book => ({ id: book.path, title: book.title })),
+  openOnTitle: true,
+  open: id => openBook(id),
+  fileType: /\.pdf$/i,
+  importFiles: paths => addBooks(paths, false),
+  changed: renderLibrary,
+  redraw: renderLibrary
+};

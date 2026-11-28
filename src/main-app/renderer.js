@@ -4,62 +4,7 @@
 const J_MONTHS = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
 const J_DAYS   = ['یک‌شنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنج‌شنبه','جمعه','شنبه'];
 
-function toJalali(gy, gm, gd) {
-  const g_d_no = [0,31,59+Math.floor(gy/4)-Math.floor(gy/100)+Math.floor(gy/400)-Math.floor((gy-1)/4)+Math.floor((gy-1)/100)-Math.floor((gy-1)/400),
-    91,120,151,181,212,243,273,304,334];
-  let jy = gy <= 1600 ? 0 : 979;
-  gy = gy <= 1600 ? gy - 621 : gy - 1600;
-  const gy2 = gm > 2 ? gy + 1 : gy;
-  let g_days = 365*gy + Math.floor((gy2+3)/4) - Math.floor((gy2+99)/100) + Math.floor((gy2+399)/400) - 80 + gd + g_d_no[gm-1];
-  jy += 33*Math.floor(g_days/12053);
-  g_days %= 12053;
-  jy += 4*Math.floor(g_days/1461);
-  g_days %= 1461;
-  if (g_days > 365) { jy += Math.floor((g_days-1)/365); g_days = (g_days-1) % 365; }
-  const jm = g_days < 186 ? 1+Math.floor(g_days/31) : 7+Math.floor((g_days-186)/30);
-  const jd = g_days < 186 ? (g_days % 31)+1 : ((g_days-186) % 30)+1;
-  return { y: jy, m: jm, d: jd };
-}
-
-function fromJalali(jy, jm, jd) {
-  let epbase = jy - (jy >= 0 ? 474 : 473);
-  const epyear = 474 + (((epbase % 2820) + 2820) % 2820);
-  return jd + (jm <= 6 ? (jm-1)*31 : (jm-1)*30+6) +
-    Math.floor((epyear*682 - 110) / 2816) + (epyear-1)*365 +
-    Math.floor(epbase/2820)*1029983 + 1948319.5 - 2440587.5;
-}
-
-function jalaliToGregorian(jy, jm, jd) {
-  const jdn = fromJalali(jy, jm, jd);
-  const a = jdn + 0.5, z = Math.floor(a), f = a - z;
-  let b = z >= 2299161 ? ((() => { const alpha = Math.floor((z-1867216.25)/36524.25); return z+1+alpha-Math.floor(alpha/4); })()) : z;
-  const c = b + 1524, d = Math.floor((c-122.1)/365.25), e = Math.floor(365.25*d), g = Math.floor((c-e)/30.6001);
-  const gd = c - e + f - Math.floor(30.6001*g);
-  const gm = g < 14 ? g-1 : g-13;
-  const gy = gm > 2 ? d-4716 : d-4715;
-  return { y: gy, m: gm, d: Math.floor(gd) };
-}
-
-function todayJalali() {
-  const now = new Date();
-  return toJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
-}
-
-function jalaliMonthLen(y, m) {
-  if (m <= 6) return 31;
-  if (m <= 11) return 30;
-  // Esfand: leap check
-  const g = jalaliToGregorian(y, 12, 1);
-  const isLeap = (g.y%4===0 && g.y%100!==0) || g.y%400===0;
-  return isLeap ? 30 : 29;
-}
-
-function jalaliFirstWeekday(y, m) {
-  const g = jalaliToGregorian(y, m, 1);
-  const dow = new Date(g.y, g.m-1, g.d).getDay(); // 0=Sun
-  // Jalali week starts Sat(6): convert Sun=0→1, Mon=1→2 ... Sat=6→0
-  return (dow + 1) % 7;
-}
+const { todayJalali, jalaliMonthLen, jalaliWeekday, jalaliFirstWeekday, addJalaliDays, dateKey, compareDays } = AsarCalendar;
 
 function toFarsiNum(n) {
   return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]);
@@ -68,6 +13,9 @@ function toFarsiNum(n) {
 // ── State & persistence ───────────────────────────────────────────────────
 const KEY_LIB    = 'asar-library';
 const KEY_EVENTS = 'asar-events';
+const KEY_ACTUAL = 'asar-actual-events';
+let actualEvents = {};
+let eventSide = 'plan';
 const KEY_SETTINGS = 'asar-settings';
 const KEY_HABITS = 'asar-habits';
 const KEY_GOALS  = 'asar-goals';
@@ -94,6 +42,7 @@ let selectedDay; // {y,m,d} jalali
 function load() {
   try { library  = JSON.parse(localStorage.getItem(KEY_LIB))  || []; } catch { library  = []; }
   try { events   = JSON.parse(localStorage.getItem(KEY_EVENTS)) || {}; } catch { events   = {}; }
+  try { actualEvents = JSON.parse(localStorage.getItem(KEY_ACTUAL)) || {}; } catch { actualEvents = {}; }
   try { settings = JSON.parse(localStorage.getItem(KEY_SETTINGS)) || {}; } catch { settings = {}; }
   try { habits   = JSON.parse(localStorage.getItem(KEY_HABITS)) || []; } catch { habits   = []; }
   try { goals    = JSON.parse(localStorage.getItem(KEY_GOALS))  || []; } catch { goals    = []; }
@@ -179,8 +128,9 @@ function syncSubAppsToLibrary() {
   if (changed) saveLib();
 }
 
-function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); }
+function saveLib()      { localStorage.setItem(KEY_LIB,    JSON.stringify(library)); window.asarCollections?.refresh(); }
 function saveEvents()   { localStorage.setItem(KEY_EVENTS, JSON.stringify(events));  }
+function saveActualEvents() { localStorage.setItem(KEY_ACTUAL, JSON.stringify(actualEvents)); debouncedSync(); }
 function saveSettings() { localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings)); }
 function saveHabits()   { localStorage.setItem(KEY_HABITS,  JSON.stringify(habits));  }
 function saveGoals()    { localStorage.setItem(KEY_GOALS,   JSON.stringify(goals));   }
@@ -191,17 +141,31 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 let activeSection = 'home';
 
 window.showSection = function(id, el) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('section-' + id).classList.add('active');
-  if (el) el.classList.add('active');
+  const section = document.getElementById('section-' + id);
+  if (!section) return;
+  document.querySelector('.section.active')?.classList.remove('active');
+  document.querySelector('.nav-item.active')?.classList.remove('active');
+  const tab = document.querySelector('.nav-item[data-section="' + id + '"]') || el;
+  document.querySelector('.nav-item[aria-current]')?.removeAttribute('aria-current');
+  tab?.classList.add('active');
+  tab?.setAttribute('aria-current', 'page');
+  section.classList.add('active');
+  const title = tab?.querySelector('.nav-label')?.textContent;
+  if (title) document.getElementById('asar-section-title').textContent = title;
   activeSection = id;
   if (id === 'home')      renderHome();
   if (id === 'library')   renderLibrary();
   if (id === 'planner')   renderPlanner();
   if (id === 'settings')  renderSettings();
+  if (id === 'profile') window.asarProfile?.render();
   if (id === 'community') loadCommunity(currentCommunityTab);
   if (id === 'admin')     loadAdminData();
+};
+
+window.openTodayPlan = function() {
+  const day = todayJalali();
+  showSection('planner');
+  selectCalDay(day.y, day.m, day.d);
 };
 
 // ── Command Palette ───────────────────────────────────────────────────────
@@ -238,6 +202,10 @@ window.searchCmdPal = function(q) {
 
   // Actions
   const actions = [
+    { icon:'＋', title:'ثبت فعالیت واقعی', sub:'ثبت سریع فعالیت امروز', badge:'عمل', action:()=>{ const day=todayJalali(); showSection('planner'); selectCalDay(day.y,day.m,day.d); openAddEvent(null,'actual'); } },
+    { icon:'＋', title:'برنامهٔ فردا', sub:'افزودن رویداد آینده', badge:'عمل', action:()=>{ const day=addJalaliDays(todayJalali(),1); showSection('planner'); selectCalDay(day.y,day.m,day.d); openAddEvent(null,'plan'); } },
+    { icon:'＋', title:'نوشتهٔ جدید', sub:'بازکردن ویرایشگر', badge:'عمل', action:()=>{ localStorage.setItem('writer-open-with', JSON.stringify({action:'new-doc'})); window.api.openWriter(); } },
+    { icon:'◉', title:'پروفایل', sub:'حساب و کتابخانهٔ دوستان', badge:'بخش', action:()=>showSection('profile') },
     { icon:'🏠', title:'خانه', sub:'برو به بخش خانه', badge:'بخش', action:()=>showSection('home', document.querySelector('[onclick*="home"]')) },
     { icon:'📚', title:'کتابخانه', sub:'برو به کتابخانه', badge:'بخش', action:()=>showSection('library', document.querySelector('[onclick*="library"]')) },
     { icon:'📅', title:'برنامه‌ریزی', sub:'برو به تقویم', badge:'بخش', action:()=>showSection('planner', document.querySelector('[onclick*="planner"]')) },
@@ -250,18 +218,34 @@ window.searchCmdPal = function(q) {
   // Library items
   const libItems = library.filter(i => !q || (i.title||'').toLowerCase().includes(q) || (i.creator||'').toLowerCase().includes(q)).slice(0, 8).map(i => ({
     icon: typeEmoji(i.type), title: i.title, sub: i.creator || typeLabel(i.type),
-    badge: typeLabel(i.type), action: () => { showSection('library', document.querySelector('[onclick*="library"]')); }
+    badge: typeLabel(i.type), action: () => { showSection('library'); openReview(i.id); }
   }));
 
-  // Events (today)
-  const today = todayJalali();
-  const todayKey = `${today.y}-${today.m}-${today.d}`;
-  const evItems = (events[todayKey] || []).filter(e => !q || e.title.toLowerCase().includes(q)).slice(0, 4).map(e => ({
-    icon: e.type==='habit'?'🔁':e.type==='note'?'📝':'✅', title: e.title, sub: `امروز ${e.time||''}`, badge:'رویداد',
-    action: () => showSection('planner', document.querySelector('[onclick*="planner"]'))
+  const matches = (value) => !q || String(value || '').toLowerCase().includes(q);
+  const safeRead = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } };
+  const evItems = Object.entries({ ...events, ...Object.fromEntries(Object.keys(actualEvents).map(key => [key, events[key] || []])) }).flatMap(([key, list]) => {
+    const day = dayForKey(key);
+    return [...list.map(event => ({ event, side: 'plan' })), ...(actualEvents[key] || []).map(event => ({ event, side: 'actual' }))]
+      .filter(({ event }) => matches(event.title) && (q || key === getTodayKey()))
+      .map(({ event, side }) => ({
+        icon:'📅', title:event.title, sub:key + ' · ' + (event.time || '') + ' · ' + (side === 'plan' ? 'برنامه' : 'واقعیت'),
+        badge:'رویداد', action: () => { showSection('planner'); selectCalDay(day.y, day.m, day.d); }
+      }));
+  }).slice(0, 8);
+  const collections = safeRead('asar-collections', {});
+  const openings = { 'music-player':'openMusicPlayer', 'video-player':'openVideoPlayer', 'book-reader':'openBookReader', writer:'openWriter' };
+  const folders = Object.entries(collections).flatMap(([scope, tree]) => (tree.folders || []).filter(folder => matches(folder.title))
+    .map(folder => ({ icon:'▤', title:folder.title, sub:'مجموعه', badge:'مجموعه', action:() => {
+      if (scope === 'main-app') { showSection('library'); window.asarCollections?.show(folder.id); }
+      else if (openings[scope]) { localStorage.setItem('asar-folder-open', JSON.stringify({ scope, id: folder.id })); window.api[openings[scope]](); }
+    }}))).slice(0, q ? 8 : 3);
+  const docs = safeRead('asar-writer-docs', []).filter(doc => matches(doc.title)).slice(0, q ? 8 : 3).map(doc => ({
+    icon:'✎', title:doc.title, sub:'نویسنده', badge:'سند', action: () => {
+      localStorage.setItem('writer-open-with', JSON.stringify({ action:'open-doc', id:doc.id }));
+      window.api.openWriter();
+    }
   }));
-
-  cmdPalItems = [...actions, ...libItems, ...evItems];
+  cmdPalItems = [...actions, ...libItems, ...evItems, ...folders, ...docs];
   if (!cmdPalItems.length) { res.innerHTML = '<div class="cmdpal-empty">نتیجه‌ای پیدا نشد</div>'; return; }
 
   let html = '';
@@ -286,9 +270,7 @@ function renderHome() {
   document.getElementById('shamsi-date').textContent =
     toFarsiNum(today.d) + ' ' + J_MONTHS[today.m-1] + ' ' + toFarsiNum(today.y);
 
-  const g = new Date();
-  document.getElementById('shamsi-day').textContent =
-    J_DAYS[g.getDay()] + ' — ' + g.toLocaleDateString('fa-IR',{year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('shamsi-day').textContent = J_DAYS[jalaliWeekday(today.y, today.m, today.d)];
 
   // Stats
   const total  = library.length;
@@ -297,19 +279,19 @@ function renderHome() {
   const todayKey = `${today.y}-${today.m}-${today.d}`;
   const evToday = (events[todayKey] || []).length;
 
-  document.getElementById('stats-row').innerHTML = `
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num accent">${toFarsiNum(total)}</div><div class="stat-label">مجموع آثار</div>
-    </div>
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num" style="color:var(--accent)">${toFarsiNum(active)}</div><div class="stat-label">در حال بررسی</div>
-    </div>
-    <div class="stat-card" onclick="showSection('library',document.querySelector('[onclick*=library]'))">
-      <div class="stat-num ok">${toFarsiNum(done)}</div><div class="stat-label">تمام شده</div>
-    </div>
-    <div class="stat-card" onclick="showSection('planner',document.querySelector('[onclick*=planner]'))">
-      <div class="stat-num warn">${toFarsiNum(evToday)}</div><div class="stat-label">رویداد امروز</div>
-    </div>`;
+
+  const cards = [
+    { kind: 'library', value: total, title: 'مجموع آثار', icon: 'M5 5h4v14H5zM10 5h4v14h-4zM16 5l4 1-2 13-4-1z' },
+    { kind: 'active', value: active, title: 'در حال بررسی', icon: 'M8 5l11 7-11 7z' },
+    { kind: 'done', value: done, title: 'تمام‌شده', icon: 'm5 12 4 4 10-10' },
+    { kind: 'today', value: evToday, title: 'رویداد امروز', icon: 'M6 4v3m12-3v3M4 9h16m-14-3h12l2 2v11H4V8z' }
+  ];
+  document.getElementById('stats-row').innerHTML = cards.map(card => `
+    <button class="stat-card" data-stat="${card.kind}" type="button" onclick="${card.kind === 'today' ? 'openTodayPlan()' : "showSection('library')"}">
+      <span class="stat-num">${toFarsiNum(card.value)}</span>
+      <span class="stat-label">${card.title}</span>
+      <span class="asar-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${card.icon}"/></svg></span>
+    </button>`).join('');
 
   // Today events
   const todayEvs = events[todayKey] || [];
@@ -550,21 +532,25 @@ function renderKanban() {
 // ── Shelf drag & drop (reorder within row) ────────────────────────────────
 window.shelfDragStart = function(e, id) {
   dragItemId = id;
+  window.asarCollections?.startDrag(e, 'item', id);
   setTimeout(() => { const el = document.getElementById('mcard-'+id); if (el) el.classList.add('dragging'); }, 0);
   e.dataTransfer.effectAllowed = 'move';
 };
 window.shelfDragEnd = function(e) {
   if (dragItemId) { const el = document.getElementById('mcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+  dragItemId = null;
 };
 
 // ── Kanban drag & drop (move between columns) ─────────────────────────────
 window.kcardDragStart = function(e, id) {
   dragItemId = id;
+  window.asarCollections?.startDrag(e, 'item', id);
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => { const el = document.getElementById('kcard-'+id); if (el) el.classList.add('dragging'); }, 0);
 };
 window.kcardDragEnd = function(e) {
   if (dragItemId) { const el = document.getElementById('kcard-'+dragItemId); if (el) el.classList.remove('dragging'); }
+  dragItemId = null;
 };
 window.kcardDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
 window.kcardDrop = function(e, targetId) {
@@ -671,6 +657,7 @@ window.openInSubApp = function(id) {
   if (!item || !item.filePath) return;
   if (item.type === 'book') window.api.openBookReaderWithFile(item.filePath);
   else if (item.type === 'film') window.api.openVideoPlayerWithFile(item.filePath);
+  else if (item.type === 'music') window.api.openMusicPlayerWithFile(item.filePath);
 };
 
 window.openInSubAppFromReview = function() {
@@ -794,7 +781,7 @@ function renderCalendar() {
     const key = `${calViewY}-${calViewM}-${d}`;
     const isToday    = calViewY===today.y && calViewM===today.m && d===today.d;
     const isSelected = selectedDay.y===calViewY && selectedDay.m===calViewM && selectedDay.d===d;
-    const hasEv      = (events[key]||[]).length > 0;
+    const hasEv      = !!(events[key]?.length || actualEvents[key]?.length);
     html += `<div class="cal-day ${isToday?'today':''} ${isSelected?'selected':''}"
                   onclick="selectCalDay(${calViewY},${calViewM},${d})">${toFarsiNum(d)}${hasEv?'<span class="has-event"></span>':''}</div>`;
   }
@@ -814,110 +801,185 @@ window.calNav = function(dir) {
   renderCalendar();
 };
 
-function renderDayView() {
-  const { y, m, d } = selectedDay;
-  const g = jalaliToGregorian(y, m, d);
-  const dow = J_DAYS[new Date(g.y, g.m-1, g.d).getDay()];
-  document.getElementById('day-title').textContent = `${toFarsiNum(d)} ${J_MONTHS[m-1]} ${toFarsiNum(y)}`;
-  document.getElementById('day-sub').textContent   = dow;
 
-  const key = `${y}-${m}-${d}`;
-  const dayEvs = events[key] || [];
-
-  let html = '';
-  for (let h = 5; h < 24; h++) {
-    const hStr = String(h).padStart(2,'0');
-    const slotEvs = dayEvs.filter(e => e.time && e.time.startsWith(hStr+':'));
-    html += `<div class="time-slot">
-      <div class="slot-label">${hStr}:۰۰</div>
-      <div class="slot-events">
-        ${slotEvs.map(ev => `
-          <div class="event-block event-type-${ev.type} ${ev.done?'done':''}"
-               onclick="openEditEvent('${key}','${ev.id}')">
-            <div class="event-title">${esc(ev.title)}</div>
-            <div class="event-meta">${ev.time}${ev.duration?' — '+toFarsiNum(ev.duration)+' دقیقه':''}</div>
-            <div class="event-del-btn" onclick="event.stopPropagation();deleteEvent('${key}','${ev.id}')" title="حذف">✕</div>
-          </div>`).join('')}
-        ${slotEvs.length === 0 ? `<div class="event-empty" onclick="quickAddEvent('${hStr}:00')"></div>` : ''}
-      </div>
-    </div>`;
-  }
-  document.getElementById('timeline').innerHTML = html;
+function dayForKey(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return { y, m, d };
 }
 
-window.quickAddEvent = function(time) {
-  openAddEvent(time);
-};
+function canEditPlan(day) {
+  return compareDays(day, todayJalali()) > 0;
+}
 
-window.openAddEvent = function(prefillTime) {
+function renderDayView() {
+  const { y, m, d } = selectedDay;
+  const dow = J_DAYS[jalaliWeekday(y, m, d)];
+  const key = dateKey(selectedDay);
+  const editable = canEditPlan(selectedDay);
+  document.getElementById('day-title').textContent = `${toFarsiNum(d)} ${J_MONTHS[m-1]} ${toFarsiNum(y)}`;
+  document.getElementById('day-sub').textContent = dow;
+  document.getElementById('plan-add').disabled = !editable;
+  document.getElementById('plan-lock').textContent = editable ? 'تا نیمه‌شب قبل از این روز قابل ویرایش' : 'قفل شده';
+  document.getElementById('actual-add').disabled = compareDays(selectedDay, todayJalali()) > 0;
+  const actualAvailable = !document.getElementById('actual-add').disabled;
+  const perHour = (list, hour) => list.filter(event => event.time?.startsWith(hour + ':'));
+  const rows = [];
+  for (let h = 0; h < 24; h++) {
+    const hour = String(h).padStart(2, '0');
+    const plan = perHour(events[key] || [], hour);
+    const actual = perHour(actualEvents[key] || [], hour);
+    rows.push(`<div class="planner-hour"><span>${toFarsiNum(hour)}:۰۰</span>
+      <div class="planner-slot" data-side="plan">${renderSlot(plan, 'plan', key, hour, editable, actualAvailable)}</div>
+      <div class="planner-slot" data-side="actual">${renderSlot(actual, 'actual', key, hour, actualAvailable, false)}</div></div>`);
+  }
+  document.getElementById('timeline').innerHTML = rows.join('');
+}
+
+function renderSlot(items, side, key, hour, editable, offerCopy) {
+  const time = hour + ':00';
+  if (!items.length) return editable ? `<button type="button" class="planner-empty-slot" aria-label="افزودن در ${time}" onclick="openAddEvent('${time}','${side}')">+</button>` : '';
+  return items.map(event => {
+    const id = encodeURIComponent(String(event.id)).replace(/'/g, '%27');
+    return `<div class="event-block event-type-${['task', 'habit', 'note', 'idle'].includes(event.type) ? event.type : 'task'}">
+      <button type="button" class="planner-event-name" ${editable ? `onclick="openEditEvent('${key}','${id}','${side}')"` : 'disabled'}>
+        <span class="event-title">${esc(event.title)}</span><span class="event-meta">${esc(event.time)} · ${toFarsiNum(Number(event.duration) || 60)} دقیقه</span></button>
+      ${offerCopy && event.type !== 'idle' && event.type !== 'note' ? `<button type="button" class="planner-mini" onclick="recordPlan('${key}','${id}')">ثبت در واقعیت</button>` : ''}
+      ${editable ? `<button type="button" class="planner-mini" aria-label="حذف" onclick="deleteEvent('${key}','${id}','${side}')">×</button>` : ''}</div>`;
+  }).join('');
+}
+
+function eventList(side, key) {
+  const source = side === 'actual' ? actualEvents : events;
+  return source[key] || [];
+}
+
+function validEdit(side, key) {
+  return side === 'actual' ? compareDays(dayForKey(key), todayJalali()) <= 0 : canEditPlan(dayForKey(key));
+}
+
+window.quickAddEvent = function(time) { openAddEvent(time, 'plan'); };
+
+window.openAddEvent = function(prefillTime, side = 'plan', prefill = null) {
+  const key = dateKey(selectedDay);
+  if (!validEdit(side, key)) return;
+  eventSide = side;
   editingEventId = null;
   selectedRecur = 'none';
-  document.getElementById('event-title').value = '';
-  document.getElementById('event-time').value  = prefillTime || '09:00';
-  document.getElementById('event-dur').value   = '60';
-  selectedEventType = 'task';
-  document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.toggle('on', o.dataset.ev === 'task'));
-  document.querySelectorAll('[data-r]').forEach(o => o.classList.toggle('on', o.dataset.r === 'none'));
-  document.getElementById('add-event-modal').classList.add('show');
-  setTimeout(() => document.getElementById('event-title').focus(), 100);
-};
-
-window.openEditEvent = function(key, id) {
-  const ev = (events[key]||[]).find(e => e.id === id);
-  if (!ev) return;
-  editingEventId = { key, id };
-  document.getElementById('event-title').value = ev.title;
-  document.getElementById('event-time').value  = ev.time || '09:00';
-  document.getElementById('event-dur').value   = ev.duration || 60;
-  selectedEventType = ev.type || 'task';
-  document.querySelectorAll('.type-opt[data-ev]').forEach(o => {
-    o.classList.toggle('on', o.dataset.ev === selectedEventType);
+  document.getElementById('event-title').value = prefill?.title || '';
+  document.getElementById('event-time').value = prefillTime || '09:00';
+  document.getElementById('event-dur').value = prefill?.duration || '60';
+  selectedEventType = prefill?.type || 'task';
+  document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.toggle('on', o.dataset.ev === selectedEventType));
+  document.querySelectorAll('[data-r]').forEach(o => {
+    o.classList.toggle('on', o.dataset.r === 'none');
+    o.hidden = side === 'actual';
   });
   document.getElementById('add-event-modal').classList.add('show');
+  document.getElementById('event-title').focus();
+};
+
+window.openEditEvent = function(key, rawId, side = 'plan') {
+  const id = decodeURIComponent(rawId);
+  const event = eventList(side, key).find(item => String(item.id) === id);
+  if (!event || !validEdit(side, key)) return;
+  openAddEvent(event.time, side, event);
+  editingEventId = { key, id };
+};
+
+window.recordPlan = function(key, rawId) {
+  const event = eventList('plan', key).find(item => String(item.id) === decodeURIComponent(rawId));
+  if (event) openAddEvent(event.time, 'actual', event);
 };
 
 window.closeAddEvent = function() {
   document.getElementById('add-event-modal').classList.remove('show');
 };
 
-window.selectEventType = function(el, t) {
+window.selectEventType = function(el, type) {
   document.querySelectorAll('.type-opt[data-ev]').forEach(o => o.classList.remove('on'));
   el.classList.add('on');
-  selectedEventType = t;
+  selectedEventType = type;
 };
 
-window.saveEvent = function() {
-  const title = document.getElementById('event-title').value.trim();
-  if (!title) { document.getElementById('event-title').focus(); return; }
-  const time = document.getElementById('event-time').value;
-  const dur  = parseInt(document.getElementById('event-dur').value) || 60;
-
-  if (editingEventId) {
-    const { key, id } = editingEventId;
-    const ev = (events[key]||[]).find(e => e.id === id);
-    if (ev) { ev.title = title; ev.time = time; ev.duration = dur; ev.type = selectedEventType; }
-  } else {
-    const { y, m, d } = selectedDay;
-    const key = `${y}-${m}-${d}`;
-    if (!events[key]) events[key] = [];
-    const newEv = { id: uid(), title, time, duration: dur, type: selectedEventType, done: false, recur: selectedRecur };
-    events[key].push(newEv);
-    if (selectedRecur !== 'none') generateRecurringEvents(newEv, { y, m, d });
-  }
-  saveEvents();
+function finishEventChange(side) {
+  if (side === 'actual') saveActualEvents();
+  else saveEvents();
   closeAddEvent();
   renderDayView();
   renderCalendar();
-  if (activeSection === 'home') renderHome();
+}
+
+window.saveEvent = function() {
+  const titleInput = document.getElementById('event-title');
+  const title = titleInput.value.trim();
+  if (!title) { titleInput.focus(); return; }
+  const durationInput = document.getElementById('event-dur');
+  const time = document.getElementById('event-time').value;
+  const duration = Number(durationInput.value);
+  const range = AsarPlanner.interval({ time, duration });
+  if (!range || range[1] - range[0] !== duration) {
+    durationInput.setCustomValidity('بازه باید در همین روز پایان پیدا کند.');
+    durationInput.reportValidity();
+    durationInput.setCustomValidity('');
+    return;
+  }
+  const side = eventSide;
+  const key = editingEventId?.key || dateKey(selectedDay);
+  if (!validEdit(side, key)) { closeAddEvent(); renderDayView(); return; }
+  const source = side === 'actual' ? actualEvents : events;
+  const list = source[key] ||= [];
+  const fields = { title, time, duration, type: selectedEventType };
+  if (editingEventId) {
+    const event = list.find(item => String(item.id) === editingEventId.id);
+    if (event) Object.assign(event, fields);
+  } else {
+    const event = { id: uid(), ...fields, done: side === 'actual', recur: side === 'plan' ? selectedRecur : 'none' };
+    list.push(event);
+    if (side === 'plan' && event.recur !== 'none') generateRecurringEvents(event, dayForKey(key));
+  }
+  finishEventChange(side);
 };
 
-window.deleteEvent = function(key, id) {
-  if (!events[key]) return;
-  events[key] = events[key].filter(e => e.id !== id);
-  saveEvents();
-  renderDayView();
+window.deleteEvent = function(key, rawId, side = 'plan') {
+  if (!validEdit(side, key)) return;
+  const source = side === 'actual' ? actualEvents : events;
+  source[key] = eventList(side, key).filter(event => String(event.id) !== decodeURIComponent(rawId));
+  finishEventChange(side);
+};
+
+window.copyPlanDay = function() {
+  const next = addJalaliDays(selectedDay, 1);
+  if (!canEditPlan(next)) { alert('تنها می‌توان برای روزهای آینده برنامه کپی کرد.'); return; }
+  const target = events[dateKey(next)] ||= [];
+  let copied = 0;
+  for (const event of events[dateKey(selectedDay)] || []) {
+    if (target.some(item => item.title === event.title && item.time === event.time && item.duration === event.duration)) continue;
+    target.push({ ...event, id: uid(), done: false, recur: 'none', recurId: null });
+    copied++;
+  }
+  if (copied) saveEvents();
   renderCalendar();
-  if (activeSection === 'home') renderHome();
+  alert(copied ? toFarsiNum(copied) + ' رویداد به روز بعد اضافه شد.' : 'رویداد تازه‌ای برای کپی نبود.');
+};
+
+window.copyPlanWeek = function() {
+  const start = addJalaliDays(selectedDay, -((jalaliWeekday(selectedDay.y, selectedDay.m, selectedDay.d) + 1) % 7));
+  let copied = 0;
+  for (let i = 0; i < 7; i++) {
+    const from = dateKey(addJalaliDays(start, i));
+    const day = addJalaliDays(start, i + 7);
+    if (!canEditPlan(day)) continue;
+    const to = dateKey(day);
+    const target = events[to] ||= [];
+    for (const event of events[from] || []) {
+      if (target.some(item => item.title === event.title && item.time === event.time && item.duration === event.duration)) continue;
+      target.push({ ...event, id: uid(), done: false, recur: 'none', recurId: null });
+      copied++;
+    }
+  }
+  if (copied) saveEvents();
+  renderCalendar();
+  alert(copied ? toFarsiNum(copied) + ' رویداد به هفتهٔ بعد اضافه شد.' : 'در روزهای آینده رویداد تازه‌ای برای کپی نبود.');
 };
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────
@@ -934,6 +996,29 @@ function renderSettings() {
   if (sbCfg && sbKey) sbKey.value = sbCfg.anonKey || '';
   updateFirebaseStatus(!!(window._sb && window._currentUser), window._currentUser || null);
 }
+
+window.toggleKeyVisibility = function(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+};
+
+window.copyApiKey = function(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if (!inp || !inp.value) return;
+  navigator.clipboard.writeText(inp.value).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ کپی شد';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }).catch(() => {
+    inp.type = 'text';
+    inp.select();
+    document.execCommand('copy');
+    btn.textContent = '✓ کپی شد';
+    setTimeout(() => btn.textContent = 'کپی', 1500);
+  });
+};
 
 window.saveClaudeKey = function() {
   const val = document.getElementById('claude-key-input').value.trim();
@@ -1043,13 +1128,11 @@ function getTodayKey() { const t = todayJalali(); return `${t.y}-${t.m}-${t.d}`;
 
 function habitStreak(habit) {
   let streak = 0;
-  const g = new Date();
+  const today = todayJalali();
   for (let i = 0; i < 365; i++) {
-    const j = toJalali(g.getFullYear(), g.getMonth()+1, g.getDate());
-    const key = `${j.y}-${j.m}-${j.d}`;
-    if (habit.doneByDay[key]) streak++;
+    const key = dateKey(addJalaliDays(today, -i));
+    if (habit.doneByDay?.[key]) streak++;
     else if (i > 0) break;
-    g.setDate(g.getDate() - 1);
   }
   return streak;
 }
@@ -1063,9 +1146,7 @@ function renderHabits() {
     const done = !!h.doneByDay[todayKey];
     const streak = habitStreak(h);
     const last7 = Array.from({length:7}, (_, i) => {
-      const g2 = new Date(); g2.setDate(g2.getDate()-6+i);
-      const j2 = toJalali(g2.getFullYear(), g2.getMonth()+1, g2.getDate());
-      const k2 = `${j2.y}-${j2.m}-${j2.d}`;
+      const k2 = dateKey(addJalaliDays(todayJalali(), i - 6));
       return h.doneByDay[k2] ? 'var(--ok)' : 'var(--bg4)';
     });
     return `<div class="habit-item ${done?'done-today':''}" onclick="toggleHabit('${h.id}')">
@@ -1107,15 +1188,9 @@ function generateRecurringEvents(ev, { y, m, d }) {
   for (let i = 1; i <= daysToGen; i++) {
     let nextG;
     if (ev.recur === 'daily') {
-      const g = jalaliToGregorian(y, m, d);
-      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i);
-      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
-      nextG = { y: j2.y, m: j2.m, d: j2.d };
+      nextG = addJalaliDays({ y, m, d }, i);
     } else if (ev.recur === 'weekly') {
-      const g = jalaliToGregorian(y, m, d);
-      const dt = new Date(g.y, g.m-1, g.d); dt.setDate(dt.getDate()+i*7);
-      const j2 = toJalali(dt.getFullYear(), dt.getMonth()+1, dt.getDate());
-      nextG = { y: j2.y, m: j2.m, d: j2.d };
+      nextG = addJalaliDays({ y, m, d }, i * 7);
     } else { // monthly
       let nm = m + i, ny = y;
       while (nm > 12) { nm -= 12; ny++; }
@@ -1162,52 +1237,49 @@ function applyStoredTheme() {
 
 // ── Export / Import ───────────────────────────────────────────────────────
 window.exportData = function() {
-  const data = { library, events, habits, goals, settings, exportedAt: Date.now() };
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `asar-backup-${Date.now()}.json`; a.click();
-  URL.revokeObjectURL(url);
+  const data = { schema: 'asar-backup', version: 2, storage: AsarBackup.collect(localStorage), exportedAt: new Date().toISOString() };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'asar-backup-' + dateKey(todayJalali()) + '.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
-window.importDataClick = function() { document.getElementById('import-file-inp').click(); };
+window.importDataClick = () => document.getElementById('import-file-inp').click();
 
-window.importData = function(input) {
+window.importData = async function(input) {
   const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (data.library) { library = data.library; saveLib(); }
-      if (data.events)  { events  = data.events;  saveEvents(); }
-      if (data.habits)  { habits  = data.habits;  saveHabits(); }
-      if (data.goals)   { goals   = data.goals;   saveGoals(); }
-      renderHome(); renderHabits();
-      alert('داده‌ها با موفقیت وارد شدند ✓');
-    } catch { alert('فایل نامعتبر است'); }
-  };
-  reader.readAsText(file);
   input.value = '';
+  if (!file) return;
+  try {
+    const values = AsarBackup.parseBackup(JSON.parse(await file.text()));
+    if (!confirm('داده‌های موجود در نسخهٔ پشتیبان جایگزین شوند؟')) return;
+    AsarBackup.restore(localStorage, values);
+    load();
+    applyStoredTheme();
+    loadPomoSessions();
+    window.asarCollections?.refresh();
+    if (activeSection === 'library') renderLibrary();
+    if (activeSection === 'planner') renderPlanner();
+    renderHome();
+    debouncedSync();
+    alert('پشتیبان بازیابی شد. پنجره‌های پلیر و نویسنده را دوباره باز کن تا نسخهٔ بازیابی‌شده را ببینی.');
+  } catch {
+    alert('فایل پشتیبان خوانده نشد یا فضای ذخیره کافی نبود.');
+  }
 };
 
 // ── Daily Performance Score ───────────────────────────────────────────────
 function calcDailyScore(jy, jm, jd) {
-  const key = `${jy}-${jm}-${jd}`;
-  const dayEvs   = events[key] || [];
-  const totalEvs = dayEvs.length;
-  const doneEvs  = dayEvs.filter(e => e.done).length;
+  const day = { y: jy, m: jm, d: jd };
+  const key = dateKey(day);
+  const doneHab = habits.filter(habit => habit.doneByDay?.[key]).length;
   const totalHab = habits.length;
-  const doneHab  = habits.filter(h => h.doneByDay?.[key]).length;
-
-  const evScore  = totalEvs  > 0 ? (doneEvs  / totalEvs)  * 50 : 0;
-  const habScore = totalHab > 0 ? (doneHab / totalHab) * 30 : 0;
-  const bonus    = (evScore + habScore) >= 65 ? 20
-                 : (evScore + habScore) >= 40 ? 10 : 0;
   return {
-    score: Math.round(evScore + habScore + bonus),
-    doneEvs, totalEvs, doneHab, totalHab
+    ...AsarPlanner.score(events[key] || [], actualEvents[key] || [], doneHab, totalHab, compareDays(day, todayJalali())),
+    doneHab,
+    totalHab
   };
 }
 
@@ -1221,16 +1293,16 @@ function renderDailyScore() {
   const dnames = ['ی','د','س','چ','پ','ج','ش']; // Sun→Sat
   const days7 = [];
   for (let i = 6; i >= 0; i--) {
-    const g = new Date(); g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
-    days7.push({ j, data: calcDailyScore(j.y, j.m, j.d), isToday: i === 0, lbl: dnames[g.getDay()] });
+    const j = addJalaliDays(today, -i);
+    days7.push({ j, data: calcDailyScore(j.y, j.m, j.d), isToday: i === 0, lbl: dnames[jalaliWeekday(j.y, j.m, j.d)] });
   }
 
   const td  = days7[6].data;
   const yd  = days7[5].data;
   const delta = td.score - yd.score;
+  const deltaLabel = td.pending ? "پس از ثبت هر دو" : (yd.pending ? "" : "نسبت به دیروز");
 
-  const lbl = td.score >= 90 ? '✦ فوق‌العاده'
+  const lbl = td.pending ? 'در انتظار ثبت' : td.score >= 90 ? '✦ فوق‌العاده'
             : td.score >= 75 ? 'خوب'
             : td.score >= 50 ? 'متوسط'
             : td.score >= 25 ? 'ضعیف'
@@ -1238,15 +1310,15 @@ function renderDailyScore() {
             : 'بدون فعالیت';
 
   const dCls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
-  const dTxt = delta > 0 ? `↑ ${toFarsiNum(delta)}` : delta < 0 ? `↓ ${toFarsiNum(-delta)}` : '= مساوی';
+  const dTxt = td.pending || yd.pending ? '' : delta > 0 ? `↑ ${toFarsiNum(delta)}` : delta < 0 ? `↓ ${toFarsiNum(-delta)}` : '= مساوی';
 
-  const evPct  = td.totalEvs  > 0 ? Math.round(td.doneEvs  / td.totalEvs  * 100) : 0;
+  const evPct = Math.round(td.adherence * 2);
   const habPct = td.totalHab > 0 ? Math.round(td.doneHab / td.totalHab * 100) : 0;
 
   const barsHTML = days7.map(d => {
     const h = Math.max(Math.round(d.data.score / 100 * 48), 2);
     return `<div class="dsc-bw">
-      <div class="dsc-bnum${d.isToday?' today':''}">${d.data.score > 0 ? toFarsiNum(d.data.score) : ''}</div>
+      <div class="dsc-bnum${d.isToday?' today':''}">${d.data.pending ? '—' : toFarsiNum(d.data.score)}</div>
       <div class="dsc-b ${d.isToday?'today':'past'}" style="height:${h}px"></div>
     </div>`;
   }).join('');
@@ -1255,16 +1327,17 @@ function renderDailyScore() {
     `<div class="dsc-dlbl${d.isToday?' today':''}">${d.lbl}</div>`).join('');
 
   card.innerHTML = `
+    <h2 class="dsc-title">نمرهٔ امروز</h2>
     <div class="dsc-top">
-      <div class="dsc-score">${toFarsiNum(td.score)}</div>
+      <div class="dsc-score ${td.pending ? 'pending' : ''}" style="--daily-progress:${td.score}%">${td.pending ? "—" : toFarsiNum(td.score)}</div>
       <div class="dsc-meta">
         <div class="dsc-label">${lbl}</div>
-        <div class="dsc-delta ${dCls}">${dTxt} نسبت به دیروز</div>
+        <div class="dsc-delta ${dCls}">${dTxt} ${deltaLabel}</div>
       </div>
     </div>
     <div class="dsc-breakdown">
       <div class="dsc-mini">
-        <div class="dsc-mini-lbl">برنامه‌ریزی ${td.totalEvs>0 ? toFarsiNum(td.doneEvs)+' از '+toFarsiNum(td.totalEvs) : '—'}</div>
+        <div class="dsc-mini-lbl">پایبندی ${toFarsiNum(Math.round(td.adherence))} از ۵۰</div>
         <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${evPct}%;background:var(--accent)"></div></div>
       </div>
       <div class="dsc-mini">
@@ -1272,7 +1345,7 @@ function renderDailyScore() {
         <div class="dsc-mini-track"><div class="dsc-mini-fill" style="width:${habPct}%;background:var(--ok)"></div></div>
       </div>
     </div>
-    <div class="dsc-chart-title">۷ روز گذشته</div>
+    <div class="dsc-chart-title">${toFarsiNum(td.onTime)} دقیقه سر وقت · ${toFarsiNum(td.anotherTime)} دقیقه در ساعت دیگر · ${toFarsiNum(td.bonus)} امتیاز پاداش</div><div class="dsc-chart-title">۷ روز گذشته</div>
     <div class="dsc-bars">${barsHTML}</div>
     <div class="dsc-dlbls">${lblsHTML}</div>`;
 }
@@ -1323,11 +1396,9 @@ function renderHeatmap() {
   // Build 365 days going back from today in weeks
   const days = [];
   for (let i = 364; i >= 0; i--) {
-    const g = new Date();
-    g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
-    const dow = (g.getDay() + 1) % 7; // 0=Sat in Jalali week
-    days.push({ j, dow, g });
+    const j = addJalaliDays(today, -i);
+    const dow = (jalaliWeekday(j.y, j.m, j.d) + 1) % 7;
+    days.push({ j, dow });
   }
 
   // Group into weeks (columns of 7)
@@ -1451,9 +1522,7 @@ window.getWeeklySummary = async function(btn) {
   const today = todayJalali();
   const activityLines = [];
   for (let i = 6; i >= 0; i--) {
-    const g = new Date();
-    g.setDate(g.getDate() - i);
-    const j = toJalali(g.getFullYear(), g.getMonth() + 1, g.getDate());
+    const j = addJalaliDays(today, -i);
     const key2 = `${j.y}-${j.m}-${j.d}`;
     const dayEvs = events[key2] || [];
     const done = dayEvs.filter(e => e.done);
@@ -1487,7 +1556,7 @@ ${activityLines.join('\n') || 'هیچ رویدادی ثبت نشده'}
   }
 
   btn.disabled = false;
-  btn.innerHTML = '<span>✦</span> خلاصه هفته با Claude';
+  btn.innerHTML = '<span>✦</span> خلاصهٔ هفته با هوش مصنوعی';
 };
 
 function getClaudeKey() {
@@ -1508,14 +1577,11 @@ document.getElementById('exit-confirm-btn').onclick = () => window.api.quitApp()
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); openCmdPal(); return; }
   if (e.key === 'Escape') {
+    if (exitModal.classList.contains('show')) { exitModal.classList.remove('show'); return; }
     if (document.getElementById('cmdpal').classList.contains('show')) { closeCmdPal(); return; }
     if (document.getElementById('review-modal').classList.contains('show')) { closeReview(); return; }
     if (document.getElementById('add-goal-modal').classList.contains('show')) { closeAddGoal(); return; }
-    if (exitModal.classList.contains('show')) {
-      exitModal.classList.remove('show');
-    } else {
-      exitModal.classList.add('show');
-    }
+    exitModal.classList.add('show');
   }
 });
 
@@ -1530,11 +1596,40 @@ selectedDay = { y: today.y, m: today.m, d: today.d };
 loadPomoSessions();
 renderHome();
 initFirebaseApp();
+let displayedToday = dateKey(today);
+function refreshAtMidnight() {
+  const day = todayJalali();
+  const current = dateKey(day);
+  if (current === displayedToday) return;
+  if (dateKey(selectedDay) === displayedToday) {
+    selectedDay = day;
+    calViewY = day.y;
+    calViewM = day.m;
+  }
+  displayedToday = current;
+  loadPomoSessions();
+  renderHome();
+  if (activeSection === 'planner') renderPlanner();
+}
+setInterval(refreshAtMidnight, 5000);
+window.addEventListener('focus', refreshAtMidnight);
+
 
 // ── Supabase Integration ──────────────────────────────────────────────────
 
+window.api.appVersion().then(version => {
+  document.getElementById('asar-version-text').textContent = version;
+  document.getElementById('asar-version-tag').textContent = 'v' + version;
+});
+
 let currentCommunityTab = 'film';
 let _syncTimer = null;
+let cloudOwner = null;
+let cloudStamp = null;
+let cloudReady = false;
+let cloudSyncing = false;
+let cloudDirty = false;
+let cloudLoading = null;
 let _authMode = 'login';
 
 function initFirebaseApp() {
@@ -1543,14 +1638,18 @@ function initFirebaseApp() {
 }
 
 window.onFirebaseAuthChange = function(user) {
+  setTimeout(() => window.asarProfile?.accountChanged(), 0);
   if (user) {
     document.getElementById('auth-overlay').classList.remove('show');
     updateFirebaseStatus(true, user);
     loadFromSupabase(user.id);
   } else {
+    cloudReady = false;
+    cloudOwner = null;
+    cloudLoading = null;
+    clearTimeout(_syncTimer);
     updateFirebaseStatus(false, null);
-    const cfg = getSupabaseConfig();
-    if (cfg && cfg.url) document.getElementById('auth-overlay').classList.add('show');
+    setSyncState('محلی');
   }
 };
 
@@ -1610,6 +1709,8 @@ window.switchAuthTab = function(el, mode) {
   document.getElementById('auth-submit-btn').textContent = mode === 'login' ? 'ورود' : 'ثبت‌نام';
   const nameGroup = document.getElementById('auth-name-group');
   if (nameGroup) nameGroup.style.display = mode === 'register' ? 'block' : 'none';
+  const discoverGroup = document.getElementById('auth-discover-group');
+  if (discoverGroup) discoverGroup.style.display = mode === 'register' ? 'block' : 'none';
   document.getElementById('auth-err').textContent = '';
 };
 
@@ -1627,21 +1728,23 @@ window.submitAuth = async function() {
       if (error) throw error;
     } else {
       const name = (document.getElementById('auth-name') || {}).value || '';
-      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name } } });
+      const discoverable = !!document.getElementById('auth-discover')?.checked;
+      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name, asar_discoverable: discoverable }, emailRedirectTo: 'https://github.com/GriefKid/asar' } });
       if (error) throw error;
-      // Create profile row
-      if (data.user) {
-        await window._sb.from('profiles').upsert({ id: data.user.id, email, display_name: name, is_admin: false }, { onConflict: 'id' });
-      }
+      if (!data.session) errEl.textContent = 'ثبت‌نام انجام شد. ایمیلت را تأیید کن و سپس وارد شو.';
     }
   } catch(e) {
     const msgs = {
       'Invalid login credentials': 'ایمیل یا رمز اشتباهه',
-      'Email not confirmed': 'ایمیلت رو تأیید کن',
+      'Email not confirmed': 'ایمیلت رو تأیید نکردی — لینک رو چک کن',
       'User already registered': 'این ایمیل قبلاً ثبت شده',
-      'Password should be at least 6 characters': 'رمز باید حداقل ۶ کاراکتر باشه'
+      'Password should be at least 6 characters': 'رمز باید حداقل ۶ کاراکتر باشه',
+      'Email rate limit exceeded': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
+      'email rate limit exceeded': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
+      'over_email_send_rate_limit': 'تعداد ایمیل‌های ارسالی زیاده — چند دقیقه صبر کن',
     };
-    errEl.textContent = msgs[e.message] || e.message;
+    const msg = msgs[e.message] || msgs[e.code] || e.message;
+    errEl.textContent = msg;
   } finally {
     btn.textContent = _authMode === 'login' ? 'ورود' : 'ثبت‌نام';
     btn.disabled = false;
@@ -1660,43 +1763,134 @@ window.fbLogout = async function() {
 
 // ── Supabase Sync ────────────────────────────────────────────────────────
 
+function setSyncState(text, color = '') {
+  const badge = document.getElementById('sidebar-sync-badge');
+  if (badge) { badge.textContent = text; badge.style.background = color; }
+  const detail = document.getElementById('asar-cloud-state');
+  if (detail) detail.textContent = text;
+}
+
+function cloudMarker(uid) { return 'asar-cloud-pending-' + uid; }
+
 function debouncedSync() {
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(syncToSupabase, 3000);
+  const uid = getUID();
+  if (!uid) { setSyncState('محلی'); return; }
+  cloudDirty = true;
+  localStorage.setItem(cloudMarker(uid), cloudStamp || 'new');
+  setSyncState('در انتظار ارسال', 'var(--bg4)');
+  if (cloudReady && cloudOwner === uid) _syncTimer = setTimeout(syncToSupabase, 1800);
+}
+
+function cloudPayload(uid) {
+  return {
+    id: uid, library, events, actual_events: actualEvents, habits, goals,
+    extra_data: AsarBackup.collect(localStorage, AsarBackup.extras),
+    updated_at: new Date().toISOString()
+  };
 }
 
 async function syncToSupabase() {
-  const sb = window._sb;
+  const client = window._sb;
   const uid = getUID();
-  if (!sb || !uid) return;
+  if (!client || !uid || !cloudReady || cloudOwner !== uid || cloudSyncing) return;
+  cloudSyncing = true;
+  cloudDirty = false;
+  setSyncState('در حال ارسال', 'var(--bg4)');
   try {
-    await sb.from('user_data').upsert({ id: uid, library, events, habits, goals, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-    const user = window._currentUser;
-    await sb.from('profiles').upsert({ id: uid, email: user?.email || '', display_name: user?.user_metadata?.display_name || '' }, { onConflict: 'id', ignoreDuplicates: false });
-    const badge = document.getElementById('sidebar-sync-badge');
-    if (badge) { badge.textContent = '✓ سینک'; badge.style.background = 'var(--ok)'; }
-  } catch(e) {
-    console.error('Supabase sync error:', e);
-    const badge = document.getElementById('sidebar-sync-badge');
-    if (badge) { badge.textContent = '⚠ خطا'; badge.style.background = 'var(--err)'; }
+    const table = client.from('user_data');
+    const payload = cloudPayload(uid);
+    const query = cloudStamp
+      ? table.update(payload).eq('id', uid).eq('updated_at', cloudStamp)
+      : table.insert(payload);
+    const { data, error } = await query.select('updated_at').maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      cloudReady = false;
+      setSyncState('تعارض با تغییر دستگاه دیگر', 'var(--warn)');
+      return;
+    }
+    if (uid !== getUID()) return;
+    cloudStamp = data.updated_at;
+    if (!cloudDirty) localStorage.removeItem(cloudMarker(uid));
+    else localStorage.setItem(cloudMarker(uid), cloudStamp);
+    setSyncState(cloudDirty ? 'در انتظار ارسال' : '✓ سینک', cloudDirty ? 'var(--bg4)' : 'var(--ok)');
+  } catch (error) {
+    if (uid === getUID()) {
+      const type = error.code === 'PGRST204' ? 'پایگاه داده نیاز به به‌روزرسانی دارد' : error.code === '23505' ? 'تعارض با تغییر دستگاه دیگر' : 'خطای همگام‌سازی';
+      if (error.code === '23505') cloudReady = false;
+      setSyncState(type, 'var(--err)');
+    }
+  } finally {
+    cloudSyncing = false;
+    if (cloudDirty && cloudReady && uid === getUID()) {
+      clearTimeout(_syncTimer);
+      _syncTimer = setTimeout(syncToSupabase, 1800);
+    }
   }
 }
 
-async function loadFromSupabase(uid) {
-  const sb = window._sb;
-  if (!sb || !uid) return;
+async function loadFromSupabase(uid, mode = null) {
+  const client = window._sb;
+  if (!client || !uid || cloudLoading === uid) return;
+  if (!mode && cloudOwner === uid && cloudReady) return;
+  cloudLoading = cloudOwner = uid;
+  cloudStamp = null;
+  cloudReady = false;
+  cloudDirty = false;
+  setSyncState('در حال دریافت', 'var(--bg4)');
   try {
-    const { data } = await sb.from('user_data').select('*').eq('id', uid).maybeSingle();
-    if (!data) { syncToSupabase(); return; }
-    if (data.library) { library = data.library; localStorage.setItem(KEY_LIB, JSON.stringify(library)); }
-    if (data.events)  { events  = data.events;  localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); }
-    if (data.habits)  { habits  = data.habits;  localStorage.setItem(KEY_HABITS, JSON.stringify(habits)); }
-    if (data.goals)   { goals   = data.goals;   localStorage.setItem(KEY_GOALS, JSON.stringify(goals)); }
+    const { data, error } = await client.from('user_data').select('*').eq('id', uid).maybeSingle();
+    if (error) throw error;
+    if (uid !== getUID()) return;
+    cloudStamp = data?.updated_at || null;
+    const pending = localStorage.getItem(cloudMarker(uid));
+    if (data && !mode && pending && pending !== cloudStamp) {
+      setSyncState('تعارض با تغییر دستگاه دیگر', 'var(--warn)');
+      return;
+    }
+    cloudReady = true;
+    if (mode === 'local' || (data && !mode && pending === cloudStamp)) { debouncedSync(); return; }
+    if (!data) { setSyncState('آمادهٔ ارسال'); return; }
+    const values = Object.fromEntries(Object.entries({
+      'asar-library': data.library, 'asar-events': data.events, 'asar-actual-events': data.actual_events,
+      'asar-habits': data.habits, 'asar-goals': data.goals
+    }).filter(([, value]) => value != null).map(([key, value]) => [key, JSON.stringify(value)]));
+    for (const [key, value] of Object.entries(data.extra_data || {})) {
+      if (AsarBackup.extras(key) && typeof value === 'string') values[key] = value;
+    }
+    if (Object.keys(values).length) AsarBackup.restore(localStorage, AsarBackup.parseBackup({ schema: 'asar-backup', version: 2, storage: values }));
+    localStorage.removeItem(cloudMarker(uid));
+    load();
+    window.asarCollections?.refresh();
     renderHome();
     if (activeSection === 'library') renderLibrary();
     if (activeSection === 'planner') renderPlanner();
-  } catch(e) { console.error('loadFromSupabase error:', e); }
+    setSyncState('✓ سینک', 'var(--ok)');
+  } catch {
+    if (uid === getUID()) setSyncState('خطای دریافت از سرور', 'var(--err)');
+  } finally {
+    if (cloudLoading === uid) cloudLoading = null;
+  }
 }
+
+window.asarCloudAction = function(mode) {
+  const uid = getUID();
+  if (!uid) { document.getElementById('auth-overlay').classList.add('show'); return; }
+  const warning = mode === 'local' ? 'نسخهٔ فعلی این دستگاه جایگزین نسخهٔ ابری شود؟' : 'داده‌های ابری روی این دستگاه بارگیری شوند؟';
+  if (confirm(warning)) loadFromSupabase(uid, mode);
+};
+
+window.addEventListener('storage', event => {
+  if (event.key && AsarBackup.extras(event.key)) debouncedSync();
+});
+window.addEventListener('asar-store', event => { if (AsarBackup.extras(event.detail)) debouncedSync(); });
+window.addEventListener('online', () => {
+  const uid = getUID();
+  if (!uid || !localStorage.getItem(cloudMarker(uid))) return;
+  if (cloudReady) syncToSupabase();
+  else loadFromSupabase(uid);
+});
 
 // Patch save functions to trigger sync
 const _origSaveLib    = saveLib;
@@ -1717,7 +1911,9 @@ window.switchCommunityTab = function(el, type) {
   loadCommunity(type);
 };
 
+let communityRequest = 0;
 async function loadCommunity(type) {
+  const request = ++communityRequest;
   const sb = window._sb;
   const grid = document.getElementById('community-grid');
   if (!grid) return;
@@ -1728,6 +1924,7 @@ async function loadCommunity(type) {
   grid.innerHTML = '<div class="community-loading">در حال بارگذاری...</div>';
   try {
     const { data, error } = await sb.from('community').select('*').eq('type', type).gt('count', 0).order('avg', { ascending: false }).limit(100);
+    if (request !== communityRequest) return;
     if (error) throw error;
     if (!data || !data.length) {
       grid.innerHTML = '<div class="community-loading">هنوز کسی امتیاز نداده...</div>';
@@ -1735,8 +1932,9 @@ async function loadCommunity(type) {
     }
     renderCommunityGrid(data);
   } catch(e) {
+    if (request !== communityRequest) return;
     console.error('loadCommunity error:', e);
-    grid.innerHTML = '<div class="community-loading">خطا در بارگذاری: ' + e.message + '</div>';
+    grid.innerHTML = '<div class="community-loading" role="status">برترین‌های اثر بارگیری نشد. اتصال را بررسی کن و دوباره تلاش کن. <button type="button" class="settings-save-btn" onclick="loadCommunity(currentCommunityTab)">تلاش دوباره</button></div>';
   }
 }
 
@@ -1745,19 +1943,24 @@ function renderCommunityGrid(items) {
   if (!grid) return;
   const typeEmoji = { film: '🎬', book: '📚', music: '🎵' };
   grid.innerHTML = items.map((item, i) => {
-    const stars = '★'.repeat(Math.round(item.avg)) + '☆'.repeat(5 - Math.round(item.avg));
-    const avg = item.avg ? item.avg.toFixed(1) : '0.0';
-    const coverHtml = item.cover
-      ? `<img src="${item.cover.replace(/"/g,'&quot;')}" alt="" loading="lazy" onerror="this.parentElement.textContent='${typeEmoji[item.type]||'★'}'">`
-      : (typeEmoji[item.type] || '★');
+    const rating = Math.max(0, Math.min(5, Number(item.avg) || 0));
+    const starCount = Math.round(rating);
+    const stars = '★'.repeat(starCount) + '☆'.repeat(5 - starCount);
+    const avg = rating.toFixed(1);
+    const icon = Object.hasOwn(typeEmoji, item.type) ? typeEmoji[item.type] : '★';
+    const cover = String(item.cover || '').trim();
+    const title = esc(item.title || 'بدون عنوان');
+    const coverHtml = /^(https?:\/\/|data:image\/(?:png|jpeg|webp|gif);base64,)/i.test(cover)
+      ? `<img src="${esc(cover)}" alt="" loading="lazy" onerror="this.parentElement.textContent='${icon}'">`
+      : icon;
     return `<div class="community-card">
       <div class="community-rank">${i < 3 ? ['🥇','🥈','🥉'][i] : '#'+(i+1)}</div>
       <div class="community-cover">${coverHtml}</div>
       <div class="community-body">
-        <div class="community-title" title="${item.title.replace(/"/g,'&quot;')}">${item.title}</div>
-        ${item.artist ? `<div class="community-votes" style="margin-bottom:3px">${item.artist}</div>` : ''}
+        <div class="community-title" title="${title}">${title}</div>
+        ${item.artist ? `<div class="community-votes" style="margin-bottom:3px">${esc(item.artist)}</div>` : ''}
         <div class="community-stars" title="${avg}">${stars} <span style="font-size:11px;color:var(--warn)">${avg}</span></div>
-        <div class="community-votes">${item.count} رأی</div>
+        <div class="community-votes">${toFarsiNum(Math.max(0, Number.parseInt(item.count, 10) || 0))} رأی</div>
       </div>
     </div>`;
   }).join('');
@@ -1796,20 +1999,20 @@ async function loadAdminData() {
       const initials = name[0].toUpperCase();
       const date = u.created_at ? u.created_at.slice(0,10) : '';
       return `<div>
-        <div class="admin-user-row" onclick="toggleAdminUser('au-${i}','${u.id}')">
-          <div class="admin-user-avatar">${initials}</div>
+        <div class="admin-user-row" onclick="toggleAdminUser('au-${i}',${esc(JSON.stringify(u.id))})">
+          <div class="admin-user-avatar">${esc(initials)}</div>
           <div class="admin-user-info">
-            <div class="admin-user-name">${name}${u.is_admin ? ' 👑' : ''}</div>
-            <div class="admin-user-email">${u.email || ''}</div>
+            <div class="admin-user-name">${esc(name)}${u.is_admin ? ' 👑' : ''}</div>
+            <div class="admin-user-email">${esc(u.email)}</div>
           </div>
-          <div class="admin-user-meta">${date}</div>
+          <div class="admin-user-meta">${esc(date)}</div>
         </div>
         <div class="admin-user-lib" id="au-${i}">در حال بارگذاری...</div>
       </div>`;
     }).join('');
   } catch(e) {
     console.error('loadAdminData error:', e);
-    if (listEl) listEl.innerHTML = '<div class="community-loading">خطا: ' + e.message + '</div>';
+    if (listEl) listEl.textContent = 'اطلاعات کاربران بارگیری نشد.';
   }
 }
 
@@ -1832,9 +2035,9 @@ window.toggleAdminUser = async function(libId, uid) {
       (lib.length === 0 ? '<div style="font-size:12px;color:var(--t3)">خالیه</div>' :
         lib.slice(0,30).map(it => `<div class="admin-lib-item">
           <span>${typeEmoji[it.type]||'•'}</span>
-          <span style="flex:1">${it.title||'بدون عنوان'}</span>
-          <span style="color:var(--warn)">${it.rating ? '★'.repeat(it.rating) : ''}</span>
-          <span style="color:var(--t3);font-size:10px">${it.status||''}</span>
+          <span style="flex:1">${esc(it.title || 'بدون عنوان')}</span>
+          <span style="color:var(--warn)">${'★'.repeat(Math.max(0, Math.min(5, Number(it.rating) || 0)))}</span>
+          <span style="color:var(--t3);font-size:10px">${esc(it.status)}</span>
         </div>`).join('') +
         (lib.length > 30 ? `<div style="font-size:11px;color:var(--t3);padding-top:6px">... و ${lib.length-30} مورد دیگه</div>` : '')
       );
@@ -1853,3 +2056,8 @@ if (window.api?.onLibraryItem) {
     }
   });
 }
+
+window.asarCollectionSource = {
+  items: () => library,
+  open: id => openReview(id)
+};

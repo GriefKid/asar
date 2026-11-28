@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ویدئو پلیر — اثر</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap">
 <style>
 :root {
   --bg0:#04040C;--bg1:#08081A;--bg2:#0E0E24;--bg3:#15152E;--bg4:#1C1C38;
@@ -19,7 +17,6 @@
 html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);
   font-family:'Inter',system-ui,sans-serif;font-size:13px}
 .app{display:flex;flex-direction:row-reverse;height:100%;position:relative}
-.drag-area{position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:999}
 .no-drag{-webkit-app-region:no-drag}
 
 /* ── Sidebar ── */
@@ -82,7 +79,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--t1);
 .movie-row.playing .play-ind{display:flex}
 
 /* ── Video Area ── */
-.video-area{flex:1;position:relative;background:#000;overflow:hidden}
+.video-area{flex:1;min-width:0;position:relative;background:#000;overflow:hidden}
 .video-area.cursor-hidden{cursor:none}
 
 video#vid{width:100%;height:100%;display:block;object-fit:contain}
@@ -119,8 +116,8 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .info-pill:hover{background:rgba(123,94,255,.32)}
 
 /* subtitle */
-.subtitle-display{position:absolute;bottom:110px;left:50%;transform:translateX(-50%);
-  z-index:3;text-align:center;pointer-events:none;white-space:nowrap}
+.subtitle-display{position:absolute;bottom:calc(var(--video-controls-height, 100px) + 10px);left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;width:min(94%,880px);z-index:3;text-align:center;pointer-events:none;overflow-wrap:anywhere}
 .subtitle-display.hidden{display:none}
 .sub-en{display:inline-block;background:rgba(0,0,0,.78);border-radius:6px;
   padding:4px 14px;font-size:16px;line-height:1.5;color:#fff;
@@ -158,8 +155,8 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .time-row{display:flex;justify-content:space-between;font-size:11px;color:rgba(255,255,255,.45);
   font-variant-numeric:tabular-nums;direction:ltr;margin-bottom:8px}
 
-.ctrl-row{display:flex;align-items:center;justify-content:space-between}
-.ctrl-left,.ctrl-right{display:flex;align-items:center;gap:3px}
+.ctrl-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px}
+.ctrl-left,.ctrl-right{display:flex;flex-wrap:wrap;align-items:center;gap:3px}
 
 .c-btn{width:36px;height:36px;border-radius:50%;background:transparent;border:none;
   color:rgba(255,255,255,.65);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
@@ -223,26 +220,37 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)}
 .info-loading{color:var(--t3);font-size:13px;text-align:center;padding:20px 0}
 
-/* ── TMDB key setup ── */
-.osub-banner{position:fixed;top:72px;right:270px;left:0;z-index:10;
-  background:rgba(14,14,36,.96);border-bottom:1px solid rgba(47,214,168,.18);
-  padding:6px 16px;display:none;align-items:center;gap:10px;direction:rtl;
-  backdrop-filter:blur(10px);flex-wrap:wrap}
-.osub-banner.show{display:flex}
-.sub-pick-item{display:flex;align-items:center;gap:7px;padding:7px 12px;cursor:pointer;border-radius:8px;margin:2px 4px;transition:background .12s}
-.sub-pick-item:hover{background:rgba(255,255,255,.07)}
-.sub-pick-item.selected{background:rgba(80,180,120,.18);border:1px solid rgba(80,180,120,.3)}
-.sub-pick-src{font-size:9.5px;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.1);color:#888;white-space:nowrap;flex-shrink:0}
-.sub-pick-name{font-size:11.5px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:ltr;text-align:left}
-.sub-pick-item.loading .sub-pick-name{color:#8af}
-.sub-pick-item.done .sub-pick-name{color:#6d6}
-.sub-auto-status{position:absolute;top:42px;left:12px;padding:5px 12px;border-radius:20px;
-  background:rgba(8,8,26,.88);border:1px solid var(--bd2);font-size:12px;color:var(--t2);
-  backdrop-filter:blur(8px);z-index:5;transition:opacity .3s;pointer-events:none;white-space:nowrap}
-.sub-auto-status.hidden{display:none}
+/* ── Subtitle selection ── */
+.sub-picker-toggle,.sub-picker button{color:var(--t1);border:1px solid var(--bd2);background:var(--bg3);
+  cursor:pointer;border-radius:8px;padding:5px 9px;font-size:12px}
+.sub-picker-toggle{position:absolute;top:10px;right:12px;z-index:9;background:#17142bee}
+.sub-picker-toggle[hidden],.sub-picker [hidden],.sub-picker[hidden]{display:none}
+.sub-picker{position:absolute;top:48px;right:12px;z-index:9;width:min(356px,calc(100% - 24px));
+  max-height:min(400px,calc(100% - 150px));display:flex;flex-direction:column;overflow:hidden;
+  background:#161226f7;border:1px solid var(--bd2);border-radius:14px;backdrop-filter:blur(12px);direction:rtl}
+.sub-picker-header,.sub-picker-actions,.sub-sync{display:flex;align-items:center;gap:6px}
+.sub-picker-header{padding:8px 10px;border-bottom:1px solid var(--bd2);justify-content:space-between;flex-wrap:wrap}
+.sub-picker-header strong{font-size:12px}
+.sub-picker button:hover,.sub-picker-toggle:hover{border-color:var(--asar-focus)}
+.sub-picker button:disabled{opacity:.6;cursor:default}
+.sub-picker-list{min-height:0;overflow:auto;padding:4px 8px;scrollbar-width:thin}
+.sub-picker .sub-pick-item{width:100%;display:flex;align-items:center;gap:7px;margin:3px 0;text-align:start}
+.sub-picker .sub-pick-item.selected{color:var(--asar-focus);border-color:var(--asar-focus);background:#282738}
+.sub-pick-src{font-size:10px;color:var(--t2);flex-shrink:0}
+.sub-pick-name{min-width:0;overflow-wrap:anywhere;direction:ltr;text-align:left}
+.sub-pick-item.loading .sub-pick-name{color:#a8bcff}
+.sub-picker-footer{display:grid;gap:6px;padding:8px 10px;border-top:1px solid var(--bd2)}
+.sub-key-form{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+.sub-key-form input{min-width:0}
+.sub-sync{justify-content:space-between;flex-wrap:wrap;font-size:11px;color:var(--t2)}
+.sub-sync-buttons{display:flex;align-items:center;gap:3px;direction:ltr;flex-wrap:wrap}
+.sub-sync-buttons button{padding:3px 5px}
+#sub-offset-val{min-width:36px;text-align:center;font-variant-numeric:tabular-nums;color:var(--t1)}
+#sub-translate-btn{color:#171424;background:var(--asar-focus);font-weight:700}
+.sub-auto-status{color:var(--t2);font-size:11px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .sub-auto-status.done{color:var(--ok)}
 .sub-auto-status.error{color:var(--err)}
-.setup-banner{position:fixed;top:40px;right:270px;left:0;z-index:10;
+.setup-banner{position:fixed;top:calc(40px + var(--asar-windowbar-height));right:270px;left:0;z-index:10;
   background:var(--bg2);border-bottom:1px solid var(--bd2);padding:10px 18px;
   display:flex;align-items:center;gap:10px;direction:rtl;display:none}
 .setup-banner.show{display:flex}
@@ -292,8 +300,9 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .sub-box{width:380px;background:var(--bg2);border:1px solid var(--bd2);border-radius:16px;padding:24px;direction:rtl}
 .sub-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:14px}
 .sub-status{font-size:12.5px;color:var(--t2);line-height:1.6;margin-bottom:14px;min-height:36px}
-.sub-status .ok{color:var(--ok)}
-.sub-status .translating{color:var(--warn)}
+.sub-status.done{color:var(--ok)}
+.sub-status.error{color:var(--err)}
+.sub-status.translating,.sub-status .translating{color:var(--warn)}
 /* ── Claude AI Panel ── */
 .ai-fab{position:fixed;bottom:80px;right:16px;width:44px;height:44px;border-radius:50%;
   background:linear-gradient(135deg,var(--accent),#a082ff);border:none;cursor:pointer;z-index:85;
@@ -413,15 +422,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 .hist-title-txt{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hist-date{font-size:11px;color:var(--t3);margin-top:2px}
 </style>
+<link rel="stylesheet" href="../../shared/appearance.css">
+<script defer src="../../shared/window-controls.js"></script>
 </head>
-<body>
-<!-- OpenSubtitles key banner -->
-<div class="osub-banner" id="osub-banner">
-  <span style="color:var(--t2);font-size:12.5px;white-space:nowrap">برای زیرنویس خودکار، subdl API key بده:</span>
-  <input class="setup-input no-drag" id="osub-key-input" placeholder="از subdl.com">
-  <button class="setup-save no-drag" onclick="saveOsubKey()">ذخیره</button>
-  <button class="btn-cancel no-drag" style="font-size:11.5px" onclick="document.getElementById('osub-banner').classList.remove('show')">بعداً</button>
-</div>
+<body class="asar-media asar-video-player">
+<header class="asar-windowbar"></header>
 
 <!-- TMDB key banner -->
 <div class="setup-banner" id="setup-banner">
@@ -436,7 +441,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 <!-- SIDEBAR -->
 <div class="sidebar">
   <div class="sb-top">
-    <span class="sb-title">مجموعه‌ها</span>
+    <span class="sb-title">ویدیو</span>
     <div class="sb-btns no-drag">
       <div class="icon-btn" onclick="importFiles()" title="افزودن فایل">
         <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
@@ -453,13 +458,15 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
 <div class="video-area show-ctrl" id="video-area">
 
   <video id="vid" preload="metadata"></video>
+  <p id="video-play-status" class="media-play-status" role="status" hidden></p>
 
   <div class="video-gradient"></div>
 
   <!-- no track state -->
   <div class="no-track" id="no-track">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
-    <p>فیلمی انتخاب نشده<br><span style="font-size:12px">از مجموعه، روی یه فیلم بزن</span></p>
+      <span class="asar-media-object asar-object-film" aria-hidden="true"></span>
+      <h1 class="asar-empty-title">فیلمی انتخاب نشده</h1>
+      <button type="button" class="asar-empty-action" onclick="importFiles()">افزودن فیلم</button>
   </div>
 
   <!-- meta overlay -->
@@ -470,33 +477,40 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
     <div class="info-pill" onclick="openInfo()">ℹ اطلاعات بیشتر</div>
   </div>
 
-  <!-- auto-subtitle status -->
-  <div class="sub-auto-status hidden" id="sub-auto-status"></div>
-  <!-- AI subtitle fallback button -->
-  <button id="sub-ai-btn" onclick="fetchSubtitleWithAI()" style="display:none;position:absolute;top:46px;left:12px;padding:4px 12px;border-radius:14px;background:rgba(123,94,255,.85);color:#fff;border:none;font-size:11.5px;cursor:pointer;z-index:6;backdrop-filter:blur(6px)">🤖 زیرنویس با AI</button>
-  <!-- subtitle offset controls -->
-  <div id="sub-offset-bar" style="display:none;position:absolute;top:46px;right:12px;z-index:6;align-items:center;gap:2px;background:rgba(8,8,26,.92);border:1px solid rgba(255,255,255,.14);border-radius:22px;padding:4px 10px;backdrop-filter:blur(8px)">
-    <button onclick="shiftSubs(-5)" title="-5s" style="background:rgba(255,255,255,.08);border:none;color:#aaa;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">−5s</button>
-    <button onclick="shiftSubs(-1)" title="-1s" style="background:rgba(255,255,255,.08);border:none;color:#bbb;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">−1s</button>
-    <button onclick="shiftSubs(-0.5)" title="-0.5s" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 3px;line-height:1">−</button>
-    <span id="sub-offset-val" style="font-size:11px;color:#8af;min-width:42px;text-align:center;font-variant-numeric:tabular-nums">0.0s</span>
-    <button onclick="shiftSubs(+0.5)" title="+0.5s" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;padding:0 3px;line-height:1">+</button>
-    <button onclick="shiftSubs(+1)" title="+1s" style="background:rgba(255,255,255,.08);border:none;color:#bbb;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">+1s</button>
-    <button onclick="shiftSubs(+5)" title="+5s" style="background:rgba(255,255,255,.08);border:none;color:#aaa;cursor:pointer;font-size:11px;border-radius:8px;padding:2px 5px;margin:0 1px">+5s</button>
-    <span style="font-size:9px;color:#555;margin-left:3px">sync</span>
-  </div>
-
-  <!-- subtitle picker panel -->
-  <div id="sub-picker" style="display:none;position:absolute;top:76px;right:12px;z-index:9;width:300px;max-height:260px;overflow-y:auto;background:rgba(6,6,20,.96);border:1px solid rgba(255,255,255,.14);border-radius:14px;backdrop-filter:blur(12px);direction:rtl">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px 6px;border-bottom:1px solid rgba(255,255,255,.08)">
-      <span style="font-size:12px;color:#aaa;font-family:'Space Grotesk',sans-serif">انتخاب زیرنویس</span>
-      <button onclick="document.getElementById('sub-picker').style.display='none'" style="background:none;border:none;color:#666;cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>
+  <button type="button" class="sub-picker-toggle no-drag" id="sub-picker-toggle" aria-controls="sub-picker"
+    aria-expanded="false" onclick="setSubtitlePickerOpen(document.getElementById('sub-picker').hidden)" hidden>زیرنویس</button>
+  <section class="sub-picker no-drag" id="sub-picker" aria-labelledby="sub-picker-title" hidden>
+    <div class="sub-picker-header">
+      <strong id="sub-picker-title">پیشنهادهای زیرنویس انگلیسی</strong>
+      <div class="sub-picker-actions">
+        <button type="button" id="sub-search-btn" onclick="if (currentMovieInfo) autoFetchSubtitle(currentMovieInfo)">جست‌وجوی دوباره</button>
+        <button type="button" id="sub-picker-close" onclick="setSubtitlePickerOpen(false)" aria-label="بستن پنل زیرنویس">×</button>
+      </div>
     </div>
-    <div id="sub-picker-list" style="padding:4px 0"></div>
-    <div style="padding:6px 10px 8px;border-top:1px solid rgba(255,255,255,.06)">
-      <button id="sub-translate-btn" onclick="translateNowFromPicker()" style="display:none;width:100%;padding:7px;border-radius:10px;background:rgba(80,180,120,.9);color:#fff;border:none;cursor:pointer;font-size:12.5px;font-family:'Space Grotesk',sans-serif;font-weight:600">ترجمه به فارسی</button>
+    <div class="sub-picker-list" id="sub-picker-list"></div>
+    <div class="sub-picker-footer">
+      <p class="sub-auto-status" id="sub-auto-status" role="status" hidden></p>
+      <form class="sub-key-form" id="osub-banner" onsubmit="event.preventDefault(); saveOsubKey()" hidden>
+        <label for="osub-key-input">کلید Subdl</label>
+        <input type="password" class="setup-input no-drag" id="osub-key-input" autocomplete="off" required>
+        <button type="submit">ذخیره</button>
+      </form>
+      <button type="button" id="sub-ai-btn" onclick="fetchSubtitleWithAI()" hidden>زیرنویس تقریبی با هوش مصنوعی</button>
+      <div class="sub-sync" id="sub-offset-bar" hidden>
+        <span>سینک زیرنویس</span>
+        <div class="sub-sync-buttons" role="group" aria-label="تنظیم زمان زیرنویس به ثانیه">
+          <button type="button" onclick="shiftSubs(-5)">−5</button>
+          <button type="button" onclick="shiftSubs(-1)">−1</button>
+          <button type="button" onclick="shiftSubs(-0.5)">−0.5</button>
+          <button type="button" id="sub-offset-val" onclick="setSubOffset(0)" title="بازنشانی سینک">0.0s</button>
+          <button type="button" onclick="shiftSubs(0.5)">+0.5</button>
+          <button type="button" onclick="shiftSubs(1)">+1</button>
+          <button type="button" onclick="shiftSubs(5)">+5</button>
+        </div>
+      </div>
+      <button type="button" id="sub-translate-btn" onclick="translateNowFromPicker()" hidden>ترجمه به فارسی</button>
     </div>
-  </div>
+  </section>
 
   <!-- subtitle display -->
   <div class="subtitle-display hidden" id="sub-display">
@@ -621,6 +635,7 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
     <div class="sub-title">زیرنویس</div>
     <div class="sub-status" id="sub-status">در حال بارگذاری...</div>
     <div class="cmt-actions">
+      <button class="btn-cancel" id="sub-modal-retry" onclick="translateLocalSubtitle()" hidden>تلاش دوباره برای ترجمه</button>
       <button class="btn-cancel" onclick="document.getElementById('sub-modal').classList.remove('show')">بستن</button>
     </div>
   </div>
@@ -651,6 +666,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
       <span id="ai-ctx-lbl">اضافه کردن اطلاعات صحنه</span>
     </button>
   </div>
+  <div class="asar-scene-frame no-drag">
+    <button id="scene-attach" type="button" onclick="attachSceneFrame()" disabled>از این صحنه بپرس</button>
+    <div id="scene-preview" hidden><img id="scene-preview-image" alt="پیش‌نمایش صحنه"><span id="scene-frame-time"></span><button type="button" onclick="clearSceneFrame()">حذف تصویر</button></div>
+    <small id="scene-status" role="status">برای افزودن تصویر، فیلم را مکث کن.</small>
+  </div>
   <div class="ai-input-row">
     <button class="ai-send-btn no-drag" id="ai-send-btn" onclick="sendAI()">↑</button>
     <textarea class="ai-textarea no-drag" id="ai-textarea" placeholder="سوالت رو بپرس..." rows="2" onkeydown="onAIKey(event)"></textarea>
@@ -667,8 +687,11 @@ video#vid{width:100%;height:100%;display:block;object-fit:contain}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/dist/umd/supabase.min.js"></script>
+<script src="../../../node_modules/@supabase/supabase-js/dist/umd/supabase.js"></script>
 <script src="../../shared/supabase-init.js"></script>
 <script src="renderer.js"></script>
+<script src="../../shared/collections.js"></script>
+<script src="../../shared/collection-panel.js"></script>
+<script src="../../shared/appearance.js"></script>
 </body>
 </html>

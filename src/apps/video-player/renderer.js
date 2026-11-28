@@ -44,7 +44,12 @@ let queue = [];
 let queueIdx = -1;
 let subMode = 'both';
 let subtitles = [];        // [{start, end, en, fa}]
-let subTranslating = false;
+let translatingTrack = null;
+let subtitleSearchRequest = 0;
+let subtitleSelection = 0;
+let subtitleDownloadRequest = 0;
+let selectedSubtitleId = null;
+let subOffset = 0;
 let cmtTimestamp = 0;
 let isDraggingProg = false;
 let isDraggingVol = false;
@@ -53,10 +58,14 @@ let currentMovieInfo = null;
 let abA = null, abB = null, abActive = false;
 let vidSpeed = 1.0;
 let resumeSaveTimer = null;
+let videoLoadRequest = 0;
 const VID_SPEED_OPTS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
 const vid = document.getElementById('vid');
 const area = document.getElementById('video-area');
+new ResizeObserver(([entry]) => {
+  area.style.setProperty('--video-controls-height', `${entry.target.offsetHeight}px`);
+}).observe(document.getElementById('controls'));
 
 // ── Persistence ────────────────────────────────────────────────────────
 function loadState() {
@@ -74,6 +83,7 @@ function loadState() {
 
 function saveState() {
   try { localStorage.setItem(DATA_KEY, JSON.stringify(state)); } catch {}
+  window.asarCollections?.refresh();
 }
 
 // ── TMDB key ───────────────────────────────────────────────────────────
@@ -94,27 +104,29 @@ function getOsubKey() {
 }
 
 function saveOsubKey() {
-  const key = document.getElementById('osub-key-input').value.trim();
+  const input = document.getElementById('osub-key-input');
+  const key = input.value.trim();
   if (!key) return;
   try { localStorage.setItem('osub-key', key); } catch {}
-  document.getElementById('osub-banner').classList.remove('show');
-  // retry subtitle fetch for current video
-  if (queue[queueIdx]) autoFetchSubtitle(queue[queueIdx]);
+  input.value = '';
+  if (currentMovieInfo) autoFetchSubtitle(currentMovieInfo);
 }
 
 // ── Auto-subtitle status ───────────────────────────────────────────────
-let subStatusTimer = null;
-
 function setSubAutoStatus(msg, type) {
   const el = document.getElementById('sub-auto-status');
-  if (!el) return;
-  clearTimeout(subStatusTimer);
-  if (!msg) { el.classList.add('hidden'); return; }
   el.textContent = msg;
+  el.hidden = !msg;
   el.className = 'sub-auto-status' + (type ? ' ' + type : '');
-  if (type === 'done' || type === 'error') {
-    subStatusTimer = setTimeout(() => el.classList.add('hidden'), 4000);
-  }
+}
+
+function setSubtitlePickerOpen(open) {
+  const picker = document.getElementById('sub-picker');
+  const toggle = document.getElementById('sub-picker-toggle');
+  if (!open && picker.contains(document.activeElement)) toggle.focus();
+  if (open) toggle.hidden = false;
+  picker.hidden = !open;
+  toggle.setAttribute('aria-expanded', String(open));
 }
 
 // ── Auto-fetch subtitle ────────────────────────────────────────────────
@@ -137,6 +149,7 @@ async function checkSubtitleSync(parsedSubs, movieTitle) {
 }
 
 async function autoFetchSubtitle(video) {
+  const request = ++subtitleSearchRequest;
   const subdlKey = getOsubKey();
 
   const fileName = video.fileName || '';
@@ -147,34 +160,33 @@ async function autoFetchSubtitle(video) {
   const year  = parsedYear || video.year || null;
   const imdbId = video.imdbId || null;
 
-  // If no subdl key and no IMDB, show banner and stop — hash search only works with file path
-  if (!subdlKey) {
-    setSubAutoStatus('⚠️ کلید subdl لازمه', 'error');
-    setTimeout(() => document.getElementById('osub-banner')?.classList.add('show'), 300);
-    return;
-  }
-
   // Build title variations: original, with/without "The "
   const titleVariants = [title];
   if (!title.toLowerCase().startsWith('the ')) titleVariants.push('The ' + title);
   else titleVariants.push(title.replace(/^the\s+/i, ''));
 
+  const searchButton = document.getElementById('sub-search-btn');
+  const keyForm = document.getElementById('osub-banner');
+  searchButton.disabled = true;
+  keyForm.hidden = true;
   showSubAIBtn(false);
   let results = null;
 
   for (const t of titleVariants) {
+    if (request !== subtitleSearchRequest) return;
     setSubAutoStatus(`🔍 "${t}" ${year || ''}...`, '');
-    const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(e => {
-      setSubAutoStatus(`❌ خطای IPC: ${e?.message || e}`, 'error');
-      return null;
-    });
-    if (r?.length) { results = r; break; }
+    const r = await window.api.subtitleSearch(t, year, subdlKey, fileName, videoPath, imdbId).catch(() => null);
+    if (request !== subtitleSearchRequest) return;
+    if (r?.some(result => result.fileId)) { results = r; break; }
     setSubAutoStatus(`⚠️ "${t}" — ۰ نتیجه`, '');
     await sleep(500);
   }
 
+  if (request !== subtitleSearchRequest) return;
+  searchButton.disabled = false;
   if (!results?.length) {
-    setSubAutoStatus(`⚠️ نتیجه‌ای یافت نشد — "${title}" ${year||''}`, 'error');
+    keyForm.hidden = false;
+    setSubAutoStatus(_pickerResults.length ? 'پیشنهاد تازه‌ای پیدا نشد.' : 'زیرنویس انگلیسی پیدا نشد.', 'error');
     showSubAIBtn(true);
     return;
   }
@@ -187,105 +199,110 @@ let _pickerResults = [];
 let _pickerKey = '';
 
 function showSubtitlePicker(results, subdlKey) {
-  _pickerResults = results.slice(0, 10);
+  _pickerResults = [...new Map(results.filter(result => result.fileId).map(result => [result.fileId, result])).values()];
   _pickerKey = subdlKey;
 
   const list = document.getElementById('sub-picker-list');
-  if (!list) return;
-
   list.innerHTML = _pickerResults.map((r, i) => {
     const src = r.source || '';
-    const name = (r.name || '—').slice(0, 48);
-    return `<div class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})">
-      <span class="sub-pick-src">${src}</span>
-      <span class="sub-pick-name">${name}</span>
-    </div>`;
+    const name = r.name || '—';
+    return `<button type="button" class="sub-pick-item" id="spitem-${i}" onclick="selectSubtitleFromPicker(${i})" aria-pressed="false">
+      <span class="sub-pick-src">${esc(src)}</span>
+      <span class="sub-pick-name">${esc(name)}</span>
+    </button>`;
   }).join('');
-
-  const picker = document.getElementById('sub-picker');
-  if (picker) picker.style.display = 'block';
-  document.getElementById('sub-translate-btn').style.display = 'none';
-  setSubAutoStatus(`${_pickerResults.length} زیرنویس — یکی انتخاب کن`, '');
+  updateSubtitleChoices();
+  document.getElementById('sub-picker-toggle').textContent = `زیرنویس (${_pickerResults.length})`;
+  if (!selectedSubtitleId) setSubAutoStatus('یک پیشنهاد را برای پیش‌نمایش انگلیسی انتخاب کن.', '');
+  else setSubAutoStatus('فهرست پیشنهادها به‌روز شد.', 'done');
 }
 
 async function selectSubtitleFromPicker(idx) {
   const r = _pickerResults[idx];
   if (!r) return;
+  const request = ++subtitleDownloadRequest;
+  const selection = subtitleSelection;
 
-  // Visual feedback
   document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
-    el.classList.remove('selected', 'loading', 'done');
-    if (i === idx) el.classList.add('loading');
+    el.classList.toggle('loading', i === idx);
   });
-  document.getElementById('sub-translate-btn').style.display = 'none';
-  setSubAutoStatus(`📥 در حال دانلود...`, '');
+  setSubAutoStatus('در حال دریافت زیرنویس…', '');
 
   const srtText = await window.api.subtitleDownload(r.fileId, _pickerKey).catch(() => null);
+  if (request !== subtitleDownloadRequest || selection !== subtitleSelection) return;
+  document.querySelector('.sub-pick-item.loading')?.classList.remove('loading');
   if (!srtText) {
-    document.getElementById(`spitem-${idx}`)?.classList.replace('loading', 'sub-pick-item');
-    setSubAutoStatus(`❌ دانلود ناموفق`, 'error');
+    setSubAutoStatus('دریافت این زیرنویس ناموفق بود. دوباره امتحان کن یا پیشنهاد دیگری را بزن.', 'error');
     return;
   }
   const parsed = parseSrt(srtText);
   if (!parsed.length) {
-    setSubAutoStatus(`❌ فایل ناخوانا`, 'error');
+    setSubAutoStatus('این فایل زیرنویس خوانده نشد. پیشنهاد دیگری را امتحان کن.', 'error');
     return;
   }
 
-  document.getElementById(`spitem-${idx}`)?.classList.add('done');
-  document.getElementById(`spitem-${idx}`)?.classList.remove('loading');
+  loadSubtitleTrack(parsed, r.fileId);
+  setSubMode(document.querySelector('.stab[data-mode="en"]'), 'en');
+  const btn = document.getElementById('sub-translate-btn');
+  btn.hidden = false;
+  btn.disabled = false;
+  btn.textContent = 'ترجمه به فارسی';
+  setSubAutoStatus('پیش‌نمایش انگلیسی فعال است. بعد از تنظیم سینک می‌توانی ترجمه را شروع کنی.', 'done');
+}
+
+function updateSubtitleChoices() {
   document.querySelectorAll('.sub-pick-item').forEach((el, i) => {
-    if (i !== idx) el.classList.remove('selected');
+    const selected = _pickerResults[i]?.fileId === selectedSubtitleId;
+    el.classList.toggle('selected', selected);
+    el.setAttribute('aria-pressed', String(selected));
   });
-  document.getElementById(`spitem-${idx}`)?.classList.add('selected');
+}
 
+function loadSubtitleTrack(parsed, fileId = null) {
+  ++subtitleSelection;
+  selectedSubtitleId = fileId;
   subtitles = parsed;
-  subOffset = 0;
-  const offsetBar = document.getElementById('sub-offset-bar');
-  const offsetVal = document.getElementById('sub-offset-val');
-  if (offsetBar) offsetBar.style.display = 'flex';
-  if (offsetVal) offsetVal.textContent = '0.0s';
-
-  document.getElementById('sub-translate-btn').style.display = 'block';
-  setSubAutoStatus(`✓ ${parsed.length} خط | سینک تنظیم کن، بعد ترجمه بزن`, 'done');
+  document.querySelector('.sub-pick-item.loading')?.classList.remove('loading');
+  updateSubtitleChoices();
+  document.getElementById('sub-offset-bar').hidden = false;
+  document.getElementById('sub-translate-btn').hidden = true;
+  setSubOffset(0);
 }
 
 async function translateNowFromPicker() {
-  if (!subtitles.length) return;
+  const track = subtitles;
+  const selection = subtitleSelection;
+  if (!track.length || translatingTrack === track) return;
   const btn = document.getElementById('sub-translate-btn');
-  if (btn) btn.disabled = true;
-  setSubAutoStatus(`🌐 ترجمه ${subtitles.length} خط...`, '');
-  await translateSubtitles();
-  if (btn) { btn.disabled = false; btn.textContent = '✓ ترجمه شد'; }
-  setSubAutoStatus(`✓ ترجمه کامل شد`, 'done');
+  btn.disabled = true;
+  btn.textContent = 'در حال ترجمه…';
+  const result = await translateSubtitles((message, type) => setSubAutoStatus(message, type));
+  if (!result || track !== subtitles || selection !== subtitleSelection) return;
+  btn.disabled = result.complete;
+  btn.textContent = result.complete ? '✓ ترجمه شد' : 'تلاش دوباره برای ترجمه';
 }
-
-let subOffset = 0;
 
 function shiftSubs(delta) {
   if (!subtitles.length) return;
-  subOffset += delta;
-  for (const s of subtitles) {
-    s.start += delta;
-    s.end += delta;
-  }
-  const bar = document.getElementById('sub-offset-bar');
-  const val = document.getElementById('sub-offset-val');
-  if (bar) bar.style.display = 'flex';
-  if (val) val.textContent = (subOffset >= 0 ? '+' : '') + subOffset.toFixed(1) + 's';
+  setSubOffset(subOffset + delta);
 }
 
-function showSubAIBtn(show, video) {
-  const btn = document.getElementById('sub-ai-btn');
-  if (!btn) return;
-  btn.style.display = show ? '' : 'none';
-  if (show && video) btn.dataset.title = video.title || video.fileName || '';
+function setSubOffset(offset) {
+  subOffset = offset;
+  document.getElementById('sub-offset-val').textContent = `${offset > 0 ? '+' : ''}${offset.toFixed(1)}s`;
+  updateSubtitle();
+}
+
+function showSubAIBtn(show) {
+  document.getElementById('sub-ai-btn').hidden = !show;
 }
 
 async function fetchSubtitleWithAI(video) {
   const title = video?.title || video?.fileName || queue[queueIdx]?.title || queue[queueIdx]?.fileName || '';
   const key = getAIKey();
   if (!key) { setSubAutoStatus('کلید AI ندارم', 'error'); return; }
+  const request = ++subtitleDownloadRequest;
+  const selection = subtitleSelection;
 
   showSubAIBtn(false);
   setSubAutoStatus('🤖 ساخت زیرنویس با AI...', '');
@@ -304,13 +321,16 @@ next line
 
   try {
     const reply = await window.api.claudeChat(sys, [{ role: 'user', content: msg }], key);
-    subtitles = parseSrt(reply);
-    if (!subtitles.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
-    setSubAutoStatus(`🤖 ${subtitles.length} خط از AI (تقریبی)`, 'done');
-    await translateSubtitles();
+    if (request !== subtitleDownloadRequest || selection !== subtitleSelection) return;
+    const parsed = parseSrt(reply);
+    if (!parsed.length) { setSubAutoStatus('زیرنویس AI ساخته نشد', 'error'); return; }
+    loadSubtitleTrack(parsed);
+    setSubAutoStatus(`🤖 ${parsed.length} خط از AI (تقریبی)`, 'done');
+    await translateSubtitles((message, type) => setSubAutoStatus(message, type));
   } catch {
+    if (request !== subtitleDownloadRequest) return;
     setSubAutoStatus('خطا در AI', 'error');
-    showSubAIBtn(true, queue[queueIdx]);
+    showSubAIBtn(true);
   }
 }
 
@@ -327,17 +347,20 @@ function renderColls() {
     return;
   }
 
-  el.innerHTML = state.collections.map(c => {
+  const rows = window.asarCollections?.nativeRows(state.collections) || state.collections.map(collection => ({ collection, depth: 0 }));
+  el.innerHTML = rows.map(({ collection: c, depth }) => {
     const isActive = c.id === activeColl;
     const videos = c.videos || [];
     const thumb = videos.find(v => v.poster)?.poster || null;
 
     return `<div class="coll ${isActive ? 'active' : ''} ${c.open ? 'open' : ''}" id="coll-${c.id}"
+         style="margin-inline-start: ${Math.min(depth, 7) * 10}px"
          draggable="true"
-         ondragstart="collHeaderDragStart(event,'${c.id}')"
-         ondragend="collHeaderDragEnd(event)"
-         ondragover="collHeaderDragOverReorder(event,'${c.id}')"
-         ondrop="collHeaderDropReorder(event,'${c.id}')">
+         ondragstart="dragNativeFolder(event,'${c.id}')"
+         ondragend="endNativeDrag(event)"
+         ondragover="window.asarCollections?.dragOverNative(event)"
+         ondragleave="window.asarCollections?.dragLeaveNative(event)"
+         ondrop="window.asarCollections?.dropNative(event,'${c.id}')">
       <div class="coll-hd" onclick="toggleColl('${c.id}')">
         <div class="coll-thumb">
           ${thumb ? `<img src="${esc(thumb)}" alt="">` : '🎬'}
@@ -346,13 +369,10 @@ function renderColls() {
           <div class="coll-name">${esc(c.name)}</div>
           <div class="coll-cnt">${videos.length} فیلم</div>
         </div>
-        <div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>
+        ${c.id === 'asar-unfiled' ? '' : `<div class="coll-del-btn" onclick="event.stopPropagation();deleteColl('${c.id}')" title="حذف مجموعه">🗑</div>`}
         <span class="coll-chev">›</span>
       </div>
-      <div class="coll-items" id="coll-items-${c.id}"
-           ondragover="collDragOver(event,'${c.id}')"
-           ondrop="collDrop(event,'${c.id}')"
-           ondragleave="collDragLeave(event,'${c.id}')">
+      <div class="coll-items" id="coll-items-${c.id}">
         ${videos.map((v, i) => {
           const playing = queueIdx >= 0 && queue[queueIdx]?.path === v.path && activeColl === c.id;
           const wd = state.watchData?.[v.path];
@@ -362,10 +382,10 @@ function renderColls() {
           return `<div class="movie-row ${playing ? 'playing' : ''}"
               draggable="true"
               ondragstart="movieDragStart(event,'${c.id}',${i})"
-              ondragend="movieDragEnd(event)"
+              ondragend="endNativeDrag(event)"
               onclick="playVideo('${c.id}',${i})">
             <div class="movie-thumb-sm">
-              ${v.poster ? `<img src="${esc(v.poster)}" alt="">` : '🎥'}
+              ${v.poster ? `<img src="${esc(v.poster)}" alt="" draggable="false">` : '🎥'}
             </div>
             <div class="movie-info">
               <div class="movie-name">${esc(v.title || v.fileName)}</div>
@@ -402,90 +422,30 @@ function removeVideoFromColl(collId, idx) {
 }
 
 function deleteColl(id) {
+  if (window.asarCollections?.removeNativeFolder(id)) return;
   state.collections = state.collections.filter(c => c.id !== id);
   if (activeColl === id) activeColl = state.collections[0]?.id || null;
   saveState();
   renderColls();
 }
 
-// ── Drag & drop: reorder collections ─────────────────────────────────
-let dragCollId = null;
-
-function collHeaderDragStart(e, id) {
-  dragCollId = id;
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.5';
+// Drag from the visible collection or media row.
+function dragNativeFolder(event, id) {
+  if (event.target !== event.currentTarget && event.target.closest(".movie-row")) return;
+  window.asarCollections?.startNativeFolderDrag(event, id);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collHeaderDragEnd(e) {
-  dragCollId = null;
-  e.currentTarget.style.opacity = '';
+function movieDragStart(event, collId, index) {
+  const item = state.collections.find(collection => collection.id === collId)?.videos[index];
+  if (!item) return;
+  event.stopPropagation();
+  window.asarCollections?.startDrag(event, "item", item.path, collId);
+  event.currentTarget.classList.add("asar-dragging");
 }
 
-function collHeaderDragOverReorder(e, id) {
-  if (!dragCollId || dragCollId === id) return;
-  e.preventDefault();
-  e.stopPropagation();
-  e.dataTransfer.dropEffect = 'move';
-}
-
-function collHeaderDropReorder(e, targetId) {
-  if (!dragCollId || dragCollId === targetId) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const fromIdx = state.collections.findIndex(c => c.id === dragCollId);
-  const toIdx = state.collections.findIndex(c => c.id === targetId);
-  if (fromIdx < 0 || toIdx < 0) return;
-  const [moved] = state.collections.splice(fromIdx, 1);
-  state.collections.splice(toIdx, 0, moved);
-  dragCollId = null;
-  saveState();
-  renderColls();
-}
-
-// ── Drag & drop videos between collections ────────────────────────────
-let dragMovie = null; // { collId, idx }
-
-function movieDragStart(e, collId, idx) {
-  dragMovie = { collId, idx };
-  e.dataTransfer.effectAllowed = 'move';
-  e.currentTarget.style.opacity = '0.4';
-}
-
-function movieDragEnd(e) {
-  e.currentTarget.style.opacity = '';
-  dragMovie = null;
-}
-
-function collDragOver(e, collId) {
-  if (!dragMovie || dragMovie.collId === collId) return;
-  e.preventDefault();
-  const el = document.getElementById('coll-items-' + collId);
-  if (el) el.style.background = 'rgba(123,94,255,.08)';
-}
-
-function collDragLeave(e, collId) {
-  const el = document.getElementById('coll-items-' + collId);
-  if (el) el.style.background = '';
-}
-
-function collDrop(e, targetCollId) {
-  e.preventDefault();
-  const el = document.getElementById('coll-items-' + targetCollId);
-  if (el) el.style.background = '';
-  if (!dragMovie || dragMovie.collId === targetCollId) return;
-
-  const srcColl = state.collections.find(c => c.id === dragMovie.collId);
-  const dstColl = state.collections.find(c => c.id === targetCollId);
-  if (!srcColl || !dstColl) return;
-
-  const [video] = srcColl.videos.splice(dragMovie.idx, 1);
-  if (!dstColl.videos.find(v => v.path === video.path)) {
-    dstColl.videos.push(video);
-  }
-  dragMovie = null;
-  saveState();
-  renderColls();
+function endNativeDrag(event) {
+  event.currentTarget.classList.remove("asar-dragging");
 }
 
 // ── Import ─────────────────────────────────────────────────────────────
@@ -495,8 +455,8 @@ async function importFiles() {
   await addVideosToColl(paths);
 }
 
-async function addVideosToColl(paths) {
-  let coll = state.collections.find(c => c.id === activeColl);
+async function addVideosToColl(paths, destination) {
+  let coll = destination || state.collections.find(c => c.id === activeColl);
   if (!coll) {
     if (!state.collections.length) {
       createCollWithName('فیلم‌ها');
@@ -632,16 +592,23 @@ async function playVideo(collId, idx) {
   renderColls();
 }
 
-function loadVideo(video) {
-  const path = video.path.replace(/\\/g, '/');
-  vid.src = `file:///${path}`;
+async function loadVideo(video) {
+  if (!video) return;
+  const request = ++videoLoadRequest;
+  clearTimeout(resumeSaveTimer);
+  setPlaybackMessage('');
+  const url = await window.api.mediaFileUrl(video.path).catch(() => null);
+  if (request !== videoLoadRequest) return;
+  clearSceneFrame();
+  if (url) vid.src = url;
+  else vid.removeAttribute('src');
   vid.load();
 
   // restore resume position
   const savedPos = state.resume?.[video.path];
   if (savedPos && savedPos > 10) {
     vid.addEventListener('canplay', function restorePos() {
-      vid.removeEventListener('canplay', restorePos);
+      if (request !== videoLoadRequest) return;
       if (savedPos < (vid.duration || 0) - 15) {
         vid.currentTime = savedPos;
         showResumeToast(savedPos);
@@ -649,8 +616,12 @@ function loadVideo(video) {
     }, { once: true });
   }
 
-  vid.play();
-  addToHistory(video);
+  if (url) {
+    playVideoElement();
+    addToHistory(video);
+  } else {
+    setPlaybackMessage('مسیر این ویدیو معتبر نیست. فایل را دوباره اضافه کن.');
+  }
 
   // reset AB loop
   abA = null; abB = null; abActive = false;
@@ -671,14 +642,24 @@ function loadVideo(video) {
   renderMetaTags(video);
 
   // reset subtitles
+  ++subtitleSelection;
+  ++subtitleDownloadRequest;
   subtitles = [];
-  hideSubtitle();
+  selectedSubtitleId = null;
+  _pickerResults = [];
+  document.getElementById('sub-picker-toggle').textContent = 'زیرنویس';
+  document.getElementById('sub-picker-list').replaceChildren();
+  document.getElementById('sub-offset-bar').hidden = true;
+  document.getElementById('sub-translate-btn').hidden = true;
+  document.getElementById('sub-modal').classList.remove('show');
+  setSubOffset(0);
   setSubAutoStatus('', '');
   showSubAIBtn(false);
 
   // load duration later
   currentMovieInfo = video;
   fetchMovieDetails(video);
+  setSubtitlePickerOpen(true);
   autoFetchSubtitle(video);
 }
 
@@ -708,7 +689,7 @@ async function fetchMovieDetails(video) {
     video.poster = video.poster || details.poster_path;
     saveState();
     renderColls();
-    renderMetaTags(video);
+    if (currentMovieInfo === video) renderMetaTags(video);
   } catch {}
 }
 
@@ -765,6 +746,7 @@ vid.addEventListener('ended', () => {
 });
 vid.addEventListener('play', updatePlayBtn);
 vid.addEventListener('pause', updatePlayBtn);
+vid.addEventListener('seeked', updateSubtitle);
 
 function updatePlayBtn() {
   const icon = document.getElementById('play-icon');
@@ -777,9 +759,27 @@ function updatePlayBtn() {
 }
 
 function togglePlay() {
-  if (vid.paused) vid.play();
+  if (vid.paused) playVideoElement();
   else vid.pause();
 }
+
+function setPlaybackMessage(message) {
+  const status = document.getElementById('video-play-status');
+  status.hidden = !message;
+  status.textContent = message;
+}
+
+function playVideoElement() {
+  const request = videoLoadRequest;
+  vid.play().catch(error => {
+    if (request === videoLoadRequest && error.name === 'NotAllowedError') setPlaybackMessage('برای شروع پخش، دکمهٔ پخش را بزن.');
+  });
+}
+
+vid.addEventListener('error', () => {
+  if (vid.getAttribute('src')) setPlaybackMessage('این ویدیو پخش نشد. وجود فایل و فرمت آن را بررسی کن.');
+});
+vid.addEventListener('playing', () => setPlaybackMessage(''));
 
 function prevVideo() {
   if (!queue.length) return;
@@ -872,6 +872,7 @@ vid.addEventListener('pause', () => {
 
 // ── Claude AI Panel ───────────────────────────────────────────────────
 let aiOpen = false, aiHistory = [], aiCtxOn = false;
+let sceneFrame = null;
 const AI_CTX_LABEL_VID = 'اضافه کردن اطلاعات صحنه';
 
 function getAIKey() { try { return localStorage.getItem('claude-api-key') || ''; } catch { return ''; } }
@@ -885,6 +886,7 @@ function toggleAI() {
   aiOpen = !aiOpen;
   document.getElementById('ai-panel').classList.toggle('open', aiOpen);
   if (aiOpen) {
+    updateSceneButton();
     if (!getAIKey()) document.getElementById('ai-key-box').style.display = '';
     setTimeout(() => document.getElementById('ai-textarea')?.focus(), 300);
   }
@@ -911,10 +913,47 @@ function getAIContext() {
   const name = v.path ? v.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') : 'Unknown';
   const secs = Math.floor(vid.currentTime);
   const timeStr = `${Math.floor(secs/3600).toString().padStart(2,'0')}:${(Math.floor(secs/60)%60).toString().padStart(2,'0')}:${(secs%60).toString().padStart(2,'0')}`;
-  const curSub = subtitles.find(s => vid.currentTime >= s.start && vid.currentTime <= s.end);
+  const curSub = activeSubtitle();
   const info = currentMovieInfo ? `\nMovie: ${currentMovieInfo.title} (${currentMovieInfo.release_date?.slice(0,4)||''})\nOverview: ${(currentMovieInfo.overview||'').slice(0,300)}` : '';
   return `Video: "${name}"\nTimestamp: ${timeStr}${info}\nCurrent subtitle: "${curSub?.en || ''}"`;
 }
+function updateSceneButton() {
+  const button = document.getElementById('scene-attach');
+  if (!button) return;
+  button.disabled = !vid.paused || vid.readyState < 2 || !vid.videoWidth;
+}
+for (const event of ['pause', 'play', 'loadeddata', 'emptied', 'seeked']) vid.addEventListener(event, updateSceneButton);
+
+function clearSceneFrame() {
+  sceneFrame = null;
+  document.getElementById('scene-preview').hidden = true;
+  document.getElementById('scene-preview-image').removeAttribute('src');
+  document.getElementById('scene-status').textContent = 'برای افزودن تصویر، فیلم را مکث کن.';
+}
+
+function attachSceneFrame() {
+  if (!vid.paused || vid.readyState < 2 || !vid.videoWidth) return;
+  const status = document.getElementById('scene-status');
+  try {
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, 960 / Math.max(vid.videoWidth, vid.videoHeight));
+    canvas.width = Math.round(vid.videoWidth * scale);
+    canvas.height = Math.round(vid.videoHeight * scale);
+    canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
+    const url = canvas.toDataURL('image/jpeg', 0.8);
+    const t = Math.floor(vid.currentTime);
+    const timestamp = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(n => String(n).padStart(2, '0')).join(':');
+    sceneFrame = { data: url.split(',')[1], context: getAIContext() };
+    document.getElementById('scene-preview-image').src = url;
+    document.getElementById('scene-frame-time').textContent = timestamp;
+    document.getElementById('scene-preview').hidden = false;
+    status.textContent = 'تصویر هنگام ارسال سؤال به سرویس هوش مصنوعی می‌رسد.';
+    document.getElementById('ai-textarea').focus();
+  } catch {
+    status.textContent = 'گرفتن تصویر از این ویدیو ممکن نبود.';
+  }
+}
+
 async function sendAI() {
   const ta = document.getElementById('ai-textarea');
   const text = ta.value.trim();
@@ -923,14 +962,18 @@ async function sendAI() {
   if (!key) { document.getElementById('ai-key-box').style.display = ''; return; }
   ta.value = '';
   appendAIMsg('user', text);
-  const content = aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
+  const frame = sceneFrame;
+  const content = frame ? '[Frame context]\n' + frame.context + '\n\n[Question]\n' + text : aiCtxOn ? `[Context]\n${getAIContext()}\n\n[Question]\n${text}` : text;
   aiHistory.push({ role: 'user', content });
   if (aiHistory.length > 20) aiHistory = aiHistory.slice(-20);
   const typingDiv = appendAIMsg('bot typing', '...');
   document.getElementById('ai-send-btn').disabled = true;
   try {
     const sys = `You are a helpful AI assistant in a video player app. Help the user understand the movie/show they are watching. Be concise. Match user's language (Persian or English).`;
-    const reply = await window.api.claudeChat(sys, aiHistory, key);
+    const setting = localStorage.getItem('claude-api-provider');
+    const provider = setting && setting !== 'auto' ? setting : null;
+    const reply = await window.api.claudeChat(sys, aiHistory, key, provider, frame?.data);
+    if (frame && frame === sceneFrame) clearSceneFrame();
     typingDiv.classList.remove('typing'); typingDiv.textContent = reply;
     aiHistory.push({ role: 'assistant', content: reply });
     if (aiCtxOn) { aiCtxOn = false; document.getElementById('ai-ctx-btn').classList.remove('on'); document.getElementById('ai-ctx-lbl').textContent = AI_CTX_LABEL_VID; }
@@ -950,10 +993,14 @@ document.addEventListener('keydown', e => {
     const openModal = document.querySelector('.modal-bg.show,.cmt-modal.show,.newcoll-modal.show,.sub-modal.show');
     if (openModal) { openModal.classList.remove('show'); return; }
     if (aiOpen) { toggleAI(); return; }
+    if (!document.getElementById('sub-picker').hidden) { setSubtitlePickerOpen(false); return; }
     window.api.closeWindow();
     return;
   }
-  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'Space' && !e.target.closest('.asar-window-actions, .sub-picker, .sub-picker-toggle')) {
+    e.preventDefault();
+    togglePlay();
+  }
   if (e.code === 'KeyF') toggleFullscreen();
   if (e.code === 'ArrowRight') vid.currentTime = Math.min(vid.duration || 0, vid.currentTime + 10);
   if (e.code === 'ArrowLeft') vid.currentTime = Math.max(0, vid.currentTime - 10);
@@ -984,34 +1031,40 @@ document.addEventListener('fullscreenchange', () => {
 async function loadSubtitle() {
   const modal = document.getElementById('sub-modal');
   const status = document.getElementById('sub-status');
+  const retry = document.getElementById('sub-modal-retry');
   modal.classList.add('show');
+  retry.hidden = true;
   status.innerHTML = `<span class="translating">در حال بارگذاری...</span>`;
 
+  const selection = subtitleSelection;
   const raw = await window.api.openSubtitleFile().catch(() => null);
+  if (selection !== subtitleSelection) return;
   if (!raw) { modal.classList.remove('show'); return; }
 
-  subtitles = parseSrt(raw);
-  if (!subtitles.length) {
+  const parsed = parseSrt(raw);
+  if (!parsed.length) {
     status.innerHTML = `<span style="color:var(--err)">فایل زیرنویس ناخوانا بود.</span>`;
     return;
   }
 
-  subOffset = 0;
-  const offsetBar = document.getElementById('sub-offset-bar');
-  const offsetVal = document.getElementById('sub-offset-val');
-  if (offsetBar) offsetBar.style.display = 'flex';
-  if (offsetVal) offsetVal.textContent = '0.0s';
+  loadSubtitleTrack(parsed);
+  await translateLocalSubtitle();
+}
 
-  status.innerHTML = `<span class="ok">✓ ${subtitles.length} خط لود شد.</span> در حال ترجمه...`;
-  modal.classList.add('show');
-
-  await translateSubtitles();
-  status.innerHTML = `<span class="ok">✓ ترجمه کامل شد. زیرنویس آماده‌ست.</span>`;
+async function translateLocalSubtitle() {
+  const retry = document.getElementById('sub-modal-retry');
+  const status = document.getElementById('sub-status');
+  retry.hidden = true;
+  const result = await translateSubtitles((message, type) => {
+    status.textContent = message;
+    status.className = `sub-status ${type || 'translating'}`;
+  });
+  if (result) retry.hidden = result.complete;
 }
 
 function parseSrt(text) {
   if (!text) return [];
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 
   // Auto-detect ASS/SSA format
   if (/^\[Script Info\]/m.test(normalized) || /^Dialogue:/m.test(normalized)) {
@@ -1019,19 +1072,14 @@ function parseSrt(text) {
   }
 
   const result = [];
-  const blocks = normalized.split(/\n\n+/);
+  const blocks = normalized.split(/\n(?:[ \t]*\n)+/);
+  const timing = /^\s*((?:\d+:)?\d{2}:\d{2}(?:[,.]\d{1,3})?)\s*-->\s*((?:\d+:)?\d{2}:\d{2}(?:[,.]\d{1,3})?)(?:\s|$)/;
 
   for (const block of blocks) {
     const lines = block.trim().split('\n');
-    if (lines.length < 2) continue;
-
-    let i = 0;
-    if (/^\d+$/.test(lines[0].trim())) i = 1;
-
-    const timeLine = lines[i];
-    if (!timeLine) continue;
-
-    const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]?\d{0,3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]?\d{0,3})/);
+    if (/^(WEBVTT|NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0])) continue;
+    const i = timing.test(lines[0]) ? 0 : 1;
+    const timeMatch = lines[i]?.match(timing);
     if (!timeMatch) continue;
 
     const start = parseSrtTime(timeMatch[1]);
@@ -1075,67 +1123,64 @@ function parseAssTime(t) {
 }
 
 function parseSrtTime(t) {
-  const clean = t.replace(',', '.');
-  const parts = clean.split(':');
-  const h = parseInt(parts[0]) || 0;
-  const m = parseInt(parts[1]) || 0;
-  const s = parseFloat(parts[2]) || 0;
-  return h * 3600 + m * 60 + s;
+  return t.replace(',', '.').split(':').reduce((seconds, part) => seconds * 60 + Number(part), 0);
 }
 
-async function translateSubtitles() {
-  subTranslating = true;
-  const CHUNK = 15; // smaller chunk — reduces Google Translate rate-limiting
-  const total = subtitles.length;
-  let failCount = 0;
+async function translateSubtitles(report) {
+  const track = subtitles;
+  const selection = subtitleSelection;
+  if (!track.length || translatingTrack === track) return;
+  translatingTrack = track;
+  const pending = track.filter(cue => !cue.fa);
+  let translated = track.length - pending.length;
+  let emptyBatches = 0;
+  const progress = () => report(`در حال ترجمه · ${translated} از ${track.length} خط`, '');
 
-  for (let i = 0; i < total; i += CHUNK) {
-    const chunk = subtitles.slice(i, i + CHUNK);
-    const nonEmpty = chunk.map((s, j) => ({ j, text: s.en })).filter(x => x.text);
-    if (!nonEmpty.length) continue;
+  try {
+    progress();
+    for (let index = 0; index < pending.length && emptyBatches < 2;) {
+      const batch = [];
+      let querySize = 0;
+      while (index < pending.length && batch.length < 32) {
+        const cue = pending[index];
+        const size = new URLSearchParams({ q: cue.en }).toString().length + 1;
+        if (batch.length && querySize + size > 3400) break;
+        batch.push(cue);
+        querySize += size;
+        index++;
+      }
 
-    const joined = nonEmpty.map(x => x.text).join('\n');
-    let translated = null;
-
-    for (let attempt = 0; attempt < 2 && !translated; attempt++) {
-      try { translated = await window.api.translate(joined); } catch {}
-      if (!translated && attempt < 1) await sleep(1000);
+      const result = await window.api.subtitleTranslate(batch.map(cue => cue.en)).catch(() => null);
+      if (track !== subtitles || selection !== subtitleSelection) return;
+      const before = translated;
+      if (result?.length === batch.length) {
+        batch.forEach((cue, index) => {
+          if (!result[index]) return;
+          cue.fa = result[index];
+          translated++;
+        });
+      }
+      emptyBatches = translated === before ? emptyBatches + 1 : 0;
+      if (translated && subMode === 'en') setSubMode(document.querySelector('.stab[data-mode="both"]'), 'both');
+      updateSubtitle();
+      progress();
     }
 
-    if (translated) {
-      failCount = 0;
-      // Google Translate returns segments joined; newlines may or may not be preserved
-      // Split on newline, also try counting segments if lines mismatch
-      let parts = translated.split('\n').filter(p => p.trim() !== '');
-      // If segment count doesn't match, try line-by-line split on the raw response
-      if (parts.length !== nonEmpty.length && translated.includes('\n')) {
-        const raw = translated.split('\n');
-        if (raw.filter(p => p.trim()).length === nonEmpty.length) parts = raw.filter(p => p.trim());
-      }
-      for (let k = 0; k < nonEmpty.length; k++) {
-        subtitles[i + nonEmpty[k].j].fa = parts[k]?.trim() || '';
-      }
-    } else {
-      failCount++;
-      // After 2 consecutive failed chunks, stop trying translation
-      if (failCount >= 2) {
-        setSubAutoStatus('⚠️ ترجمه در دسترس نیست (شبکه)', 'error');
-        subTranslating = false;
-        return;
-      }
-    }
-    setSubAutoStatus(`🌐 ترجمه ${Math.min(i + CHUNK, total)}/${total}...`, '');
-    await sleep(300); // small delay between chunks to avoid rate-limiting
+    const complete = translated === track.length;
+    report(complete ? '✓ ترجمه کامل شد' : `ترجمه ناقص ماند · ${translated} از ${track.length} خط`, complete ? 'done' : 'error');
+    return { complete };
+  } finally {
+    if (translatingTrack === track) translatingTrack = null;
   }
+}
 
-  subTranslating = false;
+function activeSubtitle() {
+  const t = vid.currentTime - subOffset;
+  return subtitles.find(s => t >= s.start && t <= s.end);
 }
 
 function updateSubtitle() {
-  if (!subtitles.length) return;
-  const t = vid.currentTime;
-  const sub = subtitles.find(s => t >= s.start && t <= s.end);
-
+  const sub = activeSubtitle();
   const display = document.getElementById('sub-display');
   const enLine = document.getElementById('sub-en-line');
   const faLine = document.getElementById('sub-fa-line');
@@ -1150,19 +1195,16 @@ function updateSubtitle() {
   enLine.textContent = sub.en;
   faLine.textContent = sub.fa || '';
 
-  enLine.style.display = (subMode === 'en' || subMode === 'both') ? 'inline-block' : 'none';
+  enLine.style.display = subMode !== 'fa' || !sub.fa ? 'inline-block' : 'none';
   // Hide FA line if translation isn't available (empty string) rather than showing "..."
   faLine.style.display = (subMode === 'fa' || subMode === 'both') && sub.fa ? 'inline-block' : 'none';
-}
-
-function hideSubtitle() {
-  document.getElementById('sub-display').classList.add('hidden');
 }
 
 function setSubMode(btn, mode) {
   subMode = mode;
   document.querySelectorAll('.stab').forEach(b => b.classList.remove('on'));
-  btn.classList.add('on');
+  btn?.classList.add('on');
+  updateSubtitle();
 }
 
 // ── Info modal ─────────────────────────────────────────────────────────
@@ -1591,3 +1633,17 @@ if (window.api?.onOpenFile) {
     }
   });
 }
+
+window.asarCollectionSource = {
+  items: () => state.collections.flatMap(entry => entry.videos.map(video => ({ id: video.path, title: video.title || video.fileName }))),
+  open: id => { const coll = state.collections.find(entry => entry.videos.some(item => item.path === id)); if (coll) playVideo(coll.id, coll.videos.findIndex(item => item.path === id)); },
+  fileType: /\.(mp4|mkv|avi|mov|webm|m4v|wmv|flv|ts|mpg|mpeg)$/i,
+  importFiles: (paths, folder) => addVideosToColl(paths, AsarCollections.ensureNative(state.collections, 'videos', folder)),
+  changed() {
+    if (!state.collections.some(collection => collection.id === activeColl)) activeColl = state.collections[0]?.id || null;
+    saveState();
+    renderColls();
+  },
+  redraw: renderColls,
+  legacy: { list: () => state.collections, field: 'videos' }
+};

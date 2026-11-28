@@ -3,6 +3,15 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const { pathToFileURL } = require('node:url');
+const { selectProfilePath } = require('./src/shared/profile-path.cjs');
+const { createSubtitleTranslator } = require('./src/shared/subtitle-translation.cjs');
+
+ipcMain.handle('app:version', () => require('./package.json').version);
+
+const profilePath = selectProfilePath(app.getPath('appData'), app.getPath('userData'));
+if (fs.existsSync(profilePath)) app.setPath('userData', profilePath);
+if (process.platform === 'win32') app.setAppUserModelId('com.griefkid.mylife');
 
 let mainWindow = null;
 let musicWindow = null;
@@ -18,57 +27,83 @@ const WEB_PREFS = {
 };
 
 const APP_ICON = path.join(__dirname, 'assets', 'icon.ico');
+const fileReceivers = new WeakSet();
+const pendingFiles = new WeakMap();
+
+app.on('web-contents-created', (_, contents) => {
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event, url) => {
+    event.preventDefault();
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'https:' && ['t.me', 'github.com'].includes(target.hostname)) shell.openExternal(target.href);
+    } catch {}
+  });
+});
+
+function createAppWindow(file, width, height, display, backgroundColor = '#04040C') {
+  const currentDisplay = mainWindow ? screen.getDisplayMatching(mainWindow.getBounds()) : screen.getPrimaryDisplay();
+  const area = (display || currentDisplay).workArea;
+  width = Math.min(width, Math.floor(area.width * 0.9));
+  height = Math.min(height, Math.floor(area.height * 0.9));
+  const window = new BrowserWindow({
+    width, height, x: area.x + Math.floor((area.width - width) / 2), y: area.y + Math.floor((area.height - height) / 2),
+    frame: false, backgroundColor, icon: APP_ICON, webPreferences: WEB_PREFS, show: false
+  });
+  for (const [event, fullscreen] of [['enter-full-screen', true], ['leave-full-screen', false]]) {
+    window.on(event, () => window.webContents.send('window:fullscreen-changed', fullscreen));
+  }
+  window.webContents.on('did-start-loading', () => fileReceivers.delete(window.webContents));
+  window.loadFile(file);
+  window.once('ready-to-show', () => window.show());
+  return window;
+}
 
 function createMusicPlayer() {
-  musicWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  musicWindow.loadFile('src/apps/music-player/index.html');
-  musicWindow.once('ready-to-show', () => musicWindow.show());
+  musicWindow = createAppWindow('src/apps/music-player/index.html', 1320, 850);
   musicWindow.on('closed', () => { musicWindow = null; });
 }
 
-function createVideoPlayer() {
-  videoWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  videoWindow.loadFile('src/apps/video-player/index.html');
-  videoWindow.once('ready-to-show', () => videoWindow.show());
+function createVideoPlayer(display) {
+  videoWindow = createAppWindow('src/apps/video-player/index.html', 1400, 885, display);
   videoWindow.on('closed', () => { videoWindow = null; });
 }
 
 function createMainApp() {
-  mainWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  mainWindow.loadFile('src/main-app/index.html');
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow = createAppWindow('src/main-app/index.html', 1420, 920);
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-function createBookReader() {
-  bookWindow = new BrowserWindow({ fullscreen: true, frame: false, backgroundColor: '#04040C', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  bookWindow.loadFile('src/apps/book-reader/index.html');
-  bookWindow.once('ready-to-show', () => bookWindow.show());
+function createBookReader(display) {
+  bookWindow = createAppWindow('src/apps/book-reader/index.html', 1320, 900, display);
   bookWindow.on('closed', () => { bookWindow = null; });
 }
 
 function createWriter() {
-  writerWindow = new BrowserWindow({ width: 1100, height: 740, frame: false, backgroundColor: '#0f0f13', icon: APP_ICON, webPreferences: WEB_PREFS, show: false });
-  writerWindow.loadFile('src/apps/writer/index.html');
-  writerWindow.once('ready-to-show', () => writerWindow.show());
+  writerWindow = createAppWindow('src/apps/writer/index.html', 1100, 740, undefined, '#0f0f13');
   writerWindow.on('closed', () => { writerWindow = null; });
 }
 
 // ── IPC: Open sub-apps ─────────────────────────────────────────────────
+function focusWindow(window) {
+  if (window.isMinimized()) window.restore();
+  window.focus();
+}
+
 ipcMain.handle('app:open-music', () => {
-  if (musicWindow) { musicWindow.focus(); return; }
+  if (musicWindow) { focusWindow(musicWindow); return; }
   createMusicPlayer();
 });
 ipcMain.handle('app:open-video', () => {
-  if (videoWindow) { videoWindow.focus(); return; }
+  if (videoWindow) { focusWindow(videoWindow); return; }
   createVideoPlayer();
 });
 ipcMain.handle('app:open-book', () => {
-  if (bookWindow) { bookWindow.focus(); return; }
+  if (bookWindow) { focusWindow(bookWindow); return; }
   createBookReader();
 });
 ipcMain.handle('app:open-writer', () => {
-  if (writerWindow) { writerWindow.focus(); return; }
+  if (writerWindow) { focusWindow(writerWindow); return; }
   createWriter();
 });
 
@@ -181,44 +216,47 @@ ipcMain.handle('lib:download', async (_, item) => {
 });
 
 // ── IPC: Open sub-apps with specific file (second monitor) ─────────────
-ipcMain.handle('app:open-book-file', async (_, filePath) => {
-  const displays = screen.getAllDisplays();
+function secondaryDisplay() {
   const primary = screen.getPrimaryDisplay();
-  const second = displays.find(d => d.id !== primary.id);
+  return screen.getAllDisplays().find(display => display.id !== primary.id);
+}
 
-  if (!bookWindow || bookWindow.isDestroyed()) {
-    createBookReader();
-    await new Promise(resolve => bookWindow.once('ready-to-show', resolve));
-  } else {
-    bookWindow.focus();
-  }
-  if (second) bookWindow.setBounds(second.workArea);
+function openFileIn(window, filePath) {
+  if (typeof filePath !== 'string' || !filePath) return;
+  const contents = window.webContents;
+  if (fileReceivers.has(contents)) contents.send('open:file', filePath);
+  else pendingFiles.set(contents, filePath);
+}
 
-  setTimeout(() => {
-    if (bookWindow && !bookWindow.isDestroyed()) {
-      bookWindow.webContents.send('open:file', filePath);
-    }
-  }, 600);
+ipcMain.on('open:file-ready', ({ sender }) => {
+  fileReceivers.add(sender);
+  if (!pendingFiles.has(sender)) return;
+  const filePath = pendingFiles.get(sender);
+  pendingFiles.delete(sender);
+  sender.send('open:file', filePath);
 });
 
-ipcMain.handle('app:open-video-file', async (_, filePath) => {
-  const displays = screen.getAllDisplays();
-  const primary = screen.getPrimaryDisplay();
-  const second = displays.find(d => d.id !== primary.id);
+ipcMain.handle('app:open-book-file', (_, filePath) => {
+  if (bookWindow) focusWindow(bookWindow);
+  else createBookReader(secondaryDisplay());
+  openFileIn(bookWindow, filePath);
+});
 
-  if (!videoWindow || videoWindow.isDestroyed()) {
-    createVideoPlayer();
-    await new Promise(resolve => videoWindow.once('ready-to-show', resolve));
-  } else {
-    videoWindow.focus();
-  }
-  if (second) videoWindow.setBounds(second.workArea);
+ipcMain.handle('app:open-video-file', (_, filePath) => {
+  if (videoWindow) focusWindow(videoWindow);
+  else createVideoPlayer(secondaryDisplay());
+  openFileIn(videoWindow, filePath);
+});
 
-  setTimeout(() => {
-    if (videoWindow && !videoWindow.isDestroyed()) {
-      videoWindow.webContents.send('open:file', filePath);
-    }
-  }, 600);
+ipcMain.handle('app:open-music-file', (_, filePath) => {
+  if (musicWindow) focusWindow(musicWindow);
+  else createMusicPlayer();
+  openFileIn(musicWindow, filePath);
+});
+
+ipcMain.handle('file:media-url', (_, filePath) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) return null;
+  return pathToFileURL(filePath).href;
 });
 
 app.whenReady().then(() => {
@@ -234,11 +272,50 @@ app.on('window-all-closed', () => {
 });
 
 // ── IPC: Window controls ───────────────────────────────────────────────
+ipcMain.handle('window:minimize', (event) => {
+  BrowserWindow.fromWebContents(event.sender)?.minimize();
+});
+ipcMain.handle('window:toggle-fullscreen', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) window.setFullScreen(!window.isFullScreen());
+});
 ipcMain.handle('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close();
 });
 ipcMain.handle('app:quit', () => {
   app.quit();
+});
+
+const windowDrags = new WeakMap();
+ipcMain.on('window:drag-start', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isMinimized()) return;
+  const cursor = screen.getCursorScreenPoint();
+  const bounds = window.getBounds();
+  const restore = window.isFullScreen() || window.isMaximized();
+  const normal = window.getNormalBounds();
+  windowDrags.set(window, {
+    restore,
+    x: restore ? Math.round(Math.max(0, Math.min(1, (cursor.x - bounds.x) / bounds.width)) * normal.width) : cursor.x - bounds.x,
+    y: restore ? Math.max(0, Math.min(24, cursor.y - bounds.y)) : cursor.y - bounds.y
+  });
+});
+ipcMain.on('window:drag-move', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const drag = windowDrags.get(window);
+  if (!drag || window.isMinimized()) return;
+  if (drag.restore) {
+    if (window.isFullScreen()) window.setFullScreen(false);
+    else if (window.isMaximized()) window.unmaximize();
+    drag.restore = false;
+  }
+  if (window.isFullScreen() || window.isMaximized()) return;
+  const cursor = screen.getCursorScreenPoint();
+  window.setPosition(cursor.x - drag.x, cursor.y - drag.y);
+});
+ipcMain.on('window:drag-end', (event) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) windowDrags.delete(window);
 });
 
 // ── IPC: File dialogs ──────────────────────────────────────────────
@@ -327,6 +404,9 @@ ipcMain.handle('lyrics:fetch', async (_, artist, title) => {
 });
 
 // ── IPC: Translate ─────────────────────────────────────────────────
+const translateSubtitleCues = createSubtitleTranslator();
+ipcMain.handle('subtitle:translate', (_, cues) => translateSubtitleCues(cues));
+
 ipcMain.handle('translate:toFarsi', async (_, text) => {
   // Try Google Translate (gtx — no key needed)
   try {
@@ -426,7 +506,7 @@ ipcMain.handle('dialog:openSubtitleFile', async () => {
     filters: [{ name: 'Subtitle Files', extensions: ['srt','vtt','ass','ssa'] }]
   });
   if (result.canceled) return null;
-  return fs.readFileSync(result.filePaths[0], 'utf8');
+  return decodeSubtitle(fs.readFileSync(result.filePaths[0]));
 });
 
 // ── IPC: TMDB search ───────────────────────────────────────────────────
@@ -561,7 +641,7 @@ ipcMain.handle('dialog:openPdfFiles', async () => {
 });
 
 ipcMain.handle('file:readBuffer', async (_, filePath) => {
-  const buf = fs.readFileSync(filePath);
+  const buf = await fs.promises.readFile(filePath);
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 });
 
@@ -778,6 +858,16 @@ ipcMain.handle('subtitle:search', async (_, title, year, apiKey, fileName, video
 });
 
 // ── IPC: Subtitle download (ZIP / gzip / plain) ────────────────────────
+function decodeSubtitle(buffer) {
+  if (buffer.length < 2) return buffer.toString('utf8');
+  const marker = buffer.readUInt16BE(0);
+  if (marker === 0xfffe || marker === 0xfeff) {
+    return new TextDecoder(marker === 0xfffe ? 'utf-16le' : 'utf-16be').decode(buffer);
+  }
+  const utf8 = buffer.toString('utf8');
+  return utf8.includes('\ufffd') ? new TextDecoder('windows-1252').decode(buffer) : utf8;
+}
+
 ipcMain.handle('subtitle:download', async (_, fileUrl, apiKey) => {
   try {
     let fullUrl, extraHeaders = {};
@@ -807,13 +897,17 @@ ipcMain.handle('subtitle:download', async (_, fileUrl, apiKey) => {
     // Detect format by magic bytes
     const magic = buf.slice(0, 2).toString('hex');
     if (magic === '1f8b') {
-      return zlib.gunzipSync(buf).toString('utf8');
+      return decodeSubtitle(zlib.gunzipSync(buf));
     } else if (magic === '504b') {
       const zip = new AdmZip(buf);
-      const sub = zip.getEntries().find(e => /\.(srt|ass|ssa|vtt)$/i.test(e.entryName));
-      return sub ? sub.getData().toString('utf8') : null;
+      for (const entry of zip.getEntries()) {
+        if (entry.isDirectory || !/\.(srt|ass|ssa|vtt)$/i.test(entry.name) || entry.name.startsWith('._')) continue;
+        const subtitle = decodeSubtitle(entry.getData());
+        if (/\d\s*-->\s*\d|^Dialogue:/m.test(subtitle)) return subtitle;
+      }
+      return null;
     } else {
-      return buf.toString('utf8');
+      return decodeSubtitle(buf);
     }
   } catch { return null; }
 });
@@ -830,10 +924,11 @@ ipcMain.handle('image:fetch', async (_, url) => {
 });
 
 // ── IPC: AI chat (Claude / Groq / DeepSeek) ───────────────────────────
-ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider) => {
+ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider, frame) => {
   // Auto-detect provider from key prefix if not specified
   if (!provider) {
     if (apiKey && (apiKey.startsWith('AIza') || apiKey.startsWith('AQ.'))) provider = 'gemini';
+    else if (apiKey && apiKey.startsWith('sk-ant-')) provider = 'claude';
     else if (apiKey && apiKey.startsWith('gsk_')) provider = 'groq';
     else if (apiKey && apiKey.startsWith('sk-or-')) provider = 'openrouter';
     else if (apiKey && apiKey.startsWith('hf_')) provider = 'huggingface';
@@ -842,10 +937,16 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     else provider = 'claude';
   }
 
+  if (frame && (!['gemini', 'claude', 'openrouter'].includes(provider) || typeof frame !== 'string' || frame.length > 1_000_000 || !/^[A-Za-z0-9+/=]+$/.test(frame))) {
+    throw new Error('برای پرسش تصویری از کلید Gemini، Claude یا OpenRouter استفاده کن.');
+  }
+  const withFrame = (items, image) => frame
+    ? items.map((item, index) => index === items.length - 1 ? { ...item, content: [{ type: 'text', text: item.content }, image] } : item)
+    : items;
   let url, headers, body, extractText;
 
   if (provider === 'gemini') {
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-flash';
     // Both AQ. and AIza keys use x-goog-api-key header
     url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     headers = { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey };
@@ -855,6 +956,7 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     if (!geminiMsgs.length || geminiMsgs[geminiMsgs.length - 1].role !== 'user') {
       geminiMsgs.push({ role: 'user', parts: [{ text: 'سلام' }] });
     }
+    if (frame) geminiMsgs.at(-1).parts.push({ inlineData: { mimeType: 'image/jpeg', data: frame } });
     body = JSON.stringify({
       systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
       contents: geminiMsgs,
@@ -889,8 +991,8 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
   } else if (provider === 'openrouter') {
     url = 'https://openrouter.ai/api/v1/chat/completions';
     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
-    body = JSON.stringify({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages] });
+    body = JSON.stringify({ model: frame ? 'google/gemini-3-flash-preview' : 'nvidia/nemotron-3-ultra-550b-a55b:free', max_tokens: 2048,
+      messages: [{ role: 'system', content: systemPrompt }, ...withFrame(messages, { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + frame } })] });
     extractText = d => d.choices[0].message.content;
 
   } else if (provider === 'huggingface') {
@@ -911,12 +1013,14 @@ ipcMain.handle('claude:chat', async (_, systemPrompt, messages, apiKey, provider
     // Claude (Anthropic)
     url = 'https://api.anthropic.com/v1/messages';
     headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' };
-    body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 2048, system: systemPrompt, messages });
+    body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 2048, system: systemPrompt,
+      messages: withFrame(messages, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: frame } }) });
     extractText = d => d.content[0].text;
   }
 
   const resp = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(90000) });
   if (!resp.ok) {
+    if (frame) throw new Error('سرویس تصویر پاسخ نداد (' + resp.status + ').');
     const errText = await resp.text().catch(() => '');
     throw new Error(errText.slice(0, 400) || `HTTP ${resp.status}`);
   }
