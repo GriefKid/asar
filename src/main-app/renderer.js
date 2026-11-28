@@ -1617,6 +1617,11 @@ window.addEventListener('focus', refreshAtMidnight);
 
 // ── Supabase Integration ──────────────────────────────────────────────────
 
+window.api.appVersion().then(version => {
+  document.getElementById('asar-version-text').textContent = version;
+  document.getElementById('asar-version-tag').textContent = 'v' + version;
+});
+
 let currentCommunityTab = 'film';
 let _syncTimer = null;
 let cloudOwner = null;

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  appVersion: () => ipcRenderer.invoke('app:version'),
   // Music player
   openAudioFiles:  ()             => ipcRenderer.invoke('dialog:openAudioFiles'),
   openAudioFolder: ()             => ipcRenderer.invoke('dialog:openAudioFolder'),

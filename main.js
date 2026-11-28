@@ -7,6 +7,8 @@ const { pathToFileURL } = require('node:url');
 const { selectProfilePath } = require('./src/shared/profile-path.cjs');
 const { createSubtitleTranslator } = require('./src/shared/subtitle-translation.cjs');
 
+ipcMain.handle('app:version', () => require('./package.json').version);
+
 const profilePath = selectProfilePath(app.getPath('appData'), app.getPath('userData'));
 if (fs.existsSync(profilePath)) app.setPath('userData', profilePath);
 if (process.platform === 'win32') app.setAppUserModelId('com.griefkid.mylife');

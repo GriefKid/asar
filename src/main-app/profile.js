@@ -195,40 +195,6 @@
       });
       if (!ownProfile) return;
 
-      const sharing = card('آثاری که دنبال‌کننده‌ها می‌بینند');
-      const shared = await result(client.from('asar_shared_works').select('*').eq('owner', uid));
-      if (!current()) return;
-      const byId = new Map(shared.map(work => [work.work_id, work]));
-      const library = window.asarCollectionSource?.items() || [];
-      const options = el('div', '', 'asar-share-list');
-      sharing.append(options);
-      const selected = [];
-      for (const item of library) {
-        if (!item.id || !item.title || !['book', 'film', 'music'].includes(item.type)) continue;
-        const previous = byId.get(String(item.id));
-        const row = el('div', '', 'asar-share-row');
-        const share = field(row, item.title, 'checkbox', !!previous);
-        const pinned = field(row, 'سنجاق', 'checkbox', previous?.pinned);
-        const collection = field(row, 'نام مجموعه برای نمایش', 'text', previous?.collection || '', 70);
-        selected.push({ item, share, pinned, collection });
-        options.append(row);
-      }
-      action(sharing, 'ذخیرهٔ آثار مشترک', async () => {
-        const records = selected.filter(entry => entry.share.checked).map(({ item, pinned, collection }) => ({
-          owner: uid, work_id: String(item.id).slice(0, 120), title: String(item.title).slice(0, 300),
-          creator: String(item.creator || '').slice(0, 160), kind: item.type,
-          stage: ['queue', 'active', 'done'].includes(item.stage) ? item.stage : 'queue',
-          rating: Math.min(5, Math.max(0, Math.round(Number(item.rating) || 0))),
-          pinned: pinned.checked, collection: collection.value.trim()
-        }));
-        const newIds = new Set(records.map(row => row.work_id));
-        const removed = shared.filter(row => !newIds.has(row.work_id)).map(row => row.work_id);
-        if (removed.length) await result(client.from('asar_shared_works').delete().eq('owner', uid).in('work_id', removed));
-        if (records.length) await result(client.from('asar_shared_works').upsert(records));
-        await render();
-        return 'آثار مشترک ذخیره شدند.';
-      });
-
       const people = card('پیدا کردن افراد و دنبال‌کردن');
       const search = field(people, 'جست‌وجوی نام یا نام کاربری', 'text', '', 60);
       const directory = el('div', '', 'asar-directory');
@@ -247,7 +213,7 @@
         if (!current()) return;
         directory.replaceChildren();
         if (!matches.length) {
-          directory.append(el('p', 'حساب قابل جست‌وجویی پیدا نشد.'));
+          directory.append(el('p', search.value.trim() ? 'حساب مطابق این جست‌وجو پیدا نشد.' : 'هنوز حساب دیگری در فهرست افراد نیست.'));
           return;
         }
         for (const match of matches) {
@@ -322,6 +288,42 @@
         people.append(row);
       }
       if (browsing) await browse(browsing, peerView).catch(() => { browsing = null; });
+
+      const sharing = card('آثاری که دنبال‌کننده‌ها می‌بینند');
+      const shared = await result(client.from('asar_shared_works').select('*').eq('owner', uid));
+      if (!current()) return;
+      const byId = new Map(shared.map(work => [work.work_id, work]));
+      const library = window.asarCollectionSource?.items() || [];
+      const options = el('div', '', 'asar-share-list');
+      sharing.append(options);
+      const selected = [];
+      for (const item of library) {
+        if (!item.id || !item.title || !['book', 'film', 'music'].includes(item.type)) continue;
+        const previous = byId.get(String(item.id));
+        const row = el('div', '', 'asar-share-row');
+        const share = field(row, item.title, 'checkbox', !!previous);
+        const pinned = field(row, 'سنجاق', 'checkbox', previous?.pinned);
+        const collection = field(row, 'نام مجموعه برای نمایش', 'text', previous?.collection || '', 70);
+        selected.push({ item, share, pinned, collection });
+        options.append(row);
+      }
+      action(sharing, 'ذخیرهٔ آثار مشترک', async () => {
+        const records = selected.filter(entry => entry.share.checked).map(({ item, pinned, collection }) => ({
+          owner: uid, work_id: String(item.id).slice(0, 120), title: String(item.title).slice(0, 300),
+          creator: String(item.creator || '').slice(0, 160), kind: item.type,
+          stage: ['queue', 'active', 'done'].includes(item.stage) ? item.stage : 'queue',
+          rating: Math.min(5, Math.max(0, Math.round(Number(item.rating) || 0))),
+          pinned: pinned.checked, collection: collection.value.trim()
+        }));
+        const newIds = new Set(records.map(row => row.work_id));
+        const removed = shared.filter(row => !newIds.has(row.work_id)).map(row => row.work_id);
+        if (removed.length) await result(client.from('asar_shared_works').delete().eq('owner', uid).in('work_id', removed));
+        if (records.length) await result(client.from('asar_shared_works').upsert(records));
+        await render();
+        return 'آثار مشترک ذخیره شدند.';
+      });
+
+
     } catch (error) {
       if (current()) view.querySelector('[role=status]').textContent = message(error);
     }
