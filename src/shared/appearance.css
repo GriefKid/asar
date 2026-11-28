@@ -306,6 +306,9 @@ body:has(> .asar-windowbar) { --asar-windowbar-height: 36px; display: flex; flex
 .asar-person .asar-avatar { width: 45px; height: 45px; }
 .asar-follow-list, .asar-share-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
 .asar-share-list, .asar-follow-list, .asar-peer-view { flex-basis: 100%; }
+.asar-directory { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow: auto; }
+.asar-directory-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; padding: 9px; border: 1px solid var(--bd); border-radius: 9px; }
+.asar-directory-row small { flex-basis: 100%; color: var(--t2); }
 .asar-share-list { max-height: 310px; overflow: auto; }
 .asar-share-row { padding: 6px; border-bottom: 1px solid var(--bd); }
 .asar-profile-works { padding: 0; list-style: none; }

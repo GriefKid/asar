@@ -178,7 +178,7 @@
       const bio = field(profile, 'معرفی کوتاه', 'textarea', ownProfile?.bio || '');
       const avatar = field(profile, 'عکس یا آواتار', 'file', '');
       avatar.accept = 'image/png,image/jpeg,image/webp';
-      const discover = field(profile, 'پروفایلم با وارد کردن نام کاربری دقیق پیدا شود', 'checkbox', ownProfile?.discoverable);
+      const discover = field(profile, 'پروفایلم در فهرست افراد دیده شود', 'checkbox', ownProfile?.discoverable);
       let avatarData = ownProfile?.avatar || '';
       action(profile, 'برداشتن تصویر', () => { avatarData = ''; avatar.value = ''; preview.replaceChildren(photo('', username.value)); });
       action(profile, 'ذخیرهٔ پروفایل', async () => {
@@ -229,32 +229,11 @@
         return 'آثار مشترک ذخیره شدند.';
       });
 
-      const people = card('دنبال‌کردن');
-      const handle = field(people, 'نام کاربری دقیق', 'text', '', 24);
-      handle.dir = 'ltr';
-      const searchResult = el('div', '', 'asar-follow-list');
+      const people = card('پیدا کردن افراد و دنبال‌کردن');
+      const search = field(people, 'جست‌وجوی نام یا نام کاربری', 'text', '', 60);
+      const directory = el('div', '', 'asar-directory');
       const peerView = el('div', '', 'asar-peer-view');
-      action(people, 'پیدا کردن حساب', async () => {
-        const [match] = await result(client.rpc('asar_find_profile', { handle: handle.value.trim() }));
-        searchResult.replaceChildren();
-        if (!match) return 'حساب قابل نمایشی با این نام پیدا نشد.';
-        searchResult.append(el('strong', '@' + match.username));
-        const existing = await result(client.from('asar_follows').select('status').eq('requester', uid).eq('owner', match.id).maybeSingle());
-        if (existing?.status === 'accepted') action(searchResult, 'دیدن پروفایل و آثار', () => browse(match.id, peerView));
-        else if (existing) searchResult.append(el('span', 'در انتظار تأیید'));
-        else action(searchResult, 'درخواست دنبال‌کردن', async () => {
-          await result(client.from('asar_follows').insert({ requester: uid, owner: match.id }));
-          await render();
-          return 'درخواست فرستاده شد.';
-        });
-        action(searchResult, 'مسدود کردن', async () => {
-          await result(client.rpc('asar_block_profile', { other_id: match.id }));
-          browsing = null;
-          await render();
-          return 'حساب مسدود شد.';
-        });
-      });
-      people.append(searchResult);
+      people.append(directory, peerView);
       const [relations, names, blocks] = await Promise.all([
         result(client.from('asar_follows').select('requester,owner,status').or('requester.eq.' + uid + ',owner.eq.' + uid)),
         result(client.rpc('asar_follow_handles')),
@@ -262,6 +241,53 @@
       ]);
       if (!current()) return;
       const handles = new Map(names.map(entry => [entry.peer_id, entry.username]));
+      const outgoing = new Map(relations.filter(relation => relation.requester === uid).map(relation => [relation.owner, relation.status]));
+      async function listDirectory() {
+        const matches = await result(client.rpc('asar_discover_profiles', { search_text: search.value.trim(), page_limit: 50 }));
+        if (!current()) return;
+        directory.replaceChildren();
+        if (!matches.length) {
+          directory.append(el('p', 'حساب قابل جست‌وجویی پیدا نشد.'));
+          return;
+        }
+        for (const match of matches) {
+          const row = el('div', '', 'asar-directory-row');
+          row.append(el('strong', match.display_name || '@' + match.username), el('span', '@' + match.username));
+          if (match.bio) row.append(el('small', match.bio));
+          const status = outgoing.get(match.id);
+          const open = el('button', 'مشاهدهٔ پروفایل', 'settings-save-btn');
+          open.type = 'button';
+          open.onclick = () => {
+            peerView.replaceChildren();
+            const person = el('div', '', 'asar-person');
+            person.append(el('strong', match.display_name || '@' + match.username), el('span', '@' + match.username));
+            peerView.append(person);
+            if (match.bio) peerView.append(el('p', match.bio));
+            if (status === 'accepted') action(peerView, 'دیدن آثار', () => browse(match.id, peerView));
+            else if (status === 'pending') peerView.append(el('span', 'درخواست دنبال‌کردن در انتظار تأیید است.'));
+            else action(peerView, 'درخواست دنبال‌کردن', async () => {
+              await result(client.from('asar_follows').insert({ requester: uid, owner: match.id }));
+              await render();
+              return 'درخواست فرستاده شد.';
+            });
+            peerView.scrollIntoView({ block: 'nearest' });
+          };
+          row.append(open);
+          if (status === 'accepted') action(row, 'دیدن پروفایل و آثار', () => browse(match.id, peerView));
+          else if (status === 'pending') row.append(el('span', 'در انتظار تأیید'));
+          else action(row, 'درخواست دنبال‌کردن', async () => {
+            await result(client.from('asar_follows').insert({ requester: uid, owner: match.id }));
+            await render();
+            return 'درخواست فرستاده شد.';
+          });
+          directory.append(row);
+        }
+      }
+      const searchButton = action(people, 'جست‌وجو', listDirectory);
+      search.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); searchButton.click(); }
+      });
+      await listDirectory();
       for (const relation of relations) {
         const incoming = relation.owner === uid;
         const peer = incoming ? relation.requester : relation.owner;
@@ -295,7 +321,6 @@
         });
         people.append(row);
       }
-      people.append(peerView);
       if (browsing) await browse(browsing, peerView).catch(() => { browsing = null; });
     } catch (error) {
       if (current()) view.querySelector('[role=status]').textContent = message(error);
