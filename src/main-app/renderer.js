@@ -1704,6 +1704,8 @@ window.switchAuthTab = function(el, mode) {
   document.getElementById('auth-submit-btn').textContent = mode === 'login' ? 'ورود' : 'ثبت‌نام';
   const nameGroup = document.getElementById('auth-name-group');
   if (nameGroup) nameGroup.style.display = mode === 'register' ? 'block' : 'none';
+  const discoverGroup = document.getElementById('auth-discover-group');
+  if (discoverGroup) discoverGroup.style.display = mode === 'register' ? 'block' : 'none';
   document.getElementById('auth-err').textContent = '';
 };
 
@@ -1721,7 +1723,8 @@ window.submitAuth = async function() {
       if (error) throw error;
     } else {
       const name = (document.getElementById('auth-name') || {}).value || '';
-      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name }, emailRedirectTo: 'https://github.com/GriefKid/asar' } });
+      const discoverable = !!document.getElementById('auth-discover')?.checked;
+      const { data, error } = await window._sb.auth.signUp({ email, password: pass, options: { data: { display_name: name, asar_discoverable: discoverable }, emailRedirectTo: 'https://github.com/GriefKid/asar' } });
       if (error) throw error;
       if (!data.session) errEl.textContent = 'ثبت‌نام انجام شد. ایمیلت را تأیید کن و سپس وارد شو.';
     }

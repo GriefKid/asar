@@ -23,10 +23,18 @@ test('social access requires approval, blocks revoke it, and an account cannot c
     `);
     await db.exec(fs.readFileSync('supabase-setup.sql', 'utf8'));
     await db.exec('grant all on public.profiles, public.user_data to authenticated');
+    const legacy = '00000000-0000-4000-8000-000000000004';
+    await db.query('insert into auth.users values ($1, $2, $3)', [legacy, 'legacy@example.invalid', {}]);
     await db.exec(fs.readFileSync('supabase/migrations/202611270001_profiles_and_sharing.sql', 'utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations/202611280001_auto_social_profiles.sql', 'utf8'));
+    assert.equal((await db.query('select discoverable from public.asar_profiles where id = $1', [legacy])).rows[0].discoverable, false);
     for (const [id, name] of [[owner, 'owner'], [reader, 'reader'], [stranger, 'stranger']]) {
-      await db.query('insert into auth.users values ($1, $2, $3)', [id, name + '@example.invalid', {}]);
-      await db.query('insert into public.asar_profiles (id, username, discoverable) values ($1, $2, $3)', [id, name, name === 'owner']);
+      await db.query('insert into auth.users values ($1, $2, $3)', [id, name + '@example.invalid', { display_name: name, asar_discoverable: name === 'owner' }]);
+      const profile = (await db.query('select username, display_name, discoverable from public.asar_profiles where id = $1', [id])).rows[0];
+      assert.match(profile.username, /^asar_[a-f0-9]{19}$/);
+      assert.equal(profile.display_name, name);
+      assert.equal(profile.discoverable, name === 'owner');
+      await db.query('update public.asar_profiles set username = $1 where id = $2', [name, id]);
     }
     const switchTo = async id => {
       await db.exec('set role authenticated');
