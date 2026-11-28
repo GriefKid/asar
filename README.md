@@ -39,7 +39,7 @@
 
 برای مدیر پروژهٔ Supabase:
 
-1. برای یک پروژهٔ تازه [ساختار اولیه](supabase-setup.sql)، [مهاجرت نسخهٔ ۲](supabase/migrations/202611270001_profiles_and_sharing.sql)، [ساخت خودکار پروفایل](supabase/migrations/202611280001_auto_social_profiles.sql)، [فهرست افراد](supabase/migrations/202611280002_discoverable_profiles_directory.sql) و [مجوز سینک](supabase/migrations/202611280003_user_data_sync_grants.sql) را به همین ترتیب اجرا کنید. برای پروژهٔ موجود، چهار مهاجرت را به ترتیب اجرا کنید. مهاجرت ساخت پروفایل برای حساب‌های قبلی هم پروفایل می‌سازد، بدون اینکه آن‌ها را قابل جست‌وجو کند.
+1. برای یک پروژهٔ تازه [ساختار اولیه](supabase-setup.sql)، [مهاجرت نسخهٔ ۲](supabase/migrations/202611270001_profiles_and_sharing.sql)، [ساخت خودکار پروفایل](supabase/migrations/202611280001_auto_social_profiles.sql)، [فهرست افراد](supabase/migrations/202611280002_discoverable_profiles_directory.sql)، [مجوز سینک](supabase/migrations/202611280003_user_data_sync_grants.sql) و [مجوز برترین آثار](supabase/migrations/202611280004_community_grants.sql) را به همین ترتیب اجرا کنید. برای پروژهٔ موجود، پنج مهاجرت را به ترتیب اجرا کنید. مهاجرت ساخت پروفایل برای حساب‌های قبلی هم پروفایل می‌سازد، بدون اینکه آن‌ها را قابل جست‌وجو کند.
 2. نشانی و کلید Publishable پروژهٔ فعلی از قبل در برنامه تنظیم شده‌اند. فقط اگر به پروژهٔ Supabase دیگری منتقل می‌شوید، نشانی و کلید عمومی آن را در تنظیمات وارد کنید. کلید دسترسی مدیر یا Service Role را در اپ وارد نکنید.
 3. تأیید ایمیل و تغییر امن ایمیل را در بخش Auth فعال کنید. پس از تأیید در مرورگر می‌توان با ایمیل تأییدشده در اپ وارد شد.
 4. قبل از انتشار، ورود و ارسال ایمیل را در محیط آزمایشی و دسترسی کتابخانه را با دو حساب بررسی کنید.

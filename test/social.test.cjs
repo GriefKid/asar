@@ -28,6 +28,10 @@ test('social access requires approval, blocks revoke it, and an account cannot c
     await db.exec(fs.readFileSync('supabase/migrations/202611280001_auto_social_profiles.sql', 'utf8'));
     await db.exec(fs.readFileSync('supabase/migrations/202611280002_discoverable_profiles_directory.sql', 'utf8'));
     await db.exec(fs.readFileSync('supabase/migrations/202611280003_user_data_sync_grants.sql', 'utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations/202611280004_community_grants.sql', 'utf8'));
+    await db.exec('set role anon');
+    assert.equal((await db.query('select key from public.community')).rows.length, 0);
+    await db.exec('reset role');
     assert.equal((await db.query('select discoverable from public.asar_profiles where id = $1', [legacy])).rows[0].discoverable, false);
     for (const [id, name] of [[owner, 'owner'], [reader, 'reader'], [stranger, 'stranger']]) {
       await db.query('insert into auth.users values ($1, $2, $3)', [id, name + '@example.invalid', { display_name: name, asar_discoverable: name === 'owner' }]);
@@ -42,6 +46,8 @@ test('social access requires approval, blocks revoke it, and an account cannot c
       await db.query("select set_config('request.jwt.claim.sub', $1, false)", [id]);
     };
     await switchTo(owner);
+    await db.query("insert into public.community (key,type,title) values ('book:test','book','Test book')");
+    await db.query("update public.community set count = 1 where key = 'book:test'");
     await db.query("insert into public.asar_shared_works (owner,work_id,title,kind,stage) values ($1,'work','Shared book','book','done')", [owner]);
     await db.query('insert into public.user_data (id) values ($1)', [owner]);
     assert.equal((await db.query('select id from public.user_data where id = $1', [owner])).rows.length, 1);
